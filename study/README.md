@@ -21,3 +21,15 @@ python study/board.py hint 1.1
 | 5 Decoding & Inference | 采样 · 投机解码 · 连续批处理 · 推理引擎 | 待开讲 |
 | 6 Systems | MoE | 待开讲 |
 | Basics | 线性回归 → CNN/RNN/LSTM → 经典 ML | 待开讲 |
+
+## TorchLeet 全题库
+
+`study/problem_bank.json` 收录全部 68 题（题面、起始代码、判题项、分级提示），由 `python study/build_bank.py` 从 `problems.json`、题目 notebook 和 `python/torchleet` 判题规格生成（不含 SOLN 答案）。
+
+```bash
+python study/board.py tl list basics
+python study/board.py tl init  lin-regression
+python study/board.py tl check lin-regression
+```
+
+每次核验会打印一行 `TL-RESULT <id> <通过>/<总数>`，粘贴到在线教程的“核验结果”框里即可同步进度。

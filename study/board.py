@@ -6,6 +6,12 @@
     python study/board.py hint 1.1   # 逐级提示（不会给答案）
     编号 A.1 ~ A.9 是应用 ML 题（numpy/pandas，不需要 PyTorch）。
 
+    python study/board.py tl list [llm-path|basics|advanced]   # TorchLeet 全题库
+    python study/board.py tl init  <id>   # 生成桩文件 study/submissions/torchleet/<id>.py
+    python study/board.py tl check <id>   # 自动核验
+    python study/board.py tl hint  <id> [n]
+每次核验都会打印一行 TL-RESULT，整行粘贴到在线教程的“核验结果”框即可记录进度。
+
 核验使用仓库自带的判题器 python/torchleet（检查性质，不对比标准答案，
 所以写法和官方不同也能通过）。
 """
@@ -73,6 +79,72 @@ def load(path, names):
     return {n: getattr(m, n) for n in names if hasattr(m, n)}
 
 
+def emit(pid, passed_n, total, skipped=0):
+    """打印一行结果，可整行粘贴到在线教程的“核验结果”框里自动记录进度。"""
+    extra = f" skip={skipped}" if skipped else ""
+    print(f"  TL-RESULT {pid} {passed_n}/{total}{extra}")
+
+
+def run_torchleet(pid, ns):
+    from torchleet.runner import run, report
+    results = run(pid, ns)
+    ok = report(pid, results)
+    n_pass = sum(1 for r in results if r[1] == "pass")
+    n_skip = sum(1 for r in results if r[1] == "skip")
+    n_fail = sum(1 for r in results if r[1] == "fail")
+    emit(pid, n_pass, n_pass + n_fail + n_skip, n_skip)
+    return ok
+
+
+def tl(a):
+    """TorchLeet 全题库: list / init / check / hint。"""
+    bank = json.loads((ROOT / "problem_bank.json").read_text())
+    by = {b["id"]: b for b in bank}
+    sub = a[0] if a else "list"
+    d = passed()
+    if sub == "list":
+        flt = a[1] if len(a) > 1 else None
+        for b in bank:
+            if flt and flt not in b["tracks"] and flt != b["difficulty"]:
+                continue
+            mark = "✅" if b["id"] in d else ("⬜" if b["graded"] else "·")
+            print(f"  {mark} {b['id']:<36} {b['difficulty']:<7} {','.join(b['tracks'])}{'' if b['graded'] else '  (无自动判题)'}")
+        return print("\n  tracks: llm-path / basics / advanced；用法: python study/board.py tl init|check|hint <id>\n")
+    pid = a[1] if len(a) > 1 else None
+    if pid not in by:
+        sys.exit(f"未知题目 id: {pid}。先运行: python study/board.py tl list")
+    b = by[pid]
+    f = ROOT / "submissions" / "torchleet" / f"{pid}.py"
+    if sub == "init":
+        f.parent.mkdir(parents=True, exist_ok=True)
+        if f.exists():
+            return print(f"  已存在: {f.relative_to(ROOT.parent)}（不会覆盖）")
+        f.write_text(b["starter"])
+        return print(f"  已生成 {f.relative_to(ROOT.parent)}，填写后: python study/board.py tl check {pid}")
+    if sub == "hint":
+        hs = b["hints"]
+        if not hs:
+            return print("  这题还没有提示")
+        n = int(a[2]) if len(a) > 2 else 1
+        return print(f"  hint {min(max(n, 1), len(hs))}/{len(hs)}: {hs[min(max(n, 1), len(hs)) - 1]}")
+    if sub != "check":
+        sys.exit(__doc__)
+    if not b["graded"]:
+        sys.exit("这题没有自动判题。请对照 notebook 里的测试单元自查，再看 SOLN 解答。")
+    if not f.exists():
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(b["starter"])
+        sys.exit(f"已生成桩文件 {f.relative_to(ROOT.parent)}。先填写实现，再运行本命令。")
+    try:
+        ns = load(f, b["entries"])
+    except Exception as e:
+        sys.exit(f"导入 {f.name} 失败: {type(e).__name__}: {e}")
+    import torchleet
+    print(f"\n  核验 {b['title']}")
+    ok = run_torchleet(pid, ns)
+    print("  🎉 通过！\n" if ok else f"  还没通过；需要提示: python study/board.py tl hint {pid}\n")
+
+
 def applied(cmd, tid, a):
     sys.path.insert(0, str(ROOT))
     import applied_checks as A
@@ -104,6 +176,7 @@ def applied(cmd, tid, a):
             bad += 1
             msg = str(e) if isinstance(e, AssertionError) and str(e) else f"{type(e).__name__}: {e}"
             print(f"   ❌ {name} — {msg}")
+    emit(pid, len(spec["checks"]) - bad, len(spec["checks"]))
     if bad:
         print(f"\n  {bad} 项未通过。需要提示: python study/board.py hint {tid} [1-{len(spec['hints'])}]\n")
         return
@@ -117,6 +190,8 @@ def main():
     a = sys.argv[1:]
     if not a:
         return show()
+    if a[0] == "tl":
+        return tl(a[1:])
     cmd, tid = a[0], (a[1] if len(a) > 1 else None)
     if tid in APPLIED:
         return applied(cmd, tid, a)
@@ -136,7 +211,7 @@ def main():
     if missing:
         sys.exit(f"{f} 里缺少: {', '.join(missing)}")
     print(f"\n  核验 {tid} {title}")
-    ok = torchleet.check(pid, **ns)
+    ok = run_torchleet(pid, ns)
     print("  🎉 通过！" if ok else "  还没通过，看上面的失败信息再试；需要提示: python study/board.py hint " + tid)
 
 
