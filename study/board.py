@@ -32,6 +32,14 @@ TASKS = {
     "1.4": ("1 Foundations", "RMSNorm", "rms-norm", "s1_4_rmsnorm.py", ["RMSNorm"]),
     "1.5": ("1 Foundations", "Attention", "implement-attention-from-scratch",
             "s1_5_attention.py", ["scaled_dot_product_attention"]),
+    "2.1": ("2 Core Transformer", "Multi-Head Attention", "multi-head-attention",
+            "s2_1_mha.py", ["multi_head_attention"]),
+    "2.2": ("2 Core Transformer", "Grouped Query Attention", "grouped-query-attention",
+            "s2_2_gqa.py", ["grouped_query_attention"]),
+    "2.3": ("2 Core Transformer", "KV Cache", "kv-cache",
+            "s2_3_kvcache.py", ["KVCache", "CachedAttention"]),
+    "2.4": ("2 Core Transformer", "Sliding Window Attention", "sliding-window-attention",
+            "s2_4_swa.py", ["create_sliding_window_mask", "full_attention", "sliding_window_attention"]),
 }
 APPLIED = {
     "A.1": ("评估指标", "a1-metrics", "a1_metrics.py"),
