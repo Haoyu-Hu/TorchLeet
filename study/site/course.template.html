@@ -175,7 +175,8 @@ mjx-container.wide{display:block;overflow-x:auto;overflow-y:hidden;max-width:100
     <tr><td>3 Full Model</td><td>架构总览 · RoPE+GQA 注意力块 · 组装 SmolLM 并生成</td><td><span class="pill">已开讲</span></td></tr>
     <tr><td>4 Alignment</td><td>KL · LoRA · SFT · DPO · PPO-RLHF · GRPO</td><td><span class="pill">已开讲</span></td></tr>
     <tr><td>5 Decoding &amp; Inference</td><td>温度 · Top-k · Top-p · 投机解码 · 连续批处理 · 推理引擎</td><td><span class="pill">已开讲</span></td></tr>
-    <tr><td>6 Systems</td><td>Mixture of Experts</td><td class="soon">待开讲</td></tr>
+    <tr><td>6 MoE</td><td>MoE 层 · 路由、负载均衡与专家容量</td><td><span class="pill">已开讲</span></td></tr>
+    <tr><td>概率与统计</td><td>贝叶斯 · 常见分布 · 期望与协方差 · MLE/MAP · 置信区间 · 假设检验 · 信息论 · 采样方法</td><td><span class="pill">已开讲</span></td></tr>
     <tr><td>应用 ML</td><td>指标 · 预处理 · 交叉验证 · 回归 · KNN · 决策树 · PCA · pandas（numpy / pandas 笔试向）</td><td><span class="pill">已开讲</span></td></tr>
     <tr><td>TorchLeet 题库</td><td>全部 68 题：题面、起始代码、判题项、分级提示，可搜索（LLM 路径 / Basics / Advanced）</td><td><span class="pill">已嵌入</span></td></tr>
     <tr><td>Basics</td><td>线性回归 → CNN/RNN/LSTM → K-Means / KNN / 逻辑回归</td><td class="soon">待开讲</td></tr>
@@ -2255,7 +2256,237 @@ for step in range(max_new_tokens):
   <pre><code>文件  study/submissions/s5_6_inference_engine.py
 实现  SimpleTokenizer · KVCache · MultiHeadAttention · FeedForward · TransformerBlock · MiniTransformer · top_p_sample · InferenceEngine
 核验  python study/board.py check 5.6</code></pre>
-  <div class="next"><button class="btn ghost" data-go="cbatch">← 5.5</button><button class="btn" data-go="board">去看板 →</button></div>
+  <div class="next"><button class="btn ghost" data-go="cbatch">← 5.5</button><button class="btn" data-go="moe">下一课 6.1 →</button></div>
+</section>
+
+<!-- ============ 6.1 MoE ============ -->
+<section id="moe" data-title="6.1 MoE 层" hidden>
+  <h2>6.1 Mixture of Experts：用稀疏激活扩大模型容量</h2>
+  <p class="sub">参数量很大，但每个 token 只用其中一小部分。</p>
+  <h3>为什么</h3>
+  <p>稠密模型里，参数量和每个 token 的计算量是绑在一起的：参数翻倍，计算也翻倍。MoE 把一层前馈网络换成 N 个“专家”前馈网络，再加一个<b>路由器</b>，每个 token 只送进其中 k 个专家（k 远小于 N）。这样总参数接近 N 倍，而每个 token 的计算只相当于 k 个专家。</p>
+  <p>Shazeer 等人 2017 年的稀疏门控 MoE 层由多达数千个前馈子网络组成，摘要报告模型容量提升了 1000 倍以上，而计算效率只有很小的损失，并训练了参数多达 1370 亿的模型。</p>
+  <h3>直觉</h3>
+  <p>把 N 个专家想成医院里的 N 个科室，路由器是分诊台。每个病人（token）只去最相关的一两个科室，而不是把所有科室都看一遍。医院可以有很多科室（容量大），但每个病人花的时间不变（计算量小）。</p>
+  <h3>一层 MoE 的计算</h3>
+  <p>记 token 的隐藏向量为 \(\mathbf{x} \in \mathbb{R}^d\)，路由器是一个线性层 \(W_g \in \mathbb{R}^{d \times N}\)，专家是 \(E_1, \dots, E_N\)。Mixtral 论文把门控写成：</p>
+  <div class="eq">\[ G(\mathbf{x}) = \operatorname{softmax}\big(\operatorname{TopK}(\mathbf{x} W_g)\big), \qquad \operatorname{TopK}(\boldsymbol\ell)_i = \begin{cases} \ell_i &amp; \ell_i \text{ 是前 } K \text{ 大} \\ -\infty &amp; \text{否则} \end{cases} \]</div>
+  <div class="eq">\[ \mathbf{y} = \sum_{i=1}^{N} G(\mathbf{x})_i \, E_i(\mathbf{x}) \]</div>
+  <p class="eq-note">被设为 \(-\infty\) 的专家，softmax 后权重恰好为 0，所以求和里只有 K 项非零，这 K 个专家才需要真正计算。</p>
+  <p>“只对前 K 个 logit 做 softmax”与“先对全部 N 个做 softmax、再在这 K 个上重新归一化”结果相同：</p>
+  <div class="eq">\[ \frac{e^{\ell_i}}{\sum_{j \in \mathcal{K}} e^{\ell_j}} = \frac{e^{\ell_i} / \sum_{m=1}^{N} e^{\ell_m}}{\sum_{j \in \mathcal{K}} e^{\ell_j} / \sum_{m=1}^{N} e^{\ell_m}} = \frac{p_i}{\sum_{j \in \mathcal{K}} p_j} \]</div>
+  <h3>一个小例子</h3>
+  <p>4 个专家，某个 token 的路由 logits 是 \((2.0, 0.5, 1.0, -1.0)\)，取 \(K = 2\)。前两大是专家 0 和专家 2：</p>
+  <div class="eq">\[ w_0 = \frac{e^{2}}{e^{2} + e^{1}} = \frac{1}{1 + e^{-1}} \approx 0.731, \qquad w_2 = 1 - w_0 \approx 0.269 \]</div>
+  <p>输出 \(\mathbf{y} = 0.731\,E_0(\mathbf{x}) + 0.269\,E_2(\mathbf{x})\)，专家 1 和 3 不参与计算。</p>
+  <h3>参数量与计算量</h3>
+  <p>设每个专家是 \(d \to d_{ff} \to d\) 的两层网络（不计偏置），参数 \(2 d\, d_{ff}\)：</p>
+  <div class="eq">\[ \text{总参数} \approx N \cdot 2 d\, d_{ff} + d N, \qquad \text{每个 token 的前馈计算} \approx K \cdot 2 \cdot 2 d\, d_{ff} \ \text{FLOPs} \]</div>
+  <p class="eq-note">\(dN\) 是路由器的参数，很小。总参数随 N 增长，每个 token 的计算只随 K 增长。</p>
+  <p>Mixtral 8x7B 就是这样：每层 8 个前馈块（专家），每个 token 由路由器选 2 个；论文报告每个 token 可以访问 47B 参数，但推理时只使用 13B 活跃参数。它的专家是 SwiGLU 前馈网络（见 3.1）：\(\mathbf{y} = \sum_i \operatorname{softmax}(\operatorname{Top2}(\mathbf{x} W_g))_i \cdot \operatorname{SwiGLU}_i(\mathbf{x})\)。</p>
+  <h3>实现：按专家分组计算</h3>
+<pre><code>x_flat = x.view(-1, d)                         # (T, d)，T = batch × seq
+logits = router(x_flat)                        # (T, N)
+w, idx = logits.topk(k, -1)                    # (T, k)
+w = w.softmax(-1)
+out = zeros_like(x_flat)
+for e in range(N):
+    t, s = (idx == e).nonzero(as_tuple=True)   # 哪些 (token, 槽位) 选了专家 e
+    if len(t) == 0: continue
+    out.index_add_(0, t, experts[e](x_flat[t]) * w[t, s, None])</code></pre>
+  <ul>
+    <li>循环的是<b>专家</b>，不是 token：每个专家把分到它的 token 拼成一批，一次矩阵乘法算完。</li>
+    <li>同一个 token 可能被同一个专家选中吗？不会，top-k 的下标互不相同。</li>
+    <li>梯度通过权重 w 流回路由器；topk 选出的下标本身不可导。</li>
+  </ul>
+  <h3>负载不均衡：MoE 的核心难题</h3>
+  <p>路由器是学出来的。如果不加约束，少数专家一开始稍微好一点，就会得到更多 token、被训练得更好，于是得到更多 token……最终大部分专家闲置。常用的三种手段：</p>
+  <ul>
+    <li><b>辅助负载均衡损失</b>：鼓励 token 在专家间均匀分布（见 6.2）。</li>
+    <li><b>带噪声的门控</b>：Shazeer 等人在 softmax 之前给 logits 加上可学习幅度的高斯噪声，再取 top-k；论文说明噪声有助于负载均衡：\(H(\mathbf{x})_i = (\mathbf{x}W_g)_i + \text{StandardNormal}() \cdot \operatorname{Softplus}\big((\mathbf{x}W_{\text{noise}})_i\big)\)。</li>
+    <li><b>专家容量</b>：每个专家每批最多处理固定数量的 token（见 6.2）。</li>
+  </ul>
+  <h3>两个变体</h3>
+  <ul>
+    <li><b>Switch Transformer</b>：只路由到 1 个专家（k=1）。论文的理由是路由计算更少，每个专家的批大小（容量）至少可以减半。</li>
+    <li><b>DeepSeekMoE</b>：把专家切得更细（mN 个小专家，激活 mK 个），并把 K_s 个专家设为所有 token 都使用的“共享专家”，用来承载通用知识。摘要报告，2B 规模的 DeepSeekMoE 与专家参数和计算多 1.5 倍的 GShard 2.9B 表现相当。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>MoE 省的是什么？省的是每个 token 的计算；显存仍要放下全部专家的参数。</li>
+    <li>为什么 MoE 推理对显存和通信要求高？全部专家都要常驻；多卡时不同 token 要发往不同卡上的专家（专家并行），需要全互连通信。</li>
+    <li>k 从 1 增加到 2 有什么得失？每个 token 的计算翻倍，但组合更灵活、训练更稳定；Switch 选 1，Mixtral 选 2。</li>
+    <li>为什么判题要求“每个专家只处理分到它的 token”？否则就退化成稠密计算：结果对，但完全没有省计算（6.2 会检查这一点）。</li>
+  </ol>
+  <p class="note"><b>关于本题的辅助损失：</b>仓库题目说明里写的是 “num_experts × mean(…)”，起始代码注释写的是 “num_experts × sum(f_i × p_i)”，两者相差 N 倍。本教程统一采用 Switch Transformer 的写法 \(N \sum_i f_i P_i\)（完全均衡时等于 1），判题只要求它非负。</p>
+  <h3>资料与核对</h3>
+  <ul class="refs">
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1701.06538" target="_blank" rel="noopener">Shazeer 等，Outrageously Large Neural Networks（稀疏门控 MoE）</a> <span class="sub">（数千个专家、容量提升 1000 倍以上、1370 亿参数、带噪声的 top-k 门控）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2401.04088" target="_blank" rel="noopener">Jiang 等，Mixtral of Experts</a> <span class="sub">（8 个专家选 2 个、47B 总参数与 13B 活跃参数、门控公式）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2101.03961" target="_blank" rel="noopener">Fedus 等，Switch Transformers</a> <span class="sub">（只路由到一个专家的理由）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2401.06066" target="_blank" rel="noopener">Dai 等，DeepSeekMoE</a> <span class="sub">（细粒度专家与共享专家、与 GShard 2.9B 的对比）</span></span></li>
+  </ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s6_1_moe.py
+实现  Expert · MoELayer（forward 返回 (output, aux_loss)）
+核验  python study/board.py check 6.1</code></pre>
+  <div class="next"><button class="btn ghost" data-go="engine">← 5.6</button><button class="btn" data-go="moerout">下一课 6.2 →</button></div>
+</section>
+
+<!-- ============ 6.2 路由与负载均衡 ============ -->
+<section id="moerout" data-title="6.2 路由与均衡" hidden>
+  <h2>6.2 路由、负载均衡损失与专家容量</h2>
+  <p class="sub">把 6.1 里最容易写错的三件事单独拿出来，逐项检查。</p>
+  <h3>负载均衡损失（Switch Transformer）</h3>
+  <p>设一批里有 T 个 token、N 个专家，\(p_i(\mathbf{x})\) 是 token \(\mathbf{x}\) 分给专家 i 的路由概率（对全部 N 个专家做 softmax）。论文定义：</p>
+  <div class="eq">\[ \mathcal{L}_{\text{aux}} = \alpha \cdot N \cdot \sum_{i=1}^{N} f_i \cdot P_i, \qquad f_i = \frac{1}{T}\sum_{\mathbf{x}} \mathbb{1}\{\arg\max p(\mathbf{x}) = i\}, \qquad P_i = \frac{1}{T}\sum_{\mathbf{x}} p_i(\mathbf{x}) \]</div>
+  <p class="eq-note">\(f_i\) 是实际分到专家 i 的 token 比例，\(P_i\) 是路由器给专家 i 的平均概率。论文使用 \(\alpha = 10^{-2}\)。</p>
+  <h3>为什么这个形式能促进均衡</h3>
+  <ul>
+    <li><b>均衡时等于 α</b>：若 \(f_i = P_i = 1/N\)，则 \(N \sum_i \frac{1}{N}\cdot\frac{1}{N} = N \cdot N \cdot \frac{1}{N^2} = 1\)。论文说明乘以 N 是为了让损失在专家数变化时保持不变。</li>
+    <li><b>不均衡时更大</b>：若所有 token 都去专家 0、概率也全在专家 0，则 \(f_0 = P_0 = 1\)，损失 \(= N\)，是均衡时的 N 倍。</li>
+    <li><b>只有 P 可导</b>：\(f_i\) 来自 argmax（或 top-k），没有梯度。梯度只经过 \(P_i\)：对 \(P_i\) 的偏导是 \(\alpha N f_i\)，所以<b>分到越多 token 的专家，它的路由概率被往下压得越厉害</b>。</li>
+  </ul>
+  <h3>推广到 top-k</h3>
+  <p>k &gt; 1 时，一个 token 有 k 个分配（槽位）。本教程把 \(f_i\) 定义为全部 \(T \cdot k\) 个分配中落在专家 i 的比例，这样仍有 \(\sum_i f_i = 1\)，均衡时损失仍为 1：</p>
+  <div class="eq">\[ f_i = \frac{1}{T k} \sum_{t=1}^{T} \sum_{j=1}^{k} \mathbb{1}\{\text{idx}_{tj} = i\} \]</div>
+  <h3>一个小例子</h3>
+  <p>N=2，T=4，k=1。四个 token 都选了专家 0，路由概率分别是 \((0.9, 0.1), (0.8, 0.2), (0.7, 0.3), (0.6, 0.4)\)：</p>
+  <div class="eq">\[ f = (1, 0), \quad P = (0.75,\ 0.25), \quad \mathcal{L}_{\text{aux}} / \alpha = 2 \times (1 \times 0.75 + 0 \times 0.25) = 1.5 \]</div>
+  <p>比均衡时的 1 大。它的梯度只作用在 \(P_0\) 上（系数 \(2 \times 1 = 2\)），会把专家 0 的概率往下推。</p>
+  <h3>试一试：路由偏斜与损失</h3>
+  <div class="demo">
+    <div class="row"><label for="moe-n">专家数 N</label>
+      <select id="moe-n"><option>4</option><option selected>8</option><option>16</option></select>
+      <label for="moe-k">k</label><select id="moe-k"><option>1</option><option selected>2</option></select>
+      <label for="moe-s">偏斜</label>
+      <input type="range" id="moe-s" min="0" max="3" step="0.1" value="1" style="flex:1;min-width:110px;accent-color:var(--accent)">
+      <span class="pill" id="moe-sl"></span></div>
+    <canvas id="moe-canvas" width="640" height="200" aria-label="各专家的负载"></canvas>
+    <pre id="moe-out" style="margin:10px 0 0"></pre>
+  </div>
+  <p class="sub">512 个随机 token，路由 logits 的第 i 列加上“偏斜 × (N−1−i)/(N−1)”，让编号小的专家更受欢迎。柱子是 \(f_i\)，菱形标记是 \(P_i\)，虚线是均衡值 1/N。</p>
+  <h3>专家容量</h3>
+  <p>为了让每个专家的计算量可预期，Switch Transformer 给每个专家设上限：</p>
+  <div class="eq">\[ \text{expert capacity} = \frac{\text{一批的 token 数}}{\text{专家数}} \times \text{capacity factor} \]</div>
+  <p>超出容量的 token 被“丢弃”：这一层不计算它，它的表示通过残差连接直接传到下一层。capacity factor 大于 1 留出缓冲，丢弃更少，但计算和通信更多。论文报告：实验中丢弃的 token 数与专家数没有关系（通常少于 1%），而系数足够高的辅助损失保证了良好的负载均衡。GShard 采用 top-2 门控，同样设置专家容量，还提出了对第二个专家做随机路由。</p>
+  <h3>稀疏计算</h3>
+  <p>6.1 的实现要点在这里被单独检查：每个专家只能接收分给它的 token。判题用会计数的“专家”函数核对：专家 e 处理的行数必须正好等于选中它的 (token, 槽位) 数。把全部 token 送进每个专家再用掩码加权，数值上相同，但计算量变成了 N/k 倍。</p>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么不直接用 \(\sum_i f_i^2\) 作为损失？\(f_i\) 不可导，无法训练路由器；用 \(f_i \cdot P_i\) 让梯度通过可导的 \(P_i\) 传回去。</li>
+    <li>辅助损失的系数 α 太大会怎样？路由器只顾均衡、不顾把 token 送给最合适的专家，主任务变差。论文按 10 的幂试了几个值，选了 \(10^{-2}\)。</li>
+    <li>容量满了的 token 去哪了？这一层跳过它，靠残差连接把原表示传下去。</li>
+    <li>推理时还需要辅助损失吗？不需要，它只在训练时加到总损失里。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs">
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2101.03961" target="_blank" rel="noopener">Fedus 等，Switch Transformers</a> <span class="sub">（辅助损失公式 4–6、乘 N 的理由、α=10⁻²、专家容量公式、丢弃的 token 走残差、丢弃率通常少于 1%）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2006.16668" target="_blank" rel="noopener">Lepikhin 等，GShard</a> <span class="sub">（top-2 门控、专家容量、随机路由）</span></span></li>
+  </ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s6_2_moe_routing.py
+实现  topk_route · load_balancing_loss · moe_combine
+核验  python study/board.py check 6.2</code></pre>
+  <div class="next"><button class="btn ghost" data-go="moe">← 6.1</button><button class="btn" data-go="pbayes">下一课 P.1 →</button></div>
+</section>
+
+<!-- ============ 概率与统计 ============ -->
+<section id="pbayes" data-title="P.1 贝叶斯" hidden>
+  <h2>P.1 贝叶斯定理与朴素贝叶斯</h2>
+  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
+  <!-- 正文写在这里 -->
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/p1_bayes.py
+实现  posterior · sequential_update · bernoulli_nb_fit · bernoulli_nb_predict
+核验  python study/board.py check P.1</code></pre>
+  <div class="next"><button class="btn ghost" data-go="moerout">← 6.2</button><button class="btn" data-go="pdist">下一课 P.2 →</button></div>
+</section>
+
+<section id="pdist" data-title="P.2 常见分布" hidden>
+  <h2>P.2 常见分布</h2>
+  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
+  <!-- 正文写在这里 -->
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/p2_distributions.py
+实现  binomial_pmf · poisson_pmf · normal_pdf · normal_cdf
+核验  python study/board.py check P.2</code></pre>
+  <div class="next"><button class="btn ghost" data-go="pbayes">← P.1</button><button class="btn" data-go="pmom">下一课 P.3 →</button></div>
+</section>
+
+<section id="pmom" data-title="P.3 期望与协方差" hidden>
+  <h2>P.3 期望、方差、协方差与相关</h2>
+  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
+  <!-- 正文写在这里 -->
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/p3_moments.py
+实现  mean_var · covariance_matrix · correlation_matrix · welford
+核验  python study/board.py check P.3</code></pre>
+  <div class="next"><button class="btn ghost" data-go="pdist">← P.2</button><button class="btn" data-go="pmle">下一课 P.4 →</button></div>
+</section>
+
+<section id="pmle" data-title="P.4 MLE 与 MAP" hidden>
+  <h2>P.4 极大似然与最大后验</h2>
+  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
+  <!-- 正文写在这里 -->
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/p4_mle.py
+实现  gaussian_mle · gaussian_nll · bernoulli_map · categorical_mle
+核验  python study/board.py check P.4</code></pre>
+  <div class="next"><button class="btn ghost" data-go="pmom">← P.3</button><button class="btn" data-go="pci">下一课 P.5 →</button></div>
+</section>
+
+<section id="pci" data-title="P.5 置信区间" hidden>
+  <h2>P.5 大数定律、中心极限定理与置信区间</h2>
+  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
+  <!-- 正文写在这里 -->
+  <div class="demo">
+    <div class="row"><label for="clt-dist">总体分布</label>
+      <select id="clt-dist"><option value="exp">指数分布（右偏）</option><option value="uni">均匀分布</option><option value="ber">伯努利 p=0.1</option></select>
+      <label for="clt-n">每次样本量 n</label>
+      <input type="range" id="clt-n" min="1" max="100" step="1" value="5" style="flex:1;min-width:110px;accent-color:var(--accent)">
+      <span class="pill" id="clt-nl"></span></div>
+    <canvas id="clt-canvas" width="640" height="220" aria-label="样本均值的分布"></canvas>
+    <pre id="clt-out" style="margin:10px 0 0"></pre>
+  </div>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/p5_ci.py
+实现  norm_ppf · mean_ci · bootstrap_ci
+核验  python study/board.py check P.5</code></pre>
+  <div class="next"><button class="btn ghost" data-go="pmle">← P.4</button><button class="btn" data-go="ptest">下一课 P.6 →</button></div>
+</section>
+
+<section id="ptest" data-title="P.6 假设检验" hidden>
+  <h2>P.6 假设检验与 A/B 测试</h2>
+  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
+  <!-- 正文写在这里 -->
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/p6_testing.py
+实现  two_proportion_ztest · welch_t · bonferroni · benjamini_hochberg
+核验  python study/board.py check P.6</code></pre>
+  <div class="next"><button class="btn ghost" data-go="pci">← P.5</button><button class="btn" data-go="pinfo">下一课 P.7 →</button></div>
+</section>
+
+<section id="pinfo" data-title="P.7 信息论" hidden>
+  <h2>P.7 信息论：熵、交叉熵、互信息</h2>
+  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
+  <!-- 正文写在这里 -->
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/p7_info.py
+实现  entropy · cross_entropy · mutual_information · perplexity
+核验  python study/board.py check P.7</code></pre>
+  <div class="next"><button class="btn ghost" data-go="ptest">← P.6</button><button class="btn" data-go="psamp">下一课 P.8 →</button></div>
+</section>
+
+<section id="psamp" data-title="P.8 采样方法" hidden>
+  <h2>P.8 采样方法：逆变换、拒绝采样、重要性采样</h2>
+  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
+  <!-- 正文写在这里 -->
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/p8_sampling.py
+实现  sample_exponential · rejection_sample · importance_estimate
+核验  python study/board.py check P.8</code></pre>
+  <div class="next"><button class="btn ghost" data-go="pinfo">← P.7</button><button class="btn" data-go="board">去看板 →</button></div>
 </section>
 
 <!-- ============ A.0 策略 ============ -->
@@ -3015,7 +3246,7 @@ pip install torch numpy pandas</code></pre>
   <p class="note"><b>注意：</b>请用 <code>python study/board.py</code> 运行。在仓库根目录直接 <code>import torch</code> 会被根目录的 <code>torch/</code> 题目文件夹遮住。</p>
   <h3>命令</h3>
 <pre><code>python study/board.py                       # 终端里的进度看板
-python study/board.py check 1.1             # 第 1–5 节 / 应用 ML（1.x–5.x、A.1 ~ A.9）
+python study/board.py check 1.1             # 第 1–6 节 / 概率统计 / 应用 ML（1.x–6.x、P.1 ~ P.8、A.1 ~ A.9）
 python study/board.py tl list basics        # TorchLeet 全题库
 python study/board.py tl init  lin-regression   # 生成桩文件
 python study/board.py tl check lin-regression   # 自动核验
@@ -3024,7 +3255,7 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
   <div id="global-verify"></div>
   <h3>题库进度</h3>
   <div id="bank-progress"></div>
-  <h3>课程进度表 <span class="pill" id="prog">0 / 32</span></h3>
+  <h3>课程进度表 <span class="pill" id="prog">0 / 42</span></h3>
   <div id="checks"></div>
   <p class="sub" style="margin-top:12px">通过的结果也会写入本机 <code>~/.torchleet/progress.json</code>，终端看板以它为准。这里的进度只记在这个浏览器里；也可以手动勾选。</p>
   <div class="next"><button class="btn ghost" data-go="attention">← 1.5</button><span></span></div>
@@ -3042,13 +3273,15 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
     {name:'第 3 节 Full Model',ids:['arch','sblock','smodel']},
     {name:'第 4 节 Alignment',ids:['kl','lora','sft','dpo','ppo','grpo']},
     {name:'第 5 节 Decoding & Inference',ids:['temp','topk','topp','spec','cbatch','engine']},
+    {name:'第 6 节 MoE',ids:['moe','moerout']},
+    {name:'概率与统计',ids:['pbayes','pdist','pmom','pmle','pci','ptest','pinfo','psamp']},
     {name:'应用 ML',ids:['a0','a1','a2','a3','a4','a5','a6','a7','a8','a9']},
     {name:'TorchLeet 题库',ids:['bank-llm','bank-basics','bank-advanced','bank-study']},
     {name:'看板',ids:['board']}];
   var order=[].concat.apply([],groups.map(function(g){return g.ids}));
   var lessons=[['bpe','1.1 BPE','s1_1_bpe.py'],['sinusoidal','1.2 Sinusoidal','s1_2_sinusoidal.py'],
     ['rope','1.3 RoPE','s1_3_rope.py'],['rmsnorm','1.4 RMSNorm','s1_4_rmsnorm.py'],['attention','1.5 Attention','s1_5_attention.py'],
-    ['mha','2.1 Multi-Head Attention','s2_1_mha.py'],['gqa','2.2 Grouped Query Attention','s2_2_gqa.py'],['kvcache','2.3 KV Cache','s2_3_kvcache.py'],['swa','2.4 Sliding Window','s2_4_swa.py'],['sblock','3.2 RoPE+GQA 注意力块','s3_2_rope_gqa_block.py'],['smodel','3.3 组装完整 SmolLM','s3_3_smollm_model.py'],['kl','4.1 KL 散度','s4_1_kl.py'],['lora','4.2 LoRA','s4_2_lora.py'],['sft','4.3 SFT','s4_3_sft.py'],['dpo','4.4 DPO','s4_4_dpo.py'],['ppo','4.5 PPO-RLHF','s4_5_ppo.py'],['grpo','4.6 GRPO','s4_6_grpo.py'],['temp','5.1 温度采样','s5_1_temperature.py'],['topk','5.2 Top-k','s5_2_top_k.py'],['topp','5.3 Top-p','s5_3_top_p.py'],['spec','5.4 投机解码','s5_4_speculative.py'],['cbatch','5.5 连续批处理','s5_5_continuous_batching.py'],['engine','5.6 推理引擎','s5_6_inference_engine.py'],
+    ['mha','2.1 Multi-Head Attention','s2_1_mha.py'],['gqa','2.2 Grouped Query Attention','s2_2_gqa.py'],['kvcache','2.3 KV Cache','s2_3_kvcache.py'],['swa','2.4 Sliding Window','s2_4_swa.py'],['sblock','3.2 RoPE+GQA 注意力块','s3_2_rope_gqa_block.py'],['smodel','3.3 组装完整 SmolLM','s3_3_smollm_model.py'],['kl','4.1 KL 散度','s4_1_kl.py'],['lora','4.2 LoRA','s4_2_lora.py'],['sft','4.3 SFT','s4_3_sft.py'],['dpo','4.4 DPO','s4_4_dpo.py'],['ppo','4.5 PPO-RLHF','s4_5_ppo.py'],['grpo','4.6 GRPO','s4_6_grpo.py'],['temp','5.1 温度采样','s5_1_temperature.py'],['topk','5.2 Top-k','s5_2_top_k.py'],['topp','5.3 Top-p','s5_3_top_p.py'],['spec','5.4 投机解码','s5_4_speculative.py'],['cbatch','5.5 连续批处理','s5_5_continuous_batching.py'],['engine','5.6 推理引擎','s5_6_inference_engine.py'],['moe','6.1 MoE 层','s6_1_moe.py'],['moerout','6.2 路由与负载均衡','s6_2_moe_routing.py'],['pbayes','P.1 贝叶斯','p1_bayes.py'],['pdist','P.2 常见分布','p2_distributions.py'],['pmom','P.3 期望与协方差','p3_moments.py'],['pmle','P.4 MLE 与 MAP','p4_mle.py'],['pci','P.5 置信区间','p5_ci.py'],['ptest','P.6 假设检验','p6_testing.py'],['pinfo','P.7 信息论','p7_info.py'],['psamp','P.8 采样方法','p8_sampling.py'],
     ['a1','A.1 评估指标','a1_metrics.py'],['a2','A.2 数据预处理','a2_preprocess.py'],['a3','A.3 划分与交叉验证','a3_splits.py'],
     ['a4','A.4 线性/岭回归','a4_linreg.py'],['a5','A.5 逻辑回归','a5_logreg.py'],['a6','A.6 KNN','a6_knn.py'],
     ['a7','A.7 决策树划分','a7_tree.py'],['a8','A.8 PCA','a8_pca.py'],['a9','A.9 pandas','a9_pandas.py']];
@@ -3200,7 +3433,7 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
   /* ================= results, widgets, checklist ================= */
   var pidMap={bpe:'byte-pair-encoder',sinusoidal:'sinusoidal-positional-embedding',rope:'rotary-positional-embedding',
     rmsnorm:'rms-norm',attention:'implement-attention-from-scratch',a1:'a1-metrics',a2:'a2-preprocess',a3:'a3-splits',
-    sblock:'smollm',temp:'temperature-sampling',topk:'top-k-sampling',topp:'top-p-sampling',spec:'speculative-decoding',cbatch:'continuous-batching',engine:'inference-engine',kl:'s4-kl',lora:'lora',sft:'s4-sft',dpo:'dpo',ppo:'ppo-rlhf',grpo:'grpo',smodel:'s3-smollm-model',mha:'multi-head-attention',gqa:'grouped-query-attention',kvcache:'kv-cache',swa:'sliding-window-attention',a4:'a4-linreg',a5:'a5-logreg',a6:'a6-knn',a7:'a7-tree',a8:'a8-pca',a9:'a9-pandas'};
+    sblock:'smollm',moe:'mixture-of-experts',moerout:'s6-moe-routing',pbayes:'p1-bayes',pdist:'p2-distributions',pmom:'p3-moments',pmle:'p4-mle',pci:'p5-ci',ptest:'p6-testing',pinfo:'p7-info',psamp:'p8-sampling',temp:'temperature-sampling',topk:'top-k-sampling',topp:'top-p-sampling',spec:'speculative-decoding',cbatch:'continuous-batching',engine:'inference-engine',kl:'s4-kl',lora:'lora',sft:'s4-sft',dpo:'dpo',ppo:'ppo-rlhf',grpo:'grpo',smodel:'s3-smollm-model',mha:'multi-head-attention',gqa:'grouped-query-attention',kvcache:'kv-cache',swa:'sliding-window-attention',a4:'a4-linreg',a5:'a5-logreg',a6:'a6-knn',a7:'a7-tree',a8:'a8-pca',a9:'a9-pandas'};
   var results={};try{results=JSON.parse(store.get('tl-results')||'{}')}catch(e){}
   function stat(pid){
     var r=results[pid];if(!r)return 'none';
@@ -3630,6 +3863,54 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
   ['samp-t','samp-k','samp-p'].forEach(function(i){document.getElementById(i).oninput=drawSamp});
   ['spec-a','spec-g','spec-c'].forEach(function(i){document.getElementById(i).oninput=updSpec});
 
+  /* ---- section 6 & probability demos ---- */
+  function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+  function gauss(r){var u=1-r(),v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+  function updMoe(){
+    var N=+document.getElementById('moe-n').value,k=+document.getElementById('moe-k').value,sk=+document.getElementById('moe-s').value;
+    document.getElementById('moe-sl').textContent='偏斜 = '+sk.toFixed(1);
+    var r=mulberry(7),T=512,f=new Array(N).fill(0),P=new Array(N).fill(0);
+    for(var t=0;t<T;t++){
+      var z=[];for(var i=0;i<N;i++)z.push(gauss(r)+sk*(N-1-i)/(N-1));
+      var m=Math.max.apply(null,z),e=z.map(function(v){return Math.exp(v-m)}),s=e.reduce(function(a,b){return a+b},0);
+      for(i=0;i<N;i++)P[i]+=e[i]/s/T;
+      var ord=z.map(function(v,i){return i}).sort(function(a,b){return z[b]-z[a]});
+      for(var j=0;j<k;j++)f[ord[j]]+=1/(T*k);
+    }
+    var loss=N*f.reduce(function(a,v,i){return a+v*P[i]},0);
+    var c=document.getElementById('moe-canvas'),st=setup(c),x=st[0],W=st[1],H=st[2];
+    x.fillStyle=cssv('--surface');x.fillRect(0,0,W,H);
+    var mx=Math.max(Math.max.apply(null,f),Math.max.apply(null,P),2/N),h=H-30,bw=(W-40)/N;
+    var yu=h+6-(1/N)/mx*h;x.strokeStyle=cssv('--muted');x.setLineDash([4,4]);x.beginPath();x.moveTo(30,yu);x.lineTo(W-10,yu);x.stroke();x.setLineDash([]);
+    for(i=0;i<N;i++){var x0=30+i*bw;x.fillStyle=cssv('--accent');var bh=f[i]/mx*h;x.fillRect(x0+bw*0.2,h+6-bh,bw*0.6,bh);
+      var py=h+6-P[i]/mx*h;x.fillStyle=cssv('--warn');x.beginPath();x.moveTo(x0+bw/2,py-5);x.lineTo(x0+bw/2+5,py);x.lineTo(x0+bw/2,py+5);x.lineTo(x0+bw/2-5,py);x.closePath();x.fill();
+      x.fillStyle=cssv('--muted');x.font='11px '+cssv('--font-body');x.textAlign='center';x.fillText('E'+i,x0+bw/2,H-6);}
+    document.getElementById('moe-out').textContent='负载最重的专家拿到 '+(100*Math.max.apply(null,f)).toFixed(1)+'% 的分配，最轻的 '+(100*Math.min.apply(null,f)).toFixed(1)+'%（均衡值 '+(100/N).toFixed(1)+'%）\nN·Σ f_i·P_i = '+loss.toFixed(3)+'   （完全均衡时为 1，越不均衡越大）';
+  }
+  function drawClt(){
+    var dist=document.getElementById('clt-dist').value,n=+document.getElementById('clt-n').value;
+    document.getElementById('clt-nl').textContent='n = '+n;
+    var r=mulberry(11),M=4000,mu,sd,means=[];
+    function draw1(){if(dist==='exp')return -Math.log(1-r());if(dist==='uni')return r();return r()<0.1?1:0}
+    if(dist==='exp'){mu=1;sd=1}else if(dist==='uni'){mu=0.5;sd=Math.sqrt(1/12)}else{mu=0.1;sd=Math.sqrt(0.09)}
+    for(var m=0;m<M;m++){var s=0;for(var i=0;i<n;i++)s+=draw1();means.push(s/n)}
+    var se=sd/Math.sqrt(n),lo=mu-4*se,hi=mu+4*se,B=40,cnt=new Array(B).fill(0);
+    if(dist==='exp')lo=Math.max(0,lo);if(dist!=='exp'){lo=Math.max(0,lo);hi=Math.min(1,hi)}
+    means.forEach(function(v){var b=Math.floor((v-lo)/(hi-lo)*B);if(b>=0&&b<B)cnt[b]++});
+    var c=document.getElementById('clt-canvas'),st=setup(c),x=st[0],W=st[1],H=st[2];
+    x.fillStyle=cssv('--surface');x.fillRect(0,0,W,H);
+    var bw=(W-20)/B,dens=cnt.map(function(v){return v/M/((hi-lo)/B)}),pdf=function(t){return Math.exp(-(t-mu)*(t-mu)/(2*se*se))/(se*Math.sqrt(2*Math.PI))};
+    var mx=Math.max(Math.max.apply(null,dens),pdf(mu)),h=H-24;
+    for(var b=0;b<B;b++){x.fillStyle=cssv('--line');var bh=dens[b]/mx*h;x.fillRect(10+b*bw+1,h+4-bh,bw-2,bh)}
+    x.strokeStyle=cssv('--accent');x.lineWidth=2;x.beginPath();
+    for(var q=0;q<=200;q++){var t=lo+(hi-lo)*q/200,y=h+4-pdf(t)/mx*h;if(q===0)x.moveTo(10+(W-20)*q/200,y);else x.lineTo(10+(W-20)*q/200,y)}x.stroke();
+    x.fillStyle=cssv('--muted');x.font='11px '+cssv('--font-body');x.textAlign='left';x.fillText(lo.toFixed(2),10,H-4);x.textAlign='right';x.fillText(hi.toFixed(2),W-10,H-4);
+    var mm=means.reduce(function(a,v){return a+v},0)/M,vv=means.reduce(function(a,v){return a+(v-mm)*(v-mm)},0)/M;
+    document.getElementById('clt-out').textContent='4000 次实验，每次取 n='+n+' 个样本求平均。样本均值的均值 '+mm.toFixed(4)+'（总体均值 '+mu+'），标准差 '+Math.sqrt(vv).toFixed(4)+'（理论 σ/√n = '+se.toFixed(4)+'）\n灰色柱是样本均值的直方图，曲线是中心极限定理给出的正态近似 N(μ, σ²/n)。';
+  }
+  ['moe-n','moe-k'].forEach(function(i){document.getElementById(i).onchange=updMoe});document.getElementById('moe-s').oninput=updMoe;
+  document.getElementById('clt-dist').onchange=drawClt;document.getElementById('clt-n').oninput=drawClt;
+
   function draw(id){
     if(id==='mha')updMha();
     if(id==='gqa')updGqa();
@@ -3637,6 +3918,8 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
     if(id==='swa')drawSwa();
     if(id==='temp')drawSamp();
     if(id==='spec')updSpec();
+    if(id==='moerout')updMoe();
+    if(id==='pci')drawClt();
     if(id.indexOf('bank-')===0)renderBank(id);
     if(id==='sinusoidal')drawPE();
     if(id==='rope')drawRope();

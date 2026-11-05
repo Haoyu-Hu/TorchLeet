@@ -3,6 +3,8 @@
 每个检查是 fn(ns)，ns 是提交模块里的名字；assert 失败即未通过。
 检查的是性质与手算结果，不对比标准实现，写法不同也能通过。
 """
+import math
+
 import numpy as np
 
 CHECKS = {}
@@ -735,3 +737,459 @@ def check_gradients_masked(ns):
     g = logits.grad[0].abs().sum(-1)
     assert float(g[0]) == 0.0 and float(g[3]) == 0.0, f"预测提示 token 的位置 0 和最后一个位置不应有梯度，得到 {g.tolist()}"
     assert float(g[1]) > 0 and float(g[2]) > 0, "预测回答 token 的位置应有梯度"
+
+
+# ============================================================ 6.2 MoE 路由与负载均衡（PyTorch）
+add = reg("s6-moe-routing", ["topk_route", "load_balancing_loss", "moe_combine"], [
+    "topk_route：torch.topk 取每个 token 最大的 k 个 logits，再只对这 k 个做 softmax（等价于把全量 softmax 的概率在这 k 个上重新归一化）。",
+    "load_balancing_loss：P_i = 所有 token 在专家 i 上的平均路由概率（对全部专家做 softmax）；f_i = 被分到专家 i 的 (token, 槽位) 占全部 T·k 个分配的比例；loss = N·Σ f_i·P_i。",
+    "f_i 来自 argmax/topk，不可导；梯度只经过 P_i 流回路由器。",
+    "moe_combine：对每个专家 e，找出选中它的 (token, 槽位)，只把这些 token 送进专家 e，乘上对应权重后用 index_add_ 加回输出。",
+])
+
+
+def _route_data(T=12, N=6, seed=0):
+    import torch
+    g = torch.Generator().manual_seed(seed)
+    return torch.randn(T, N, generator=g)
+
+
+@add
+def check_topk_route(ns):
+    import torch
+    logits = _route_data()
+    w, idx = ns.topk_route(logits, 2)
+    assert tuple(w.shape) == (12, 2) and tuple(idx.shape) == (12, 2), f"应返回 (T,k) 的权重与下标，得到 {tuple(w.shape)}、{tuple(idx.shape)}"
+    assert torch.allclose(w.sum(-1), torch.ones(12), atol=1e-6), "每个 token 的 k 个权重之和应为 1"
+    top = logits.topk(2, dim=-1).indices
+    assert torch.equal(idx.sort(-1).values, top.sort(-1).values), "选出的专家应是 logits 最大的 k 个"
+    full = logits.softmax(-1).gather(-1, idx)
+    assert torch.allclose(w, full / full.sum(-1, keepdim=True), atol=1e-6), "权重应等于全量 softmax 概率在这 k 个专家上重新归一化"
+    w1, _ = ns.topk_route(logits, 1)
+    assert torch.allclose(w1, torch.ones(12, 1)), "k=1 时权重应全为 1"
+
+
+@add
+def check_load_balancing_values(ns):
+    import torch
+    N, T = 4, 8
+    logits = torch.zeros(T, N)
+    idx = torch.arange(T).remainder(N).unsqueeze(-1)            # 完全均衡，k=1
+    v = float(ns.load_balancing_loss(logits, idx, N))
+    assert abs(v - 1.0) < 1e-6, f"均匀概率 + 均衡分配时 loss 应为 1，得到 {v:.4f}"
+    peaked = torch.full((T, N), -20.0); peaked[:, 0] = 20.0
+    v2 = float(ns.load_balancing_loss(peaked, torch.zeros(T, 1, dtype=torch.long), N))
+    assert abs(v2 - N) < 1e-3, f"所有 token 都去专家 0、概率也全在专家 0 时 loss 应约为 N={N}，得到 {v2:.4f}"
+    logits = _route_data(T=10, N=5, seed=3)
+    idx = logits.topk(2, -1).indices
+    P = logits.softmax(-1).mean(0)
+    f = torch.zeros(5).index_add_(0, idx.reshape(-1), torch.ones(20)) / 20
+    exp = 5 * (f * P).sum()
+    got = torch.as_tensor(ns.load_balancing_loss(logits, idx, 5))
+    assert torch.allclose(got, exp, atol=1e-6), f"top-2 时 f_i 按 T·k 个分配计算：应为 {float(exp):.5f}，得到 {float(got):.5f}"
+
+
+@add
+def check_load_balancing_gradient(ns):
+    import torch
+    logits = _route_data(seed=4).requires_grad_(True)
+    idx = logits.detach().topk(2, -1).indices
+    loss = ns.load_balancing_loss(logits, idx, logits.shape[1])
+    loss.backward()
+    assert logits.grad is not None and float(logits.grad.abs().sum()) > 0, "梯度没有流回路由 logits：P_i 要由可导的 softmax 计算"
+
+
+def _experts(N=4, D=6, seed=0):
+    import torch
+    g = torch.Generator().manual_seed(seed)
+    Ws = [torch.randn(D, D, generator=g) for _ in range(N)]
+    calls = [0] * N
+
+    def make(i):
+        def f(x):
+            calls[i] += x.shape[0]
+            return torch.tanh(x @ Ws[i])
+        return f
+    return [make(i) for i in range(N)], Ws, calls
+
+
+@add
+def check_moe_combine_matches_dense(ns):
+    import torch
+    experts, Ws, _ = _experts()
+    g = torch.Generator().manual_seed(5)
+    x, logits = torch.randn(10, 6, generator=g), torch.randn(10, 4, generator=g)
+    out = ns.moe_combine(x, logits, experts, 2)
+    assert tuple(out.shape) == (10, 6), f"输出应为 (T, D)=(10,6)，得到 {tuple(out.shape)}"
+    w, idx = logits.topk(2, -1)
+    w = w.softmax(-1)
+    dense = torch.stack([torch.tanh(x @ W) for W in Ws], 1)            # (T, N, D)
+    exp = (dense.gather(1, idx.unsqueeze(-1).expand(-1, -1, 6)) * w.unsqueeze(-1)).sum(1)
+    assert torch.allclose(out, exp, atol=1e-5), "输出应为 Σ_j w_tj · E_{idx_tj}(x_t)"
+
+
+@add
+def check_moe_combine_is_sparse(ns):
+    import torch
+    experts, _, calls = _experts(seed=1)
+    g = torch.Generator().manual_seed(6)
+    x, logits = torch.randn(16, 6, generator=g), torch.randn(16, 4, generator=g)
+    ns.moe_combine(x, logits, experts, 2)
+    idx = logits.topk(2, -1).indices
+    exp = [int((idx == e).sum()) for e in range(4)]
+    assert calls == exp, f"每个专家只应处理分配给它的 token：期望各专家处理 {exp} 行，实际 {calls}"
+
+
+@add
+def check_moe_combine_gradients(ns):
+    import torch
+    experts, _, _ = _experts(seed=2)
+    g = torch.Generator().manual_seed(7)
+    x = torch.randn(8, 6, generator=g, requires_grad=True)
+    logits = torch.randn(8, 4, generator=g, requires_grad=True)
+    ns.moe_combine(x, logits, experts, 2).sum().backward()
+    assert x.grad is not None and float(x.grad.abs().sum()) > 0, "梯度没有流回输入"
+    assert logits.grad is not None and float(logits.grad.abs().sum()) > 0, "梯度没有流回路由 logits：权重要由可导的 softmax 得到"
+
+
+# ============================================================ P 概率与统计（numpy / math，不需要 scipy）
+def _a(x):
+    return np.asarray(x, dtype=float)
+
+
+# ---------- P.1 贝叶斯
+add = reg("p1-bayes", ["posterior", "sequential_update", "bernoulli_nb_fit", "bernoulli_nb_predict"], [
+    "posterior：逐元素相乘 prior·likelihood，再除以总和（总和就是证据 P(E)）。",
+    "sequential_update：在对数空间累加 log prior + Σ_t log likelihood_t，最后减去 logsumexp 再取 exp，避免连乘下溢成 0。",
+    "bernoulli_nb_fit：log_prior[c] = log(n_c / n)；θ[c, j] = (类 c 中特征 j 为 1 的个数 + α) / (n_c + 2α)，返回 (log_prior, log θ)。",
+    "bernoulli_nb_predict：得分 = log_prior + X·log θᵀ + (1−X)·log(1−θ)ᵀ，取 argmax。log(1−θ) 用 np.log1p(-θ)。",
+])
+
+
+@add
+def check_posterior_disease_test(ns):
+    post = _a(ns.posterior(np.array([0.01, 0.99]), np.array([0.99, 0.05])))
+    assert abs(post.sum() - 1) < 1e-9, "后验之和应为 1"
+    assert abs(post[0] - 0.0099 / (0.0099 + 0.0495)) < 1e-9, f"患病率 1%、灵敏度 99%、假阳性 5% 时，阳性后患病概率应约为 0.1667，得到 {post[0]:.4f}"
+
+
+@add
+def check_sequential_update(ns):
+    rng = np.random.default_rng(0)
+    prior = np.array([0.2, 0.3, 0.5])
+    L = rng.uniform(0.1, 0.9, size=(5, 3))
+    exp = prior * L.prod(0); exp /= exp.sum()
+    got = _a(ns.sequential_update(prior, L))
+    assert np.allclose(got, exp, atol=1e-9), "5 次观测后的后验应等于先验乘以全部似然再归一化"
+    assert np.allclose(_a(ns.sequential_update(prior, L[::-1])), exp, atol=1e-9), "观测的顺序不应影响最终后验"
+    big = rng.uniform(1e-4, 1e-3, size=(2000, 3)); big[:, 2] *= 1.01
+    out = _a(ns.sequential_update(prior, big))
+    logp = np.log(prior) + np.log(big).sum(0); logp -= logp.max(); ref = np.exp(logp) / np.exp(logp).sum()
+    assert np.isfinite(out).all() and abs(out.sum() - 1) < 1e-9, "2000 次很小的似然连乘下溢了：请在对数空间计算"
+    assert np.allclose(out, ref, atol=1e-6), "对数空间的结果不对"
+
+
+def _nb_data():
+    X = np.array([[1, 0, 1], [1, 1, 1], [0, 0, 1], [0, 1, 0], [0, 1, 0], [1, 1, 0]])
+    y = np.array([0, 0, 0, 1, 1, 1])
+    return X, y
+
+
+@add
+def check_nb_fit(ns):
+    X, y = _nb_data()
+    lp, lt = (_a(v) for v in ns.bernoulli_nb_fit(X, y, alpha=1.0))
+    assert lp.shape == (2,) and lt.shape == (2, 3), f"形状应为 (C,)=(2,) 与 (C,D)=(2,3)，得到 {lp.shape} {lt.shape}"
+    assert np.allclose(np.exp(lp), [0.5, 0.5]), "两类各 3 个样本，先验应各为 0.5"
+    exp0 = (np.array([2, 1, 3]) + 1) / (3 + 2)
+    assert np.allclose(np.exp(lt[0]), exp0), f"类 0 的 θ 应为 (计数+1)/(3+2) = {exp0.tolist()}，得到 {np.exp(lt[0]).round(3).tolist()}"
+
+
+@add
+def check_nb_predict(ns):
+    X, y = _nb_data()
+    lp, lt = ns.bernoulli_nb_fit(X, y, alpha=1.0)
+    pred = np.asarray(ns.bernoulli_nb_predict(X, lp, lt))
+    assert (pred == y).mean() >= 5 / 6, f"在训练集上应基本分对，得到 {pred.tolist()}"
+    Xn = np.array([[1, 0, 1], [0, 1, 0]])
+    assert np.asarray(ns.bernoulli_nb_predict(Xn, lp, lt)).tolist() == [0, 1], "典型样本分错了"
+    lt0 = _a(lt)
+    assert np.isfinite(lt0).all() and (lt0 < 0).all(), "平滑之后 θ 必须严格在 (0,1) 内，log θ 不能是 −inf"
+
+
+# ---------- P.2 常见分布
+add = reg("p2-distributions", ["binomial_pmf", "poisson_pmf", "normal_pdf", "normal_cdf"], [
+    "二项分布：C(n,k) p^k (1−p)^(n−k)。n 很大时用 math.lgamma 在对数空间算组合数，再 exp。",
+    "泊松：e^{−λ} λ^k / k!，同样在对数空间算：−λ + k log λ − lgamma(k+1)。",
+    "正态密度：exp(−(x−μ)²/(2σ²)) / (σ√(2π))；正态分布函数：½(1 + erf((x−μ)/(σ√2)))，用 math.erf。",
+    "normal_pdf / normal_cdf 要能接受 numpy 数组（可以用 np.vectorize 包一下 math.erf）。",
+])
+
+
+@add
+def check_binomial(ns):
+    assert abs(ns.binomial_pmf(3, 10, 0.3) - 0.266827932) < 1e-8, "Binomial(10, 0.3) 在 k=3 处应约为 0.266828"
+    assert abs(sum(ns.binomial_pmf(k, 20, 0.37) for k in range(21)) - 1) < 1e-9, "对所有 k 求和应为 1"
+    v = ns.binomial_pmf(1000, 2000, 0.5)
+    assert np.isfinite(v) and abs(v - 0.017839011) < 1e-7, f"n=2000 时不能溢出，应约为 0.017839，得到 {v}"
+    assert ns.binomial_pmf(0, 5, 0.0) == 1.0 and ns.binomial_pmf(5, 5, 1.0) == 1.0, "p=0 或 p=1 的边界情况"
+
+
+@add
+def check_poisson(ns):
+    assert abs(ns.poisson_pmf(2, 3.0) - 0.224041808) < 1e-8, "Poisson(3) 在 k=2 处应约为 0.224042"
+    assert abs(sum(ns.poisson_pmf(k, 4.5) for k in range(80)) - 1) < 1e-9, "对 k 求和应为 1"
+    mean = sum(k * ns.poisson_pmf(k, 4.5) for k in range(80))
+    assert abs(mean - 4.5) < 1e-8, "泊松分布的均值应等于 λ"
+    assert np.isfinite(ns.poisson_pmf(500, 480.0)), "k、λ 很大时不能溢出"
+
+
+@add
+def check_normal(ns):
+    x = np.array([-1.0, 0.0, 1.96])
+    pdf, cdf = _a(ns.normal_pdf(x, 0.0, 1.0)), _a(ns.normal_cdf(x, 0.0, 1.0))
+    assert pdf.shape == (3,) and cdf.shape == (3,), "应支持数组输入"
+    assert abs(pdf[1] - 0.398942280) < 1e-8 and abs(cdf[1] - 0.5) < 1e-12, "标准正态在 0 处：pdf≈0.398942，cdf=0.5"
+    assert abs(cdf[2] - 0.975002105) < 1e-8, "Φ(1.96) 应约为 0.975002"
+    assert abs(float(ns.normal_cdf(np.array([7.0]), 5.0, 2.0)[0]) - 0.841344746) < 1e-8, "N(5, 2²) 在 7 处的 cdf 应等于 Φ(1)"
+    grid = np.linspace(-8, 8, 160001)
+    assert abs(_a(ns.normal_pdf(grid, 0.0, 1.0)).sum() * (grid[1] - grid[0]) - 1) < 1e-6, "密度的积分应为 1"
+
+
+# ---------- P.3 矩与协方差
+add = reg("p3-moments", ["mean_var", "covariance_matrix", "correlation_matrix", "welford"], [
+    "mean_var(x, ddof)：方差的分母是 n − ddof。",
+    "covariance_matrix：先减去每列均值得到 Xc，再算 Xcᵀ Xc / (n − ddof)，结果形状 (D, D)。",
+    "correlation_matrix：Corr = Cov / (σ σᵀ)，σ 是各列标准差；对角线应为 1。",
+    "welford：一遍扫描，维护 n、mean、M2：delta = x − mean；mean += delta/n；M2 += delta·(x − mean)。最后 var = M2/n。",
+])
+
+
+@add
+def check_mean_var(ns):
+    x = np.array([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])
+    m, v = ns.mean_var(x, ddof=0)
+    assert abs(m - 5) < 1e-12 and abs(v - 4) < 1e-12, f"这组数据均值 5、总体方差 4，得到 {m}, {v}"
+    _, v1 = ns.mean_var(x, ddof=1)
+    assert abs(v1 - 32 / 7) < 1e-12, "ddof=1 时分母是 n−1"
+
+
+@add
+def check_cov_corr(ns):
+    rng = np.random.default_rng(1)
+    X = rng.normal(size=(50, 4)) @ rng.normal(size=(4, 4))
+    C = _a(ns.covariance_matrix(X, ddof=1))
+    assert np.allclose(C, np.cov(X, rowvar=False)), "应与 np.cov(X, rowvar=False) 一致"
+    assert np.allclose(C, C.T), "协方差矩阵应对称"
+    assert np.linalg.eigvalsh(C).min() > -1e-10, "协方差矩阵应半正定"
+    R = _a(ns.correlation_matrix(X))
+    assert np.allclose(R, np.corrcoef(X, rowvar=False)) and np.allclose(np.diag(R), 1), "应与 np.corrcoef 一致，对角线为 1"
+
+
+@add
+def check_welford(ns):
+    rng = np.random.default_rng(2)
+    x = 1e9 + rng.normal(size=10000)
+    m, v = ns.welford(iter(x.tolist()))
+    assert abs(m - x.mean()) < 1e-6 and abs(v - x.var()) < 1e-6, f"在 1e9 的偏移上仍应精确（总体方差约为 1），得到 var={v:.6f}"
+    naive = (x ** 2).mean() - x.mean() ** 2
+    assert abs(naive - x.var()) > 1e-2, "（内部自检：朴素公式在这里应明显失准）"
+
+
+# ---------- P.4 极大似然与 MAP
+add = reg("p4-mle", ["gaussian_mle", "gaussian_nll", "bernoulli_map", "categorical_mle"], [
+    "高斯的 MLE：μ̂ = 样本均值，σ̂² = (1/n)Σ(x−μ̂)²（分母是 n，不是 n−1）。",
+    "gaussian_nll：平均负对数似然 = ½ log(2πσ²) + mean((x−μ)²) / (2σ²)。",
+    "Beta(a, b) 先验 + k 次成功 / n 次试验的后验是 Beta(a+k, b+n−k)，MAP 是它的众数 (k+a−1)/(n+a+b−2)。",
+    "categorical_mle(counts, alpha)：(c_i + α) / (N + Kα)，α=0 就是频率。",
+])
+
+
+@add
+def check_gaussian_mle(ns):
+    rng = np.random.default_rng(3)
+    x = rng.normal(2.0, 3.0, size=500)
+    mu, var = ns.gaussian_mle(x)
+    assert abs(mu - x.mean()) < 1e-12 and abs(var - x.var()) < 1e-9, "MLE 的方差分母是 n"
+    base = ns.gaussian_nll(x, mu, var)
+    for dmu, dvar in ((0.1, 0), (-0.1, 0), (0, 0.5), (0, -0.5)):
+        assert ns.gaussian_nll(x, mu + dmu, var + dvar) > base, "MLE 应当是负对数似然的最小点"
+    assert abs(ns.gaussian_nll(np.array([0.0]), 0.0, 1.0) - 0.5 * math.log(2 * math.pi)) < 1e-12, "N(0,1) 在 0 处的 NLL 应为 ½log(2π)"
+
+
+@add
+def check_bernoulli_map(ns):
+    assert abs(ns.bernoulli_map(7, 10, 1.0, 1.0) - 0.7) < 1e-12, "均匀先验 Beta(1,1) 时 MAP 等于 MLE"
+    assert abs(ns.bernoulli_map(7, 10, 11.0, 11.0) - 17 / 30) < 1e-12, "强先验 Beta(11,11) 会把估计拉向 0.5：(7+10)/(10+20) = 0.567"
+    assert abs(ns.bernoulli_map(0, 3, 2.0, 2.0) - 0.2) < 1e-12, "0 次成功时 MLE 是 0，Beta(2,2) 的 MAP 是 1/5"
+
+
+@add
+def check_categorical_mle(ns):
+    c = np.array([3, 0, 1])
+    assert np.allclose(_a(ns.categorical_mle(c, 0.0)), [0.75, 0, 0.25]), "α=0 时就是频率"
+    s = _a(ns.categorical_mle(c, 1.0))
+    assert np.allclose(s, np.array([4, 1, 2]) / 7) and abs(s.sum() - 1) < 1e-12, "加一平滑：(c+1)/(N+K)"
+
+
+# ---------- P.5 置信区间与 bootstrap
+add = reg("p5-ci", ["norm_ppf", "mean_ci", "bootstrap_ci"], [
+    "norm_ppf：标准正态分布函数 Φ 单调递增，可以在 [−10, 10] 上二分，直到 Φ(z) 与 p 的差小于 1e-12。Φ 用 math.erf 写。",
+    "mean_ci：x̄ ± z·s/√n，s 用 ddof=1 的样本标准差，z = norm_ppf(1 − (1−conf)/2)。",
+    "bootstrap_ci：rng = np.random.default_rng(seed)；重复 n_boot 次有放回地抽 n 个样本、算统计量；取 (1−conf)/2 和 1−(1−conf)/2 两个分位数（np.quantile）。",
+])
+
+
+@add
+def check_norm_ppf(ns):
+    for p, z in ((0.975, 1.959963985), (0.5, 0.0), (0.05, -1.644853627), (0.995, 2.575829304)):
+        assert abs(ns.norm_ppf(p) - z) < 1e-6, f"norm_ppf({p}) 应约为 {z}，得到 {ns.norm_ppf(p)}"
+
+
+@add
+def check_mean_ci(ns):
+    x = np.array([4.0, 5.0, 6.0, 7.0, 8.0])
+    lo, hi = ns.mean_ci(x, 0.95)
+    half = 1.959963985 * x.std(ddof=1) / math.sqrt(5)
+    assert abs(lo - (6 - half)) < 1e-6 and abs(hi - (6 + half)) < 1e-6, f"应为 6 ± {half:.4f}，得到 ({lo:.4f}, {hi:.4f})"
+    rng = np.random.default_rng(4)
+    cover = np.mean([(lambda c: c[0] <= 0 <= c[1])(ns.mean_ci(rng.normal(size=60), 0.95)) for _ in range(2000)])
+    assert 0.93 <= cover <= 0.97, f"95% 区间在重复实验里应约有 95% 覆盖真值，得到 {cover:.3f}"
+
+
+@add
+def check_bootstrap(ns):
+    rng = np.random.default_rng(5)
+    x = rng.exponential(2.0, size=200)
+    a = ns.bootstrap_ci(x, np.mean, 2000, 0.95, 7)
+    b = ns.bootstrap_ci(x, np.mean, 2000, 0.95, 7)
+    assert a[0] == b[0] and a[1] == b[1], "同一个 seed 应得到相同的区间"
+    assert a[0] < x.mean() < a[1], "区间应包含样本均值"
+    lo, hi = ns.mean_ci(x, 0.95)
+    assert 0.8 < (a[1] - a[0]) / (hi - lo) < 1.25, "均值的 bootstrap 区间宽度应与正态近似相当"
+    m = ns.bootstrap_ci(x, np.median, 1000, 0.9, 1)
+    assert m[0] < np.median(x) < m[1], "对中位数也应适用"
+
+
+# ---------- P.6 假设检验
+add = reg("p6-testing", ["two_proportion_ztest", "welch_t", "bonferroni", "benjamini_hochberg"], [
+    "两比例 z 检验：合并比例 p̂ = (x1+x2)/(n1+n2)，SE = √(p̂(1−p̂)(1/n1 + 1/n2))，z = (p1 − p2)/SE，双侧 p = 2(1 − Φ(|z|))。",
+    "Welch t：t = (ā − b̄)/√(s_a²/n_a + s_b²/n_b)，样本方差用 ddof=1；自由度用 Welch–Satterthwaite 公式。",
+    "Bonferroni：p_i ≤ α/m 才拒绝。",
+    "BH：p 值升序排列，找最大的 k 使 p_(k) ≤ (k/m)·α，拒绝排名前 k 的全部假设（按原顺序返回布尔数组）。",
+])
+
+
+@add
+def check_two_proportion(ns):
+    z, p = ns.two_proportion_ztest(200, 1000, 250, 1000)
+    assert abs(z - (-2.677397763)) < 1e-6, f"z 应约为 −2.6774，得到 {z}"
+    assert abs(p - 0.007419649) < 1e-6, f"双侧 p 应约为 0.00742，得到 {p}"
+    z0, p0 = ns.two_proportion_ztest(50, 100, 50, 100)
+    assert abs(z0) < 1e-12 and abs(p0 - 1) < 1e-9, "两组比例相同时 z=0、p=1"
+
+
+@add
+def check_welch(ns):
+    a = [5.1, 4.9, 5.6, 5.8, 6.0, 5.2]
+    b = [4.1, 4.5, 4.0, 4.8, 4.4, 4.2, 4.6, 4.3]
+    t, df = ns.welch_t(np.array(a), np.array(b))
+    assert abs(t - 5.353005116) < 1e-6 and abs(df - 7.815014676) < 1e-6, f"应为 t≈5.3530、df≈7.8150，得到 {t}, {df}"
+
+
+@add
+def check_multiple_testing(ns):
+    p = np.array([0.01, 0.04, 0.03, 0.005, 0.20])
+    assert np.asarray(ns.bonferroni(p, 0.05)).tolist() == [True, False, False, True, False], "Bonferroni 的阈值是 0.05/5 = 0.01"
+    bh = np.asarray(ns.benjamini_hochberg(p, 0.05)).tolist()
+    assert bh == [True, True, True, True, False], f"BH：排序后 0.04 ≤ 4/5·0.05 = 0.04，所以前 4 个都拒绝；得到 {bh}"
+    assert np.asarray(ns.benjamini_hochberg(np.array([0.5, 0.6]), 0.05)).tolist() == [False, False], "都不显著时一个也不拒绝"
+    gap = np.asarray(ns.benjamini_hochberg(np.array([0.03, 0.001, 0.035, 0.2]), 0.05)).tolist()
+    assert gap == [True, True, True, False], (
+        "排序后 0.03 > 2/4·0.05，但 0.035 ≤ 3/4·0.05：BH 要找满足条件的“最大”排名 k，再拒绝前 k 个，"
+        f"不能在第一个不满足处停下；得到 {gap}")
+
+
+# ---------- P.7 信息论
+add = reg("p7-info", ["entropy", "cross_entropy", "mutual_information", "perplexity"], [
+    "entropy：−Σ p log p，约定 0·log 0 = 0（先把 p=0 的项去掉）；base 决定单位（2 是比特）。",
+    "cross_entropy(p, q)：−Σ p log q；它等于 H(p) + KL(p‖q)。",
+    "mutual_information(joint)：I = Σ_{x,y} p(x,y) log( p(x,y) / (p(x)p(y)) )，边缘分布由行和、列和得到。",
+    "perplexity(token_logprobs)：exp(−平均对数概率)，自然对数。",
+])
+
+
+@add
+def check_entropy(ns):
+    assert abs(ns.entropy(np.array([0.5, 0.5]), 2) - 1) < 1e-12, "公平硬币的熵是 1 比特"
+    assert abs(ns.entropy(np.array([1.0, 0.0]), 2)) < 1e-12, "确定事件的熵是 0（0·log0 = 0）"
+    assert abs(ns.entropy(np.ones(8) / 8, 2) - 3) < 1e-12, "8 个等概率结果的熵是 3 比特"
+    assert abs(ns.entropy(np.array([0.5, 0.5]), math.e) - math.log(2)) < 1e-12, "以 e 为底时单位是 nats"
+
+
+@add
+def check_cross_entropy(ns):
+    p, q = np.array([0.5, 0.5]), np.array([0.9, 0.1])
+    kl = (p * np.log2(p / q)).sum()
+    assert abs(ns.cross_entropy(p, q, 2) - (ns.entropy(p, 2) + kl)) < 1e-12, "交叉熵 = 熵 + KL"
+    assert abs(ns.cross_entropy(p, p, 2) - ns.entropy(p, 2)) < 1e-12, "q = p 时交叉熵等于熵"
+
+
+@add
+def check_mutual_information(ns):
+    indep = np.outer([0.3, 0.7], [0.4, 0.6])
+    assert abs(ns.mutual_information(indep, 2)) < 1e-12, "独立时互信息为 0"
+    same = np.array([[0.5, 0.0], [0.0, 0.5]])
+    assert abs(ns.mutual_information(same, 2) - 1) < 1e-12, "X = Y 且是公平硬币时互信息为 1 比特"
+    j = np.array([[0.1, 0.2, 0.05], [0.25, 0.1, 0.3]])
+    assert abs(ns.mutual_information(j, 2) - ns.mutual_information(j.T, 2)) < 1e-12, "互信息对称"
+    assert ns.mutual_information(j, 2) > 0, "相关时互信息为正"
+
+
+@add
+def check_perplexity(ns):
+    V = 50
+    assert abs(ns.perplexity(np.full(20, -math.log(V))) - V) < 1e-9, "均匀分布在 V 个词上的困惑度就是 V"
+    assert abs(ns.perplexity(np.zeros(5)) - 1) < 1e-12, "每个 token 概率都是 1 时困惑度为 1"
+
+
+# ---------- P.8 采样
+add = reg("p8-sampling", ["sample_exponential", "rejection_sample", "importance_estimate"], [
+    "逆变换采样：若 U ~ Uniform(0,1)，则 F⁻¹(U) 服从分布 F。指数分布 F(x) = 1 − e^{−λx}，反解得到 x。",
+    "拒绝采样：从提议分布抽 x、再抽 u ~ U(0,1)，若 u ≤ p(x)/(M·q(x)) 就接受；直到攒够 n 个。返回 (样本, 接受率)。",
+    "重要性采样：E_p[f] ≈ mean(f(x)·w)，w = p(x)/q(x)，x 来自 q。自归一化版本用 Σ f·w / Σ w，p 只需已知到相差一个常数。",
+])
+
+
+@add
+def check_exponential(ns):
+    rng = np.random.default_rng(8)
+    x = _a(ns.sample_exponential(2.0, 200000, rng))
+    assert x.shape == (200000,) and (x >= 0).all(), "应返回 n 个非负样本"
+    assert abs(x.mean() - 0.5) < 0.005 and abs(x.var() - 0.25) < 0.01, f"Exp(λ=2) 的均值 1/λ=0.5、方差 1/λ²=0.25，得到 {x.mean():.4f}, {x.var():.4f}"
+    assert abs((x > 1.0).mean() - math.exp(-2.0)) < 0.004, "P(X>1) 应为 e^{−2}"
+
+
+@add
+def check_rejection(ns):
+    rng = np.random.default_rng(9)
+    target = lambda x: 6 * x * (1 - x)                        # Beta(2,2)
+    samples, rate = ns.rejection_sample(target, lambda n, r: r.random(n), lambda x: np.ones_like(x), 1.5, 50000, rng)
+    s = _a(samples)
+    assert s.shape == (50000,), "应返回恰好 n 个被接受的样本"
+    assert abs(s.mean() - 0.5) < 0.005 and abs(s.var() - 0.05) < 0.003, f"Beta(2,2) 的均值 0.5、方差 0.05，得到 {s.mean():.4f}, {s.var():.4f}"
+    assert abs(rate - 1 / 1.5) < 0.01, f"接受率应约为 1/M = 0.667，得到 {rate:.3f}"
+
+
+@add
+def check_importance(ns):
+    rng = np.random.default_rng(10)
+    x = rng.normal(0, 2, size=200000)
+    p = lambda t: np.exp(-t ** 2 / 2) / math.sqrt(2 * math.pi)
+    q = lambda t: np.exp(-t ** 2 / 8) / math.sqrt(8 * math.pi)
+    f = lambda t: t ** 2
+    est = ns.importance_estimate(f, x, p, q, False)
+    assert abs(est - 1) < 0.02, f"用 N(0,2²) 的样本估计 N(0,1) 下的 E[x²]=1，得到 {est:.4f}"
+    unnorm = lambda t: 5 * p(t)
+    assert abs(ns.importance_estimate(f, x, unnorm, q, False) - 5) < 0.1, "p 乘了常数 5，普通重要性采样的结果也会乘 5"
+    assert abs(ns.importance_estimate(f, x, unnorm, q, True) - 1) < 0.02, "自归一化版本应不受常数影响"

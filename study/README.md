@@ -19,7 +19,8 @@ python study/board.py hint 1.1
 | 3 Full Model | 架构总览 · RoPE+GQA 注意力块 · 组装 SmolLM（`s3_*.py`） | ✅ 看板就绪 |
 | 4 Alignment | KL · LoRA · SFT · DPO · PPO-RLHF · GRPO（`s4_*.py`；4.1、4.3 为本仓库自建判题） | ✅ 看板就绪 |
 | 5 Decoding & Inference | 温度 · Top-k · Top-p · 投机解码 · 连续批处理 · 推理引擎（`s5_*.py`） | ✅ 看板就绪 |
-| 6 Systems | MoE | 待开讲 |
+| 6 MoE | MoE 层 · 路由、负载均衡与专家容量（`s6_*.py`；6.2 为自建判题） | ✅ 看板就绪 |
+| 概率与统计 | 贝叶斯 · 常见分布 · 期望与协方差 · MLE/MAP · 置信区间 · 假设检验 · 信息论 · 采样（`p*_*.py`，只需 numpy） | ✅ 看板就绪 |
 | Basics | 线性回归 → CNN/RNN/LSTM → 经典 ML | 待开讲 |
 
 ## TorchLeet 全题库

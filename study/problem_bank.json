@@ -2820,7 +2820,7 @@
    }
   ],
   "statement": "# Implement Mixture of Experts Layer\n\n**Difficulty**: 🔴 Hard\n\n**Companies**: Google, DeepMind, Mistral, Databricks, xAI\n\n---\n\n### Problem Statement\n\n**Mixture of Experts (MoE)** is a technique for scaling model capacity without proportionally scaling compute. Instead of one large feed-forward network (FFN), MoE uses multiple smaller \"expert\" FFNs and a **gating/router network** that selects the **top-k** experts for each token. This means each token is only processed by a fraction of the total parameters.\n\nA critical challenge in MoE is **load balancing**: without regularization, the router may collapse to always selecting the same expert(s), leaving others unused. An **auxiliary load balancing loss** encourages the router to distribute tokens evenly across experts.\n\nYour task is to implement:\n1. An `Expert` FFN module.\n2. A `MoELayer` with top-k gating, expert dispatch, and load balancing loss.\n3. A training loop that demonstrates the loss decreasing and experts receiving balanced load.\n\n---\n\n### Requirements\n\n1. **`Expert(nn.Module)`** — A simple two-layer FFN: Linear → ReLU → Linear.\n2. **`MoELayer(nn.Module)`** — Contains a list of experts, a router (linear layer), and implements top-k gating with weighted combination of expert outputs.\n3. **Load balancing loss** — Auxiliary loss = `num_experts * mean(fraction_tokens_per_expert * mean_gate_prob_per_expert)`. This penalizes uneven distribution.\n4. **`MoEConfig`** — Dataclass with `num_experts`, `top_k`, `d_model`, `d_ff`, `aux_loss_weight`.\n\n---\n\n### Constraints\n\n- ✅ Each token should be routed to exactly `top_k` experts.\n- ✅ Expert outputs should be weighted by the (softmax-normalized) gate values.\n- ✅ All experts should receive some tokens after training (no expert collapse).\n- ✅ Total MoE parameters should be significantly more than a dense FFN, but FLOPs per token should be comparable to a single expert.\n- ❌ Do **not** use any external MoE libraries.\n\n---\n\n\n\n---",
-  "starter": "\"\"\"Implement Mixture of Experts Layer  (mixture-of-experts)\n\n把 ... / TODO 填完后运行:  python study/board.py tl check mixture-of-experts\n只保留定义和 import；演示、训练循环、画图请删掉或放进 if __name__ == \"__main__\":\n\"\"\"\nimport torch\nimport torch.nn as nn\nimport torch.nn.functional as F\nfrom dataclasses import dataclass\n\n@dataclass\nclass MoEConfig:\n    num_experts: int = 8\n    top_k: int = 2\n    d_model: int = 64\n    d_ff: int = 128\n    aux_loss_weight: float = 0.01\n\nconfig = MoEConfig()\nprint(f\"Config: {config}\")\n\nclass Expert(nn.Module):\n    \"\"\"A simple feed-forward expert network.\"\"\"\n\n    def __init__(self, d_model: int, d_ff: int):\n        super().__init__()\n        # TODO: Create a two-layer FFN: Linear(d_model, d_ff) -> ReLU -> Linear(d_ff, d_model)\n        ...\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        # TODO: Pass x through the FFN\n        ...\n\n\nclass MoELayer(nn.Module):\n    \"\"\"Mixture of Experts layer with top-k gating and load balancing.\"\"\"\n\n    def __init__(self, config: MoEConfig):\n        super().__init__()\n        self.config = config\n\n        # TODO: Create a list of Expert modules (use nn.ModuleList)\n\n        # TODO: Create the router: a Linear layer (d_model -> num_experts)\n\n        ...\n\n    def forward(self, x: torch.Tensor):\n        \"\"\"\n        Forward pass with top-k expert routing.\n\n        Args:\n            x: (batch_size, seq_len, d_model)\n\n        Returns:\n            output: (batch_size, seq_len, d_model)\n            aux_loss: scalar load balancing loss\n        \"\"\"\n        batch_size, seq_len, d_model = x.shape\n        # Flatten to (num_tokens, d_model) for routing\n        x_flat = x.view(-1, d_model)\n        num_tokens = x_flat.size(0)\n\n        # TODO: Step 1 - Compute router logits: (num_tokens, num_experts)\n\n        # TODO: Step 2 - Get top-k experts per token\n        #       Use torch.topk on gate_logits to get top_k_values and top_k_indices\n\n        # TODO: Step 3 - Normalize gate values (softmax over the top-k values only)\n\n        # TODO: Step 4 - Dispatch tokens to experts and combine outputs\n        #       Initialize output = zeros_like(x_flat)\n        #       For each expert i:\n        #         - Find which (token, slot) pairs selected expert i\n        #         - Get those tokens, run through expert i\n        #         - Multiply by gate weight, add to output\n\n        # TODO: Step 5 - Compute auxiliary load balancing loss\n        #       router_probs = softmax(gate_logits)  -- over ALL experts\n        #       f_i = fraction of tokens routed to expert i (from top_k_indices)\n        #       p_i = mean router probability for expert i\n        #       aux_loss = num_experts * sum(f_i * p_i)\n\n        # TODO: Reshape output back to (batch_size, seq_len, d_model)\n\n        ...\n\n\n# Quick test\ntorch.manual_seed(42)\nmoe = MoELayer(config)\nx_test = torch.randn(4, 8, config.d_model)  # batch=4, seq=8\nout, aux_loss = moe(x_test)\nprint(f\"Input shape:  {x_test.shape}\")\nprint(f\"Output shape: {out.shape}\")\nprint(f\"Aux loss:     {aux_loss.item():.4f}\")\n"
+  "starter": "\"\"\"6.1 MoE 层（评测来自仓库的 `mixture-of-experts` 题）。讲义见在线教程第 6 节。\n核验：python study/board.py check 6.1\n注意：辅助损失按 Switch Transformer 的写法 aux = N·Σ f_i·P_i（均衡时为 1），讲义里有推导。\n\"\"\"\nimport torch\nimport torch.nn as nn\nimport torch.nn.functional as F\nfrom dataclasses import dataclass\n\n\n@dataclass\nclass MoEConfig:\n    num_experts: int = 8\n    top_k: int = 2\n    d_model: int = 64\n    d_ff: int = 128\n    aux_loss_weight: float = 0.01\n\n\nclass Expert(nn.Module):\n    \"\"\"A simple feed-forward expert network.\"\"\"\n\n    def __init__(self, d_model: int, d_ff: int):\n        super().__init__()\n        # TODO: Create a two-layer FFN: Linear(d_model, d_ff) -> ReLU -> Linear(d_ff, d_model)\n        ...\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        # TODO: Pass x through the FFN\n        ...\n\n\nclass MoELayer(nn.Module):\n    \"\"\"Mixture of Experts layer with top-k gating and load balancing.\"\"\"\n\n    def __init__(self, config: MoEConfig):\n        super().__init__()\n        self.config = config\n\n        # TODO: Create a list of Expert modules (use nn.ModuleList)\n\n        # TODO: Create the router: a Linear layer (d_model -> num_experts)\n\n        ...\n\n    def forward(self, x: torch.Tensor):\n        \"\"\"\n        Forward pass with top-k expert routing.\n\n        Args:\n            x: (batch_size, seq_len, d_model)\n\n        Returns:\n            output: (batch_size, seq_len, d_model)\n            aux_loss: scalar load balancing loss\n        \"\"\"\n        batch_size, seq_len, d_model = x.shape\n        # Flatten to (num_tokens, d_model) for routing\n        x_flat = x.view(-1, d_model)\n        num_tokens = x_flat.size(0)\n\n        # TODO: Step 1 - Compute router logits: (num_tokens, num_experts)\n\n        # TODO: Step 2 - Get top-k experts per token\n        #       Use torch.topk on gate_logits to get top_k_values and top_k_indices\n\n        # TODO: Step 3 - Normalize gate values (softmax over the top-k values only)\n\n        # TODO: Step 4 - Dispatch tokens to experts and combine outputs\n        #       Initialize output = zeros_like(x_flat)\n        #       For each expert i:\n        #         - Find which (token, slot) pairs selected expert i\n        #         - Get those tokens, run through expert i\n        #         - Multiply by gate weight, add to output\n\n        # TODO: Step 5 - Compute auxiliary load balancing loss\n        #       router_probs = softmax(gate_logits)  -- over ALL experts\n        #       f_i = fraction of tokens routed to expert i (from top_k_indices)\n        #       p_i = mean router probability for expert i\n        #       aux_loss = num_experts * sum(f_i * p_i)\n\n        # TODO: Reshape output back to (batch_size, seq_len, d_model)\n\n        ...\n"
  },
  {
   "id": "speculative-decoding",
@@ -4610,5 +4610,425 @@
   ],
   "statement": "4.3 SFT：构造样本、批量补齐、只在回答上算损失\n\n讲义见在线教程的 4.3。依赖：PyTorch。",
   "starter": "\"\"\"4.3 SFT：构造样本、批量补齐、只在回答上算损失\"\"\"\nimport torch\nimport torch.nn.functional as F\n\n\ndef build_sft_example(prompt_ids, response_ids, eos_id, ignore_index=-100):\n    \"\"\"返回 (input_ids, labels)，两个等长的一维 LongTensor：\n       input_ids = prompt + response + [eos]\n       labels    = 与 input_ids 相同，但提示部分换成 ignore_index（回答和 eos 保留）\"\"\"\n    ...\n\n\ndef collate(batch, pad_id, ignore_index=-100):\n    \"\"\"batch: [(input_ids, labels), ...]。右侧补齐到批内最长。返回 dict：\n       input_ids（用 pad_id 补）、labels（用 ignore_index 补）、attention_mask（真实为 1、补齐为 0），都是 (B, L)。\"\"\"\n    ...\n\n\ndef sft_loss(logits, labels, ignore_index=-100):\n    \"\"\"logits: (B, L, V)，labels: (B, L)。next-token 交叉熵：logits[:, :-1] 对 labels[:, 1:]，\n    对批内所有有效 token 求平均（不是先按序列平均）。没有有效 token 时返回 0（仍可反向传播）。\"\"\"\n    ...\n"
+ },
+ {
+  "id": "s6-moe-routing",
+  "title": "6.2 路由与负载均衡",
+  "description": "6.2 MoE 的路由、负载均衡与稀疏计算（本教程自建判题）",
+  "difficulty": "medium",
+  "tracks": [
+   "study"
+  ],
+  "category": "study",
+  "companies": [],
+  "order": null,
+  "question": "study/submissions/s6_2_moe_routing.py",
+  "colab": "",
+  "graded": true,
+  "entries": [
+   "topk_route",
+   "load_balancing_loss",
+   "moe_combine"
+  ],
+  "device": "cpu",
+  "extras": [],
+  "hints": [
+   "topk_route：torch.topk 取每个 token 最大的 k 个 logits，再只对这 k 个做 softmax（等价于把全量 softmax 的概率在这 k 个上重新归一化）。",
+   "load_balancing_loss：P_i = 所有 token 在专家 i 上的平均路由概率（对全部专家做 softmax）；f_i = 被分到专家 i 的 (token, 槽位) 占全部 T·k 个分配的比例；loss = N·Σ f_i·P_i。",
+   "f_i 来自 argmax/topk，不可导；梯度只经过 P_i 流回路由器。",
+   "moe_combine：对每个专家 e，找出选中它的 (token, 槽位)，只把这些 token 送进专家 e，乘上对应权重后用 index_add_ 加回输出。"
+  ],
+  "checks": [
+   {
+    "name": "topk route",
+    "doc": ""
+   },
+   {
+    "name": "load balancing values",
+    "doc": ""
+   },
+   {
+    "name": "load balancing gradient",
+    "doc": ""
+   },
+   {
+    "name": "moe combine matches dense",
+    "doc": ""
+   },
+   {
+    "name": "moe combine is sparse",
+    "doc": ""
+   },
+   {
+    "name": "moe combine gradients",
+    "doc": ""
+   }
+  ],
+  "statement": "6.2 MoE 的路由、负载均衡与稀疏计算（本教程自建判题）\n\n讲义见在线教程的 6.2。依赖：PyTorch。",
+  "starter": "\"\"\"6.2 MoE 的路由、负载均衡与稀疏计算（本教程自建判题）\"\"\"\nimport torch\n\n\ndef topk_route(router_logits, k):\n    \"\"\"router_logits: (T, N)。返回 (weights (T, k), indices (T, k))：\n    indices 是每个 token logits 最大的 k 个专家；weights 只对这 k 个 logits 做 softmax（每行和为 1）。\"\"\"\n    ...\n\n\ndef load_balancing_loss(router_logits, indices, num_experts):\n    \"\"\"Switch Transformer 的辅助损失：loss = N · Σ_i f_i · P_i。\n      P_i：所有 token 在专家 i 上的平均路由概率（对全部 N 个专家做 softmax 后求平均），可导；\n      f_i：indices (T, k) 里专家 i 出现的次数 / (T·k)，不可导。\n    完全均衡时 loss = 1。返回标量张量。\"\"\"\n    ...\n\n\ndef moe_combine(x, router_logits, experts, k):\n    \"\"\"x: (T, D)；experts：长度为 N 的列表，experts[e](x_sub) 把 (m, D) 映射到 (m, D)。\n    输出第 t 行 = Σ_j w_tj · experts[idx_tj](x_t)。\n    每个专家只能处理分配给它的那些 token（不要把全部 token 都送进每个专家）。返回 (T, D)。\"\"\"\n    ...\n"
+ },
+ {
+  "id": "p1-bayes",
+  "title": "P.1 贝叶斯与朴素贝叶斯",
+  "description": "P.1 贝叶斯定理与朴素贝叶斯（numpy）",
+  "difficulty": "easy",
+  "tracks": [
+   "study"
+  ],
+  "category": "study",
+  "companies": [],
+  "order": null,
+  "question": "study/submissions/p1_bayes.py",
+  "colab": "",
+  "graded": true,
+  "entries": [
+   "posterior",
+   "sequential_update",
+   "bernoulli_nb_fit",
+   "bernoulli_nb_predict"
+  ],
+  "device": "cpu",
+  "extras": [],
+  "hints": [
+   "posterior：逐元素相乘 prior·likelihood，再除以总和（总和就是证据 P(E)）。",
+   "sequential_update：在对数空间累加 log prior + Σ_t log likelihood_t，最后减去 logsumexp 再取 exp，避免连乘下溢成 0。",
+   "bernoulli_nb_fit：log_prior[c] = log(n_c / n)；θ[c, j] = (类 c 中特征 j 为 1 的个数 + α) / (n_c + 2α)，返回 (log_prior, log θ)。",
+   "bernoulli_nb_predict：得分 = log_prior + X·log θᵀ + (1−X)·log(1−θ)ᵀ，取 argmax。log(1−θ) 用 np.log1p(-θ)。"
+  ],
+  "checks": [
+   {
+    "name": "posterior disease test",
+    "doc": ""
+   },
+   {
+    "name": "sequential update",
+    "doc": ""
+   },
+   {
+    "name": "nb fit",
+    "doc": ""
+   },
+   {
+    "name": "nb predict",
+    "doc": ""
+   }
+  ],
+  "statement": "P.1 贝叶斯定理与朴素贝叶斯（numpy）\n\n讲义见在线教程的 P.1。依赖：numpy / pandas，不需要 PyTorch。",
+  "starter": "\"\"\"P.1 贝叶斯定理与朴素贝叶斯（numpy）\"\"\"\nimport numpy as np\n\n\ndef posterior(prior, likelihood):\n    \"\"\"prior、likelihood：长度为 K 的数组（各假设的先验，以及观测在各假设下的概率）。返回归一化的后验。\"\"\"\n    ...\n\n\ndef sequential_update(prior, likelihoods):\n    \"\"\"likelihoods：(T, K)，T 次独立观测。返回看到全部观测后的后验。T 很大时连乘会下溢，要在对数空间计算。\"\"\"\n    ...\n\n\ndef bernoulli_nb_fit(X, y, alpha=1.0):\n    \"\"\"X：(n, D) 的 0/1 矩阵；y：0..C−1 的整数标签。返回 (log_prior (C,), log_theta (C, D))，\n    θ[c, j] = P(x_j = 1 | 类 c)，用加 α 平滑：(计数 + α) / (n_c + 2α)。\"\"\"\n    ...\n\n\ndef bernoulli_nb_predict(X, log_prior, log_theta):\n    \"\"\"返回每行的预测类别 (n,)。\"\"\"\n    ...\n"
+ },
+ {
+  "id": "p2-distributions",
+  "title": "P.2 常见分布",
+  "description": "P.2 常见分布（只用 math / numpy，不用 scipy）",
+  "difficulty": "easy",
+  "tracks": [
+   "study"
+  ],
+  "category": "study",
+  "companies": [],
+  "order": null,
+  "question": "study/submissions/p2_distributions.py",
+  "colab": "",
+  "graded": true,
+  "entries": [
+   "binomial_pmf",
+   "poisson_pmf",
+   "normal_pdf",
+   "normal_cdf"
+  ],
+  "device": "cpu",
+  "extras": [],
+  "hints": [
+   "二项分布：C(n,k) p^k (1−p)^(n−k)。n 很大时用 math.lgamma 在对数空间算组合数，再 exp。",
+   "泊松：e^{−λ} λ^k / k!，同样在对数空间算：−λ + k log λ − lgamma(k+1)。",
+   "正态密度：exp(−(x−μ)²/(2σ²)) / (σ√(2π))；正态分布函数：½(1 + erf((x−μ)/(σ√2)))，用 math.erf。",
+   "normal_pdf / normal_cdf 要能接受 numpy 数组（可以用 np.vectorize 包一下 math.erf）。"
+  ],
+  "checks": [
+   {
+    "name": "binomial",
+    "doc": ""
+   },
+   {
+    "name": "poisson",
+    "doc": ""
+   },
+   {
+    "name": "normal",
+    "doc": ""
+   }
+  ],
+  "statement": "P.2 常见分布（只用 math / numpy，不用 scipy）\n\n讲义见在线教程的 P.2。依赖：numpy / pandas，不需要 PyTorch。",
+  "starter": "\"\"\"P.2 常见分布（只用 math / numpy，不用 scipy）\"\"\"\nimport math\nimport numpy as np\n\n\ndef binomial_pmf(k, n, p):\n    \"\"\"P(X = k)，X ~ Binomial(n, p)。n 很大（如 2000）时不能溢出或下溢成 0。\"\"\"\n    ...\n\n\ndef poisson_pmf(k, lam):\n    \"\"\"P(X = k)，X ~ Poisson(λ)。\"\"\"\n    ...\n\n\ndef normal_pdf(x, mu, sigma):\n    \"\"\"N(μ, σ²) 的密度，x 可以是 numpy 数组。\"\"\"\n    ...\n\n\ndef normal_cdf(x, mu, sigma):\n    \"\"\"N(μ, σ²) 的分布函数，x 可以是 numpy 数组。用 math.erf。\"\"\"\n    ...\n"
+ },
+ {
+  "id": "p3-moments",
+  "title": "P.3 均值方差与协方差",
+  "description": "P.3 均值、方差、协方差与相关（numpy）",
+  "difficulty": "easy",
+  "tracks": [
+   "study"
+  ],
+  "category": "study",
+  "companies": [],
+  "order": null,
+  "question": "study/submissions/p3_moments.py",
+  "colab": "",
+  "graded": true,
+  "entries": [
+   "mean_var",
+   "covariance_matrix",
+   "correlation_matrix",
+   "welford"
+  ],
+  "device": "cpu",
+  "extras": [],
+  "hints": [
+   "mean_var(x, ddof)：方差的分母是 n − ddof。",
+   "covariance_matrix：先减去每列均值得到 Xc，再算 Xcᵀ Xc / (n − ddof)，结果形状 (D, D)。",
+   "correlation_matrix：Corr = Cov / (σ σᵀ)，σ 是各列标准差；对角线应为 1。",
+   "welford：一遍扫描，维护 n、mean、M2：delta = x − mean；mean += delta/n；M2 += delta·(x − mean)。最后 var = M2/n。"
+  ],
+  "checks": [
+   {
+    "name": "mean var",
+    "doc": ""
+   },
+   {
+    "name": "cov corr",
+    "doc": ""
+   },
+   {
+    "name": "welford",
+    "doc": ""
+   }
+  ],
+  "statement": "P.3 均值、方差、协方差与相关（numpy）\n\n讲义见在线教程的 P.3。依赖：numpy / pandas，不需要 PyTorch。",
+  "starter": "\"\"\"P.3 均值、方差、协方差与相关（numpy）\"\"\"\nimport numpy as np\n\n\ndef mean_var(x, ddof=0):\n    \"\"\"返回 (均值, 方差)，方差分母为 n − ddof。\"\"\"\n    ...\n\n\ndef covariance_matrix(X, ddof=1):\n    \"\"\"X：(n, D)，每行一个样本。返回 (D, D) 的协方差矩阵（应与 np.cov(X, rowvar=False) 一致）。\"\"\"\n    ...\n\n\ndef correlation_matrix(X):\n    \"\"\"返回 (D, D) 的相关系数矩阵。\"\"\"\n    ...\n\n\ndef welford(stream):\n    \"\"\"一遍扫描任意可迭代对象（可能是生成器，只能读一次），返回 (均值, 总体方差)。数值要稳定。\"\"\"\n    ...\n"
+ },
+ {
+  "id": "p4-mle",
+  "title": "P.4 极大似然与 MAP",
+  "description": "P.4 极大似然与最大后验（numpy / math）",
+  "difficulty": "easy",
+  "tracks": [
+   "study"
+  ],
+  "category": "study",
+  "companies": [],
+  "order": null,
+  "question": "study/submissions/p4_mle.py",
+  "colab": "",
+  "graded": true,
+  "entries": [
+   "gaussian_mle",
+   "gaussian_nll",
+   "bernoulli_map",
+   "categorical_mle"
+  ],
+  "device": "cpu",
+  "extras": [],
+  "hints": [
+   "高斯的 MLE：μ̂ = 样本均值，σ̂² = (1/n)Σ(x−μ̂)²（分母是 n，不是 n−1）。",
+   "gaussian_nll：平均负对数似然 = ½ log(2πσ²) + mean((x−μ)²) / (2σ²)。",
+   "Beta(a, b) 先验 + k 次成功 / n 次试验的后验是 Beta(a+k, b+n−k)，MAP 是它的众数 (k+a−1)/(n+a+b−2)。",
+   "categorical_mle(counts, alpha)：(c_i + α) / (N + Kα)，α=0 就是频率。"
+  ],
+  "checks": [
+   {
+    "name": "gaussian mle",
+    "doc": ""
+   },
+   {
+    "name": "bernoulli map",
+    "doc": ""
+   },
+   {
+    "name": "categorical mle",
+    "doc": ""
+   }
+  ],
+  "statement": "P.4 极大似然与最大后验（numpy / math）\n\n讲义见在线教程的 P.4。依赖：numpy / pandas，不需要 PyTorch。",
+  "starter": "\"\"\"P.4 极大似然与最大后验（numpy / math）\"\"\"\nimport math\nimport numpy as np\n\n\ndef gaussian_mle(x):\n    \"\"\"返回 (μ̂, σ̂²)，都是极大似然估计。\"\"\"\n    ...\n\n\ndef gaussian_nll(x, mu, var):\n    \"\"\"平均负对数似然：−(1/n) Σ log N(x_i; μ, var)。\"\"\"\n    ...\n\n\ndef bernoulli_map(k, n, a, b):\n    \"\"\"n 次试验中 k 次成功，先验 Beta(a, b)，返回成功概率的最大后验估计。\"\"\"\n    ...\n\n\ndef categorical_mle(counts, alpha=0.0):\n    \"\"\"各类别的计数 → 概率估计，加 α 平滑（α=0 即频率）。\"\"\"\n    ...\n"
+ },
+ {
+  "id": "p5-ci",
+  "title": "P.5 置信区间与 bootstrap",
+  "description": "P.5 置信区间与 bootstrap（numpy / math）",
+  "difficulty": "easy",
+  "tracks": [
+   "study"
+  ],
+  "category": "study",
+  "companies": [],
+  "order": null,
+  "question": "study/submissions/p5_ci.py",
+  "colab": "",
+  "graded": true,
+  "entries": [
+   "norm_ppf",
+   "mean_ci",
+   "bootstrap_ci"
+  ],
+  "device": "cpu",
+  "extras": [],
+  "hints": [
+   "norm_ppf：标准正态分布函数 Φ 单调递增，可以在 [−10, 10] 上二分，直到 Φ(z) 与 p 的差小于 1e-12。Φ 用 math.erf 写。",
+   "mean_ci：x̄ ± z·s/√n，s 用 ddof=1 的样本标准差，z = norm_ppf(1 − (1−conf)/2)。",
+   "bootstrap_ci：rng = np.random.default_rng(seed)；重复 n_boot 次有放回地抽 n 个样本、算统计量；取 (1−conf)/2 和 1−(1−conf)/2 两个分位数（np.quantile）。"
+  ],
+  "checks": [
+   {
+    "name": "norm ppf",
+    "doc": ""
+   },
+   {
+    "name": "mean ci",
+    "doc": ""
+   },
+   {
+    "name": "bootstrap",
+    "doc": ""
+   }
+  ],
+  "statement": "P.5 置信区间与 bootstrap（numpy / math）\n\n讲义见在线教程的 P.5。依赖：numpy / pandas，不需要 PyTorch。",
+  "starter": "\"\"\"P.5 置信区间与 bootstrap（numpy / math）\"\"\"\nimport math\nimport numpy as np\n\n\ndef norm_ppf(p):\n    \"\"\"标准正态分布的分位数 Φ⁻¹(p)，误差小于 1e-6。\"\"\"\n    ...\n\n\ndef mean_ci(x, conf=0.95):\n    \"\"\"均值的正态近似置信区间 (lo, hi)：x̄ ± z·s/√n，s 用样本标准差（ddof=1）。\"\"\"\n    ...\n\n\ndef bootstrap_ci(x, stat_fn, n_boot=2000, conf=0.95, seed=0):\n    \"\"\"百分位 bootstrap 区间 (lo, hi)。用 np.random.default_rng(seed)，同一个 seed 结果必须相同。\"\"\"\n    ...\n"
+ },
+ {
+  "id": "p6-testing",
+  "title": "P.6 假设检验",
+  "description": "P.6 假设检验与多重检验（numpy / math）",
+  "difficulty": "easy",
+  "tracks": [
+   "study"
+  ],
+  "category": "study",
+  "companies": [],
+  "order": null,
+  "question": "study/submissions/p6_testing.py",
+  "colab": "",
+  "graded": true,
+  "entries": [
+   "two_proportion_ztest",
+   "welch_t",
+   "bonferroni",
+   "benjamini_hochberg"
+  ],
+  "device": "cpu",
+  "extras": [],
+  "hints": [
+   "两比例 z 检验：合并比例 p̂ = (x1+x2)/(n1+n2)，SE = √(p̂(1−p̂)(1/n1 + 1/n2))，z = (p1 − p2)/SE，双侧 p = 2(1 − Φ(|z|))。",
+   "Welch t：t = (ā − b̄)/√(s_a²/n_a + s_b²/n_b)，样本方差用 ddof=1；自由度用 Welch–Satterthwaite 公式。",
+   "Bonferroni：p_i ≤ α/m 才拒绝。",
+   "BH：p 值升序排列，找最大的 k 使 p_(k) ≤ (k/m)·α，拒绝排名前 k 的全部假设（按原顺序返回布尔数组）。"
+  ],
+  "checks": [
+   {
+    "name": "two proportion",
+    "doc": ""
+   },
+   {
+    "name": "welch",
+    "doc": ""
+   },
+   {
+    "name": "multiple testing",
+    "doc": ""
+   }
+  ],
+  "statement": "P.6 假设检验与多重检验（numpy / math）\n\n讲义见在线教程的 P.6。依赖：numpy / pandas，不需要 PyTorch。",
+  "starter": "\"\"\"P.6 假设检验与多重检验（numpy / math）\"\"\"\nimport math\nimport numpy as np\n\n\ndef two_proportion_ztest(x1, n1, x2, n2):\n    \"\"\"两比例 z 检验（合并比例）。返回 (z, 双侧 p 值)。\"\"\"\n    ...\n\n\ndef welch_t(a, b):\n    \"\"\"Welch t 检验的统计量与自由度，返回 (t, df)。\"\"\"\n    ...\n\n\ndef bonferroni(pvals, alpha=0.05):\n    \"\"\"返回布尔数组：哪些假设被拒绝。\"\"\"\n    ...\n\n\ndef benjamini_hochberg(pvals, alpha=0.05):\n    \"\"\"BH 方法控制错误发现率（FDR）。返回布尔数组，顺序与输入一致。\"\"\"\n    ...\n"
+ },
+ {
+  "id": "p7-info",
+  "title": "P.7 信息论",
+  "description": "P.7 信息论：熵、交叉熵、互信息、困惑度（numpy / math）",
+  "difficulty": "easy",
+  "tracks": [
+   "study"
+  ],
+  "category": "study",
+  "companies": [],
+  "order": null,
+  "question": "study/submissions/p7_info.py",
+  "colab": "",
+  "graded": true,
+  "entries": [
+   "entropy",
+   "cross_entropy",
+   "mutual_information",
+   "perplexity"
+  ],
+  "device": "cpu",
+  "extras": [],
+  "hints": [
+   "entropy：−Σ p log p，约定 0·log 0 = 0（先把 p=0 的项去掉）；base 决定单位（2 是比特）。",
+   "cross_entropy(p, q)：−Σ p log q；它等于 H(p) + KL(p‖q)。",
+   "mutual_information(joint)：I = Σ_{x,y} p(x,y) log( p(x,y) / (p(x)p(y)) )，边缘分布由行和、列和得到。",
+   "perplexity(token_logprobs)：exp(−平均对数概率)，自然对数。"
+  ],
+  "checks": [
+   {
+    "name": "entropy",
+    "doc": ""
+   },
+   {
+    "name": "cross entropy",
+    "doc": ""
+   },
+   {
+    "name": "mutual information",
+    "doc": ""
+   },
+   {
+    "name": "perplexity",
+    "doc": ""
+   }
+  ],
+  "statement": "P.7 信息论：熵、交叉熵、互信息、困惑度（numpy / math）\n\n讲义见在线教程的 P.7。依赖：numpy / pandas，不需要 PyTorch。",
+  "starter": "\"\"\"P.7 信息论：熵、交叉熵、互信息、困惑度（numpy / math）\"\"\"\nimport math\nimport numpy as np\n\n\ndef entropy(p, base=2):\n    \"\"\"H(p) = −Σ p log p，约定 0·log 0 = 0。\"\"\"\n    ...\n\n\ndef cross_entropy(p, q, base=2):\n    \"\"\"H(p, q) = −Σ p log q。\"\"\"\n    ...\n\n\ndef mutual_information(joint, base=2):\n    \"\"\"joint：二维联合分布表 p(x, y)（总和为 1）。返回 I(X; Y)。\"\"\"\n    ...\n\n\ndef perplexity(token_logprobs):\n    \"\"\"token_logprobs：每个 token 的自然对数概率。返回 exp(−平均对数概率)。\"\"\"\n    ...\n"
+ },
+ {
+  "id": "p8-sampling",
+  "title": "P.8 采样方法",
+  "description": "P.8 采样方法：逆变换、拒绝采样、重要性采样（numpy）",
+  "difficulty": "easy",
+  "tracks": [
+   "study"
+  ],
+  "category": "study",
+  "companies": [],
+  "order": null,
+  "question": "study/submissions/p8_sampling.py",
+  "colab": "",
+  "graded": true,
+  "entries": [
+   "sample_exponential",
+   "rejection_sample",
+   "importance_estimate"
+  ],
+  "device": "cpu",
+  "extras": [],
+  "hints": [
+   "逆变换采样：若 U ~ Uniform(0,1)，则 F⁻¹(U) 服从分布 F。指数分布 F(x) = 1 − e^{−λx}，反解得到 x。",
+   "拒绝采样：从提议分布抽 x、再抽 u ~ U(0,1)，若 u ≤ p(x)/(M·q(x)) 就接受；直到攒够 n 个。返回 (样本, 接受率)。",
+   "重要性采样：E_p[f] ≈ mean(f(x)·w)，w = p(x)/q(x)，x 来自 q。自归一化版本用 Σ f·w / Σ w，p 只需已知到相差一个常数。"
+  ],
+  "checks": [
+   {
+    "name": "exponential",
+    "doc": ""
+   },
+   {
+    "name": "rejection",
+    "doc": ""
+   },
+   {
+    "name": "importance",
+    "doc": ""
+   }
+  ],
+  "statement": "P.8 采样方法：逆变换、拒绝采样、重要性采样（numpy）\n\n讲义见在线教程的 P.8。依赖：numpy / pandas，不需要 PyTorch。",
+  "starter": "\"\"\"P.8 采样方法：逆变换、拒绝采样、重要性采样（numpy）\"\"\"\nimport numpy as np\n\n\ndef sample_exponential(lam, n, rng):\n    \"\"\"用逆变换法从 Exp(λ) 抽 n 个样本。rng 是 np.random.Generator，只能用 rng.random() 产生均匀数。\"\"\"\n    ...\n\n\ndef rejection_sample(target_pdf, proposal_sample, proposal_pdf, M, n, rng):\n    \"\"\"target_pdf(x) ≤ M·proposal_pdf(x) 处处成立。proposal_sample(m, rng) 返回 m 个提议样本。\n    返回 (恰好 n 个被接受的样本, 接受率)。\"\"\"\n    ...\n\n\ndef importance_estimate(f, x, p_pdf, q_pdf, self_normalized=False):\n    \"\"\"x 是来自 q 的样本。返回 E_p[f(X)] 的重要性采样估计；self_normalized=True 时用自归一化估计。\"\"\"\n    ...\n"
  }
 ]
