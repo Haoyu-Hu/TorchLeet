@@ -179,7 +179,7 @@ mjx-container.wide{display:block;overflow-x:auto;overflow-y:hidden;max-width:100
     <tr><td>概率与统计</td><td>贝叶斯 · 常见分布 · 期望与协方差 · MLE/MAP · 置信区间 · 假设检验 · 信息论 · 采样方法</td><td><span class="pill">已开讲</span></td></tr>
     <tr><td>应用 ML</td><td>指标 · 预处理 · 交叉验证 · 回归 · KNN · 决策树 · PCA · pandas（numpy / pandas 笔试向）</td><td><span class="pill">已开讲</span></td></tr>
     <tr><td>TorchLeet 题库</td><td>全部 68 题：题面、起始代码、判题项、分级提示，可搜索（LLM 路径 / Basics / Advanced）</td><td><span class="pill">已嵌入</span></td></tr>
-    <tr><td>Basics</td><td>线性回归 → CNN/RNN/LSTM → K-Means / KNN / 逻辑回归</td><td class="soon">待开讲</td></tr>
+    <tr><td>Basics</td><td>训练循环 · Dataset/DataLoader · 大规模数据加载 · 激活与损失 · 初始化 · CNN · RNN · LSTM · 自编码器 · 训练工程 · 经典 ML 的 PyTorch 写法</td><td><span class="pill">已开讲</span></td></tr>
   </table></div>
   <h3>符号约定</h3>
   <div class="scroll"><table>
@@ -3115,7 +3115,190 @@ for e in range(N):
   <pre><code>文件  study/submissions/p8_sampling.py
 实现  sample_exponential · rejection_sample · importance_estimate
 核验  python study/board.py check P.8</code></pre>
-  <div class="next"><button class="btn ghost" data-go="pinfo">← P.7</button><button class="btn" data-go="board">去看板 →</button></div>
+  <div class="next"><button class="btn ghost" data-go="pinfo">← P.7</button><button class="btn" data-go="b1">下一部分 B.1 →</button></div>
+</section>
+<section id="b1" data-title="B.1 训练循环" hidden>
+  <h2>B.1 训练循环与线性回归</h2>
+  <p class="sub">从最小的模型讲清 PyTorch 训练的五步：前向、损失、清梯度、反向、更新。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/optim/sgd.py" target="_blank" rel="noopener">PyTorch 源码：torch/optim/sgd.py</a> <span class="sub">（SGD 与动量的更新公式）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/linear.py" target="_blank" rel="noopener">PyTorch 源码：nn.Linear</a> <span class="sub">（y = xA^T + b，默认初始化）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1412.6980" target="_blank" rel="noopener">Kingma &amp; Ba，Adam: A Method for Stochastic Optimization</a> <span class="sub">（Adam 更新规则与偏差修正）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1711.05101" target="_blank" rel="noopener">Loshchilov &amp; Hutter，Decoupled Weight Decay Regularization</a> <span class="sub">（AdamW：权重衰减与 L2 的区别）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b1_lin_regression.py
+实现  LinearRegressionModel
+核验  python study/board.py check B.1</code></pre>
+  <div class="next"><button class="btn ghost" data-go="psamp">← P.8</button><button class="btn" data-go="b2">下一课 B.2 →</button></div>
+</section>
+<section id="b2" data-title="B.2 Dataset 与 DataLoader" hidden>
+  <h2>B.2 Dataset 与 DataLoader</h2>
+  <p class="sub">map 式与可迭代式两种数据集，DataLoader 如何分批、打乱、多进程加载。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/data/dataset.py" target="_blank" rel="noopener">PyTorch 源码：torch/utils/data/dataset.py</a> <span class="sub">（Dataset 与 IterableDataset 的接口）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/data/dataloader.py" target="_blank" rel="noopener">PyTorch 源码：torch/utils/data/dataloader.py</a> <span class="sub">（batch_size、shuffle、num_workers、collate_fn、get_worker_info 的文档字符串）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b2_custom_dataset.py
+实现  LinearRegressionDataset
+核验  python study/board.py check B.2
+
+文件  study/submissions/b2s_streaming.py
+实现  StreamingDataset
+核验  python study/board.py check B.2s</code></pre>
+  <div class="next"><button class="btn ghost" data-go="b1">← B.1</button><button class="btn" data-go="b3">下一课 B.3 →</button></div>
+</section>
+<section id="b3" data-title="B.3 大规模数据加载" hidden>
+  <h2>B.3 大规模数据加载：Shuffle Buffer 与分布式采样</h2>
+  <p class="sub">数据大到放不进内存、要分给多张卡时，怎样近似打乱，怎样让每张卡拿到不重叠的数据。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/data/distributed.py" target="_blank" rel="noopener">PyTorch 源码：DistributedSampler</a> <span class="sub">（补齐、按 rank 跨步取索引、seed + epoch）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/data/datapipes/iter/combinatorics.py" target="_blank" rel="noopener">PyTorch 源码：ShufflerIterDataPipe</a> <span class="sub">（缓冲区式打乱的实现）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b3_shuffle_buffer.py
+实现  ShuffleBufferDataset
+核验  python study/board.py check B.3
+
+文件  study/submissions/b3d_dist_sampler.py
+实现  SimpleDistributedSampler
+核验  python study/board.py check B.3d</code></pre>
+  <div class="next"><button class="btn ghost" data-go="b2">← B.2</button><button class="btn" data-go="b4">下一课 B.4 →</button></div>
+</section>
+<section id="b4" data-title="B.4 激活与损失" hidden>
+  <h2>B.4 激活函数、Softmax 与损失函数</h2>
+  <p class="sub">非线性从哪里来；softmax 的数值稳定写法；为什么对离群点要用 Huber 损失。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/loss.py" target="_blank" rel="noopener">PyTorch 源码：nn.HuberLoss / SmoothL1Loss</a> <span class="sub">（delta 的含义与两者的关系）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/activation.py" target="_blank" rel="noopener">PyTorch 源码：激活函数模块</a> <span class="sub">（ReLU、Tanh、Softmax 的定义）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1502.01852" target="_blank" rel="noopener">He 等，Delving Deep into Rectifiers</a> <span class="sub">（PReLU 与 ReLU 网络的初始化）</span></span></li><li><span class="pill">经典文献</span><span>Huber，Robust Estimation of a Location Parameter，Annals of Mathematical Statistics，1964 <span class="sub">（Huber 损失的原始出处）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b4_huber_loss.py
+实现  HuberLoss
+核验  python study/board.py check B.4
+
+文件  study/submissions/b4a_custom_activation.py
+实现  CustomActivationModel
+核验  python study/board.py check B.4a
+
+文件  study/submissions/b4s_softmax.py
+实现  softmax
+核验  python study/board.py check B.4s</code></pre>
+  <div class="next"><button class="btn ghost" data-go="b3">← B.3</button><button class="btn" data-go="b5">下一课 B.5 →</button></div>
+</section>
+<section id="b5" data-title="B.5 深层网络与初始化" hidden>
+  <h2>B.5 深层全连接网络与参数初始化</h2>
+  <p class="sub">层数变多后，信号和梯度为什么会消失或爆炸；Xavier 与 Kaiming 初始化从方差推出来。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/init.py" target="_blank" rel="noopener">PyTorch 源码：torch/nn/init.py</a> <span class="sub">（xavier_*、kaiming_*、calculate_gain、fan_in/fan_out 的计算）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1502.01852" target="_blank" rel="noopener">He 等，Delving Deep into Rectifiers</a> <span class="sub">（Kaiming 初始化的方差推导）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1502.03167" target="_blank" rel="noopener">Ioffe &amp; Szegedy，Batch Normalization</a> <span class="sub">（BatchNorm 的定义）</span></span></li><li><span class="pill">经典文献</span><span>Glorot &amp; Bengio，Understanding the difficulty of training deep feedforward neural networks，AISTATS 2010 <span class="sub">（Xavier 初始化）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b5_dnn.py
+实现  DNNModel
+核验  python study/board.py check B.5
+
+文件  study/submissions/b5i_param_init.py
+实现  config_init
+核验  python study/board.py check B.5i</code></pre>
+  <div class="next"><button class="btn ghost" data-go="b4">← B.4</button><button class="btn" data-go="b6">下一课 B.6 →</button></div>
+</section>
+<section id="b6" data-title="B.6 卷积神经网络" hidden>
+  <h2>B.6 卷积神经网络：从零实现卷积与池化</h2>
+  <p class="sub">卷积为什么适合图像；输出尺寸公式；用 unfold 把卷积变成矩阵乘法；搭一个小 CNN。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1603.07285" target="_blank" rel="noopener">Dumoulin &amp; Visin，A guide to convolution arithmetic for deep learning</a> <span class="sub">（输出尺寸、padding、stride 的关系）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/conv.py" target="_blank" rel="noopener">PyTorch 源码：nn.Conv2d</a> <span class="sub">（输出尺寸公式与权重形状）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/pooling.py" target="_blank" rel="noopener">PyTorch 源码：nn.MaxPool2d</a> <span class="sub">（池化输出尺寸）</span></span></li><li><span class="pill">经典文献</span><span>LeCun 等，Gradient-Based Learning Applied to Document Recognition，Proceedings of the IEEE，1998 <span class="sub">（LeNet-5）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b6_cnn_scratch.py
+实现  Conv2dCustom · MaxPool2dCustom
+核验  python study/board.py check B.6
+
+文件  study/submissions/b6c_cnn.py
+实现  CNNModel
+核验  python study/board.py check B.6c</code></pre>
+  <div class="next"><button class="btn ghost" data-go="b5">← B.5</button><button class="btn" data-go="b7">下一课 B.7 →</button></div>
+</section>
+<section id="b7" data-title="B.7 循环神经网络" hidden>
+  <h2>B.7 循环神经网络 RNN</h2>
+  <p class="sub">用同一组权重一步步读序列；时间反向传播；梯度为什么会消失或爆炸。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/rnn.py" target="_blank" rel="noopener">PyTorch 源码：nn.RNN</a> <span class="sub">（h_t = tanh(W_ih x_t + b_ih + W_hh h_{t-1} + b_hh)，batch_first 的形状约定）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1211.5063" target="_blank" rel="noopener">Pascanu 等，On the difficulty of training Recurrent Neural Networks</a> <span class="sub">（梯度消失/爆炸分析与梯度裁剪）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b7_rnn.py
+实现  RNNModel
+核验  python study/board.py check B.7</code></pre>
+  <div class="next"><button class="btn ghost" data-go="b6">← B.6</button><button class="btn" data-go="b8">下一课 B.8 →</button></div>
+</section>
+<section id="b8" data-title="B.8 LSTM" hidden>
+  <h2>B.8 LSTM：门控与细胞状态</h2>
+  <p class="sub">用加法更新的细胞状态缓解梯度消失；四个门逐个讲清；从零实现并与 nn.LSTM 对照。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/rnn.py" target="_blank" rel="noopener">PyTorch 源码：nn.LSTM</a> <span class="sub">（门的公式、权重按 (i, f, g, o) 排布）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1406.1078" target="_blank" rel="noopener">Cho 等，Learning Phrase Representations using RNN Encoder-Decoder</a> <span class="sub">（GRU 的提出）</span></span></li><li><span class="pill">经典文献</span><span>Hochreiter &amp; Schmidhuber，Long Short-Term Memory，Neural Computation，1997 <span class="sub">（LSTM 原始论文）</span></span></li><li><span class="pill">经典文献</span><span>Gers、Schmidhuber &amp; Cummins，Learning to Forget: Continual Prediction with LSTM，Neural Computation，2000 <span class="sub">（遗忘门）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b8_lstm.py
+实现  CustomLSTMModel · LSTMModel
+核验  python study/board.py check B.8</code></pre>
+  <div class="next"><button class="btn ghost" data-go="b7">← B.7</button><button class="btn" data-go="b9">下一课 B.9 →</button></div>
+</section>
+<section id="b9" data-title="B.9 自编码器" hidden>
+  <h2>B.9 自编码器</h2>
+  <p class="sub">把输入压到一个小的瓶颈再还原；它学到了什么，和 PCA 的关系，与 VAE 的区别。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1312.6114" target="_blank" rel="noopener">Kingma &amp; Welling，Auto-Encoding Variational Bayes</a> <span class="sub">（VAE）</span></span></li><li><span class="pill">经典文献</span><span>Hinton &amp; Salakhutdinov，Reducing the Dimensionality of Data with Neural Networks，Science，2006 <span class="sub">（深层自编码器降维）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b9_autoencoder.py
+实现  Autoencoder
+核验  python study/board.py check B.9</code></pre>
+  <div class="next"><button class="btn ghost" data-go="b8">← B.8</button><button class="btn" data-go="b10">下一课 B.10 →</button></div>
+</section>
+<section id="b10" data-title="B.10 训练工程" hidden>
+  <h2>B.10 训练工程：计时、量化、日志、保存与混合精度</h2>
+  <p class="sub">模型写对之后的工程问题：怎样正确计时，动态量化做了什么，怎样记录和保存，AMP 怎么用。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/benchmark/utils/timer.py" target="_blank" rel="noopener">PyTorch 源码：torch.utils.benchmark.Timer</a> <span class="sub">（预热、同步与多次测量）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/amp/grad_scaler.py" target="_blank" rel="noopener">PyTorch 源码：GradScaler</a> <span class="sub">（损失缩放与跳过含 inf 的步）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/tensorboard/writer.py" target="_blank" rel="noopener">PyTorch 源码：SummaryWriter</a> <span class="sub">（add_scalar 等接口）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1710.03740" target="_blank" rel="noopener">Micikevicius 等，Mixed Precision Training</a> <span class="sub">（FP32 主权重、损失缩放）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1712.05877" target="_blank" rel="noopener">Jacob 等，Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference</a> <span class="sub">（仿射量化 r = S(q − Z)）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b10_benchmark.py
+实现  SimpleNN
+核验  python study/board.py check B.10
+
+文件  study/submissions/b10q_quantize.py
+实现  LanguageModel
+核验  python study/board.py check B.10q
+
+文件  study/submissions/b10t_tensorboard.py
+实现  LinearRegressionModel
+核验  python study/board.py check B.10t</code></pre>
+  <div class="next"><button class="btn ghost" data-go="b9">← B.9</button><button class="btn" data-go="b11">下一课 B.11 →</button></div>
+</section>
+<section id="b11" data-title="B.11 经典 ML 的 PyTorch 写法" hidden>
+  <h2>B.11 经典 ML 的 PyTorch 写法：逻辑回归、K-Means、KNN</h2>
+  <p class="sub">把应用 ML 一节里的 numpy 算法改写成张量运算，重点是广播与向量化。</p>
+  <p>（待写）</p>
+  <h3>本课练习</h3>
+  <p>（待写）</p>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/loss.py" target="_blank" rel="noopener">PyTorch 源码：nn.BCELoss / BCEWithLogitsLoss</a> <span class="sub">（为什么推荐带 logits 的版本）</span></span></li><li><span class="pill">经典文献</span><span>Lloyd，Least Squares Quantization in PCM，IEEE Transactions on Information Theory，1982 <span class="sub">（K-Means 的 Lloyd 算法）</span></span></li><li><span class="pill">经典文献</span><span>Arthur &amp; Vassilvitskii，k-means++: The Advantages of Careful Seeding，SODA 2007 <span class="sub">（k-means++ 初始化）</span></span></li><li><span class="pill">经典文献</span><span>Cover &amp; Hart，Nearest Neighbor Pattern Classification，IEEE Transactions on Information Theory，1967 <span class="sub">（最近邻分类）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/b11_logistic.py
+实现  sigmoid · bce_loss · train_logistic_regression
+核验  python study/board.py check B.11
+
+文件  study/submissions/b11k_kmeans.py
+实现  kmeans
+核验  python study/board.py check B.11k
+
+文件  study/submissions/b11n_knn.py
+实现  knn_predict
+核验  python study/board.py check B.11n</code></pre>
+  <div class="next"><button class="btn ghost" data-go="b10">← B.10</button><button class="btn" data-go="a0">下一部分 A.0 →</button></div>
 </section>
 
 <!-- ============ A.0 策略 ============ -->
@@ -3884,7 +4067,7 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
   <div id="global-verify"></div>
   <h3>题库进度</h3>
   <div id="bank-progress"></div>
-  <h3>课程进度表 <span class="pill" id="prog">0 / 42</span></h3>
+  <h3>课程进度表 <span class="pill" id="prog">0 / 53</span></h3>
   <div id="checks"></div>
   <p class="sub" style="margin-top:12px">通过的结果也会写入本机 <code>~/.torchleet/progress.json</code>，终端看板以它为准。这里的进度只记在这个浏览器里；也可以手动勾选。</p>
   <div class="next"><button class="btn ghost" data-go="attention">← 1.5</button><span></span></div>
@@ -3904,6 +4087,7 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
     {name:'第 5 节 Decoding & Inference',ids:['temp','topk','topp','spec','cbatch','engine']},
     {name:'第 6 节 MoE',ids:['moe','moerout']},
     {name:'概率与统计',ids:['pbayes','pdist','pmom','pmle','pci','ptest','pinfo','psamp']},
+    {name:'Basics',ids:['b1','b2','b3','b4','b5','b6','b7','b8','b9','b10','b11']},
     {name:'应用 ML',ids:['a0','a1','a2','a3','a4','a5','a6','a7','a8','a9']},
     {name:'TorchLeet 题库',ids:['bank-llm','bank-basics','bank-advanced','bank-study']},
     {name:'看板',ids:['board']}];
@@ -3911,6 +4095,7 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
   var lessons=[['bpe','1.1 BPE','s1_1_bpe.py'],['sinusoidal','1.2 Sinusoidal','s1_2_sinusoidal.py'],
     ['rope','1.3 RoPE','s1_3_rope.py'],['rmsnorm','1.4 RMSNorm','s1_4_rmsnorm.py'],['attention','1.5 Attention','s1_5_attention.py'],
     ['mha','2.1 Multi-Head Attention','s2_1_mha.py'],['gqa','2.2 Grouped Query Attention','s2_2_gqa.py'],['kvcache','2.3 KV Cache','s2_3_kvcache.py'],['swa','2.4 Sliding Window','s2_4_swa.py'],['sblock','3.2 RoPE+GQA 注意力块','s3_2_rope_gqa_block.py'],['smodel','3.3 组装完整 SmolLM','s3_3_smollm_model.py'],['kl','4.1 KL 散度','s4_1_kl.py'],['lora','4.2 LoRA','s4_2_lora.py'],['sft','4.3 SFT','s4_3_sft.py'],['dpo','4.4 DPO','s4_4_dpo.py'],['ppo','4.5 PPO-RLHF','s4_5_ppo.py'],['grpo','4.6 GRPO','s4_6_grpo.py'],['temp','5.1 温度采样','s5_1_temperature.py'],['topk','5.2 Top-k','s5_2_top_k.py'],['topp','5.3 Top-p','s5_3_top_p.py'],['spec','5.4 投机解码','s5_4_speculative.py'],['cbatch','5.5 连续批处理','s5_5_continuous_batching.py'],['engine','5.6 推理引擎','s5_6_inference_engine.py'],['moe','6.1 MoE 层','s6_1_moe.py'],['moerout','6.2 路由与负载均衡','s6_2_moe_routing.py'],['pbayes','P.1 贝叶斯','p1_bayes.py'],['pdist','P.2 常见分布','p2_distributions.py'],['pmom','P.3 期望与协方差','p3_moments.py'],['pmle','P.4 MLE 与 MAP','p4_mle.py'],['pci','P.5 置信区间','p5_ci.py'],['ptest','P.6 假设检验','p6_testing.py'],['pinfo','P.7 信息论','p7_info.py'],['psamp','P.8 采样方法','p8_sampling.py'],
+    ['b1','B.1 训练循环','b1_lin_regression.py'],['b2','B.2 Dataset 与 DataLoader','b2_custom_dataset.py'],['b3','B.3 大规模数据加载','b3_shuffle_buffer.py'],['b4','B.4 激活与损失','b4_huber_loss.py'],['b5','B.5 深层网络与初始化','b5_dnn.py'],['b6','B.6 卷积神经网络','b6_cnn_scratch.py'],['b7','B.7 循环神经网络','b7_rnn.py'],['b8','B.8 LSTM','b8_lstm.py'],['b9','B.9 自编码器','b9_autoencoder.py'],['b10','B.10 训练工程','b10_benchmark.py'],['b11','B.11 经典 ML 的 PyTorch 写法','b11_logistic.py'],
     ['a1','A.1 评估指标','a1_metrics.py'],['a2','A.2 数据预处理','a2_preprocess.py'],['a3','A.3 划分与交叉验证','a3_splits.py'],
     ['a4','A.4 线性/岭回归','a4_linreg.py'],['a5','A.5 逻辑回归','a5_logreg.py'],['a6','A.6 KNN','a6_knn.py'],
     ['a7','A.7 决策树划分','a7_tree.py'],['a8','A.8 PCA','a8_pca.py'],['a9','A.9 pandas','a9_pandas.py']];
@@ -4062,7 +4247,8 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
   /* ================= results, widgets, checklist ================= */
   var pidMap={bpe:'byte-pair-encoder',sinusoidal:'sinusoidal-positional-embedding',rope:'rotary-positional-embedding',
     rmsnorm:'rms-norm',attention:'implement-attention-from-scratch',a1:'a1-metrics',a2:'a2-preprocess',a3:'a3-splits',
-    sblock:'smollm',moe:'mixture-of-experts',moerout:'s6-moe-routing',pbayes:'p1-bayes',pdist:'p2-distributions',pmom:'p3-moments',pmle:'p4-mle',pci:'p5-ci',ptest:'p6-testing',pinfo:'p7-info',psamp:'p8-sampling',temp:'temperature-sampling',topk:'top-k-sampling',topp:'top-p-sampling',spec:'speculative-decoding',cbatch:'continuous-batching',engine:'inference-engine',kl:'s4-kl',lora:'lora',sft:'s4-sft',dpo:'dpo',ppo:'ppo-rlhf',grpo:'grpo',smodel:'s3-smollm-model',mha:'multi-head-attention',gqa:'grouped-query-attention',kvcache:'kv-cache',swa:'sliding-window-attention',a4:'a4-linreg',a5:'a5-logreg',a6:'a6-knn',a7:'a7-tree',a8:'a8-pca',a9:'a9-pandas'};
+    sblock:'smollm',moe:'mixture-of-experts',moerout:'s6-moe-routing',pbayes:'p1-bayes',pdist:'p2-distributions',pmom:'p3-moments',pmle:'p4-mle',pci:'p5-ci',ptest:'p6-testing',pinfo:'p7-info',psamp:'p8-sampling',temp:'temperature-sampling',topk:'top-k-sampling',topp:'top-p-sampling',spec:'speculative-decoding',cbatch:'continuous-batching',engine:'inference-engine',kl:'s4-kl',lora:'lora',sft:'s4-sft',dpo:'dpo',ppo:'ppo-rlhf',grpo:'grpo',smodel:'s3-smollm-model',mha:'multi-head-attention',gqa:'grouped-query-attention',kvcache:'kv-cache',swa:'sliding-window-attention',a4:'a4-linreg',a5:'a5-logreg',a6:'a6-knn',a7:'a7-tree',a8:'a8-pca',a9:'a9-pandas',b1:'lin-regression',b2:'custom-dataset',b3:'b-shuffle-buffer',b4:'custom-loss',b5:'custom-dnn',b6:'cnn-scratch',b7:'rnn',b8:'lstm',b9:'autoencoder',b10:'benchmark',b11:'logistic-regression'};
+  var extraPids={"b2": [["b-streaming", "B.2s StreamingDataset"]], "b3": [["b-dist-sampler", "B.3d SimpleDistributedSampler"]], "b4": [["custom-activation", "B.4a CustomActivationModel"], ["softmax", "B.4s softmax"]], "b5": [["cnn-param-init", "B.5i config_init"]], "b6": [["cnn", "B.6c CNNModel"]], "b10": [["quantize-lm", "B.10q LanguageModel"], ["tensorboard", "B.10t LinearRegressionModel"]], "b11": [["kmeans", "B.11k kmeans"], ["knn", "B.11n knn_predict"]]},mainLabel={"b2": "B.2 LinearRegressionDataset", "b3": "B.3 ShuffleBufferDataset", "b4": "B.4 HuberLoss", "b5": "B.5 DNNModel", "b6": "B.6 Conv2dCustom · MaxPool2dCustom", "b10": "B.10 SimpleNN", "b11": "B.11 sigmoid · bce_loss · train_logistic_regression"};
   var results={};try{results=JSON.parse(store.get('tl-results')||'{}')}catch(e){}
   function stat(pid){
     var r=results[pid];if(!r)return 'none';
@@ -4070,7 +4256,12 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
     if(r.p>0&&r.p+(r.s||0)===r.t)return 'part';
     return 'fail';
   }
-  function lessonState(id){var st=pidMap[id]?stat(pidMap[id]):'none';return st!=='none'&&st!=='fail'?st:(done[id]?'done':'none')}
+  function lessonState(id){
+    var ps=pidMap[id]?[pidMap[id]].concat((extraPids[id]||[]).map(function(e){return e[0]})):[];
+    var sts=ps.map(stat),st='none';
+    if(sts.length&&sts.every(function(x){return x==='done'}))st='done';
+    else if(sts.some(function(x){return x==='done'||x==='part'}))st='part';
+    return st!=='none'?st:(done[id]?'done':'none')}
   function statText(pid){
     var r=results[pid];if(!r)return '尚未核验';
     var base=r.p+' / '+r.t+(r.s?'（'+r.s+' 项在本机无法验证）':'');
@@ -4148,9 +4339,9 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
       },function(err){clearTimeout(timer);msgEl.textContent='读取结果失败：'+(err&&err.code||'未知错误')});
     });
   }
-  function mkSubmit(pid){
+  function mkSubmit(pid,label){
     var w=document.createElement('div');w.className='submit';var id='sb-'+(++wid);
-    w.innerHTML='<div class="vhead"><b>提交到流水线</b><span class="pill sst" hidden></span></div>'+
+    w.innerHTML='<div class="vhead"><b>提交到流水线'+(label?' · '+label:'')+'</b><span class="pill sst" hidden></span></div>'+
       '<p class="sub" style="margin:4px 0 8px">把你的实现（只保留 import 和定义）粘贴到这里，或选择一个 .py 文件。</p>'+
       '<textarea id="'+id+'" spellcheck="false" placeholder="# 粘贴你的代码"></textarea>'+
       '<div class="row"><button class="btn">提交核验</button><label class="btn ghost" style="cursor:pointer">选择 .py 文件<input type="file" accept=".py,text/x-python,text/plain" hidden id="'+id+'-f"></label><span class="sub smsg"></span></div>'+
@@ -4190,9 +4381,9 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
     subViews[pid]=subViews[pid]||[];subViews[pid].push({res:res,msg:msg});
     return w;
   }
-  function mkWidget(pid){
+  function mkWidget(pid,label){
     var box=document.createElement('div');
-    if(pid)box.appendChild(mkSubmit(pid));
+    if(pid)box.appendChild(mkSubmit(pid,label));
     var d=document.createElement('details');d.className='manual';
     var sm=document.createElement('summary');sm.textContent=pid?'或者：在本机运行后粘贴 TL-RESULT 结果':'在本机运行后粘贴 TL-RESULT 结果';
     d.appendChild(sm);d.appendChild(mkPaste(pid));if(!pid)d.open=true;
@@ -4200,7 +4391,8 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
   }
   lessons.forEach(function(l){
     var sec=document.getElementById(l[0]),nx=sec.querySelector('.next');
-    sec.insertBefore(mkWidget(pidMap[l[0]]),nx);
+    sec.insertBefore(mkWidget(pidMap[l[0]],mainLabel[l[0]]),nx);
+    (extraPids[l[0]]||[]).forEach(function(e){sec.insertBefore(mkWidget(e[0],e[1]),nx)});
   });
   document.getElementById('global-verify').appendChild(mkWidget(''));
 

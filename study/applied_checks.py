@@ -1193,3 +1193,178 @@ def check_importance(ns):
     unnorm = lambda t: 5 * p(t)
     assert abs(ns.importance_estimate(f, x, unnorm, q, False) - 5) < 0.1, "p 乘了常数 5，普通重要性采样的结果也会乘 5"
     assert abs(ns.importance_estimate(f, x, unnorm, q, True) - 1) < 0.02, "自归一化版本应不受常数影响"
+
+
+# ============================================================ B 数据加载（PyTorch，题面来自 v3/data-loading）
+add = reg("b-streaming", ["StreamingDataset"], [
+    "__iter__ 写成生成器：用 with open(...) 打开文件，for line in f 逐行读，每行 yield 一次，不要先 readlines()。",
+    "每行是逗号分隔的浮点数，最后一列是 y：x = torch.tensor(values[:-1])，y = torch.tensor(values[-1])。",
+    "多进程：worker_info = torch.utils.data.get_worker_info()；为 None 时是主进程；否则只处理 行号 % num_workers == worker_info.id 的行。",
+])
+
+
+def _csv(tmpdir, n=37, d=3):
+    import os
+    p = os.path.join(tmpdir, "data.csv")
+    with open(p, "w") as f:
+        for i in range(n):
+            f.write(",".join(str(float(i * 10 + j)) for j in range(d)) + f",{float(i)}\n")
+    return p
+
+
+@add
+def check_streaming_reads_every_row(ns):
+    import tempfile, torch
+    from torch.utils.data import IterableDataset
+    with tempfile.TemporaryDirectory() as d:
+        ds = ns.StreamingDataset(_csv(d))
+        assert isinstance(ds, IterableDataset), "StreamingDataset 应继承 torch.utils.data.IterableDataset"
+        rows = list(ds)
+        assert len(rows) == 37, f"文件有 37 行，读到 {len(rows)} 行"
+        x, y = rows[5]
+        assert tuple(torch.as_tensor(x).shape) == (3,) and float(y) == 5.0, "每行应是 (x: 3 维张量, y: 标量)，最后一列是 y"
+        assert torch.allclose(torch.as_tensor(x), torch.tensor([50.0, 51.0, 52.0])), "x 的取值不对"
+        assert [float(r[1]) for r in rows] == [float(i) for i in range(37)], "单进程时应按文件顺序读出"
+        assert len(list(ds)) == 37, "第二个 epoch 再迭代一次也应读出全部 37 行"
+
+
+@add
+def check_streaming_is_lazy(ns):
+    import inspect
+    it = ns.StreamingDataset.__iter__
+    assert inspect.isgeneratorfunction(it), "__iter__ 应是一个生成器函数（用 yield），这样才是逐行读取，而不是先把整个文件读进内存"
+
+
+@add
+def check_streaming_multiworker_no_duplicates(ns):
+    import tempfile
+    from torch.utils.data import DataLoader
+    with tempfile.TemporaryDirectory() as d:
+        ds = ns.StreamingDataset(_csv(d))
+        ys = [float(y) for _, y in DataLoader(ds, batch_size=None, num_workers=2)]
+    assert sorted(ys) == [float(i) for i in range(37)], (
+        f"num_workers=2 时读出了 {len(ys)} 行（应为 37 且不重复）：每个 worker 都会拿到数据集的一份拷贝，"
+        "要用 get_worker_info() 让每个 worker 只处理属于自己的那部分行")
+
+
+add = reg("b-shuffle-buffer", ["ShuffleBufferDataset"], [
+    "先从底层迭代器取 buffer_size 个样本放进 buffer。",
+    "之后每来一个新样本：随机选 buffer 里的一个位置 i，yield buffer[i]，再把新样本放到 buffer[i]。",
+    "底层迭代器耗尽后，把 buffer 剩下的样本随机打乱后全部 yield 出去。",
+])
+
+
+class _Seq:
+    def __init__(self, n):
+        self.n, self.taken = n, 0
+
+    def __iter__(self):
+        self.taken = 0
+        for i in range(self.n):
+            self.taken += 1
+            yield i
+
+
+def _seq_ds(n):
+    from torch.utils.data import IterableDataset
+
+    class S(IterableDataset):
+        def __init__(self):
+            super().__init__()
+            self.inner = _Seq(n)
+
+        def __iter__(self):
+            return iter(self.inner)
+    return S()
+
+
+@add
+def check_buffer_complete_and_shuffled(ns):
+    import random, torch
+    random.seed(0); torch.manual_seed(0)
+    out = [int(v) for v in ns.ShuffleBufferDataset(_seq_ds(500), 50)]
+    assert sorted(out) == list(range(500)), f"每个样本应恰好出现一次，得到 {len(out)} 个、去重后 {len(set(out))} 个"
+    assert out != list(range(500)), "输出顺序与输入完全相同：没有打乱"
+    one = [int(v) for v in ns.ShuffleBufferDataset(_seq_ds(50), 1)]
+    assert one == list(range(50)), "buffer_size=1 时没有可以选择的余地，输出顺序应与输入相同"
+
+
+@add
+def check_buffer_is_local(ns):
+    import random, torch
+    random.seed(1); torch.manual_seed(1)
+    B = 20
+    out = [int(v) for v in ns.ShuffleBufferDataset(_seq_ds(400), B)]
+    early = [(p, i) for p, i in enumerate(out) if p < i - (B - 1)]
+    assert not early, (f"样本 {early[0][1]} 出现在第 {early[0][0]} 个位置：buffer 里最多只有前 p+{B} 个样本，"
+                       "一个样本不可能被提前这么多。是不是先把整个数据集读进来再打乱了？")
+
+
+@add
+def check_buffer_memory_bound(ns):
+    import random, torch
+    random.seed(2); torch.manual_seed(2)
+    base = _seq_ds(300)
+    it = iter(ns.ShuffleBufferDataset(base, 25))
+    worst = 0
+    for k, _ in enumerate(it, start=1):
+        worst = max(worst, base.inner.taken - k)
+    assert worst <= 25, f"某一时刻已读入但尚未输出的样本多达 {worst} 个，超过了 buffer_size=25：内存应当是 O(buffer_size)"
+
+
+add = reg("b-dist-sampler", ["SimpleDistributedSampler"], [
+    "num_samples = ceil(N / num_replicas)，total_size = num_samples × num_replicas。",
+    "shuffle=True 时：g = torch.Generator(); g.manual_seed(seed + epoch); indices = torch.randperm(N, generator=g).tolist()；否则 indices = list(range(N))。",
+    "补齐：indices += indices[:total_size − N]；再按 indices[rank::num_replicas] 取本 rank 的部分。",
+    "所有 rank 必须用同一个随机排列（同样的 seed + epoch），否则各 rank 拿到的样本会重叠或遗漏。",
+])
+
+
+def _ds(n):
+    class D:
+        def __len__(self):
+            return n
+
+        def __getitem__(self, i):
+            return i
+    return D()
+
+
+@add
+def check_sampler_no_shuffle_layout(ns):
+    got = [list(ns.SimpleDistributedSampler(_ds(10), 4, r, shuffle=False)) for r in range(4)]
+    assert got == [[0, 4, 8], [1, 5, 9], [2, 6, 0], [3, 7, 1]], (
+        f"N=10、4 个 rank、不打乱时，应先补齐成 [0..9, 0, 1]，再按 rank::4 交错取：得到 {got}")
+    assert all(len(ns.SimpleDistributedSampler(_ds(10), 4, r, shuffle=False)) == 3 for r in range(4)), "__len__ 应为 ceil(10/4) = 3"
+
+
+@add
+def check_sampler_matches_pytorch(ns):
+    from torch.utils.data import DistributedSampler
+    for N, R in ((103, 4), (64, 8), (7, 3)):
+        for epoch in (0, 3):
+            for r in range(R):
+                mine = ns.SimpleDistributedSampler(_ds(N), R, r, shuffle=True, seed=5)
+                mine.set_epoch(epoch)
+                ref = DistributedSampler(_ds(N), num_replicas=R, rank=r, shuffle=True, seed=5)
+                ref.set_epoch(epoch)
+                assert list(mine) == list(ref), (
+                    f"N={N}、{R} 个 rank、rank={r}、epoch={epoch} 时与 torch.utils.data.DistributedSampler 不一致：")
+                assert len(mine) == len(ref)
+
+
+@add
+def check_sampler_epochs(ns):
+    s = ns.SimpleDistributedSampler(_ds(50), 2, 0, shuffle=True, seed=0)
+    s.set_epoch(1); a = list(s)
+    s.set_epoch(1); b = list(s)
+    s.set_epoch(2); c = list(s)
+    assert a == b, "同一个 seed + epoch 应得到相同的顺序"
+    assert a != c, "换了 epoch 应得到不同的顺序（否则每个 epoch 数据顺序都一样）"
+    union = set()
+    for r in range(2):
+        t = ns.SimpleDistributedSampler(_ds(50), 2, r, shuffle=True, seed=0); t.set_epoch(4)
+        part = list(t)
+        assert not (union & set(part)), "N 能被 rank 数整除时，各 rank 的样本不应重叠"
+        union |= set(part)
+    assert union == set(range(50)), "所有 rank 合起来应覆盖全部样本"
