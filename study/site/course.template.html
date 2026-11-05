@@ -2394,8 +2394,86 @@ for e in range(N):
 <!-- ============ 概率与统计 ============ -->
 <section id="pbayes" data-title="P.1 贝叶斯" hidden>
   <h2>P.1 贝叶斯定理与朴素贝叶斯</h2>
-  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
-  <!-- 正文写在这里 -->
+  <p class="sub">看到证据之后，怎样把原来的判断改成新的判断，以及怎样用它搭出一个最简单的分类器。</p>
+  <h3>为什么重要</h3>
+  <p>贝叶斯定理在 ML 里到处出现。分类器输出的 \(P(y\mid \mathbf{x})\) 就是一个后验；MAP 估计、贝叶斯优化、垃圾邮件过滤都直接用它；面试里的“检测阳性后真正患病的概率”几乎是必考题。这一课把公式从头推一遍，再用它写一个伯努利朴素贝叶斯分类器。</p>
+  <h3>直觉</h3>
+  <p>把所有可能的世界想成一块蛋糕，先验是每个假设先分到的面积。观测到一个证据后，每块面积按“这个假设下出现该证据的概率”打折。打完折，蛋糕变小了，再把剩下的部分放大回总面积 1。放大之后各块的比例就是后验。一个假设原来的面积很小，即使打折很轻，最后也可能仍然很小。这就是“基率”的作用。</p>
+  <h3>定义与公式</h3>
+  <p>条件概率的定义，以及由它直接得到的乘法公式：</p>
+  <div class="eq">\[ P(A\mid B) = \frac{P(A\cap B)}{P(B)},\qquad P(A\cap B) = P(B\mid A)\,P(A) \]</div>
+  <p>若 \(H_1,\dots,H_K\) 两两互斥且合起来是全部可能，就有全概率公式：</p>
+  <div class="eq">\[ P(E) = \sum_{k=1}^{K} P(E\mid H_k)\,P(H_k) \]</div>
+  <p>把乘法公式写两遍再相除，就得到贝叶斯定理：</p>
+  <div class="eq">\[ \underbrace{P(H_k\mid E)}_{\text{后验}} = \frac{\overbrace{P(E\mid H_k)}^{\text{似然}}\;\overbrace{P(H_k)}^{\text{先验}}}{\underbrace{\sum_{j} P(E\mid H_j)\,P(H_j)}_{\text{证据 } P(E)}} \]</div>
+  <p class="eq-note">其中先验是看到证据前对假设的信念；似然是假设成立时观测到 E 的概率，它是 \(H_k\) 的函数，对 k 求和不必为 1；证据只是归一化常数，对所有假设都一样。</p>
+  <p>因为分母对每个假设都相同，常写成 \(P(H\mid E) \propto P(E\mid H)\,P(H)\)。算的时候先逐项相乘，最后除以总和。</p>
+  <h3>例子：基率谬误</h3>
+  <p>某病患病率 1%。检测的灵敏度 99%，即患病者有 99% 检出阳性；假阳性率 5%，即健康人有 5% 也显示阳性。一个人检出阳性，他真正患病的概率是多少？很多人的第一反应是 99% 或 95%。逐步算：</p>
+  <div class="eq">\[ \begin{aligned}
+  P(+\mid D)P(D) &amp;= 0.99\times 0.01 = 0.0099 \\
+  P(+\mid \neg D)P(\neg D) &amp;= 0.05\times 0.99 = 0.0495 \\
+  P(+) &amp;= 0.0099 + 0.0495 = 0.0594 \\
+  P(D\mid +) &amp;= 0.0099 / 0.0594 \approx 0.1667
+  \end{aligned} \]</div>
+  <p class="eq-note">前两行是乘法公式，第三行是全概率公式，第四行是贝叶斯定理。结果恰好是 1/6。</p>
+  <p>换成人数更好理解。10000 人里有 100 个病人，其中 99 个阳性；9900 个健康人里有 495 个假阳性。阳性一共 594 人，只有 99 个真的有病。健康人太多，5% 的误报在人数上就压过了病人。</p>
+  <p>如果这个人再做一次独立检测，又是阳性，就把 1/6 当作新的先验再算一遍：</p>
+  <div class="eq">\[ P(D\mid +,+) = \frac{0.99\times\tfrac16}{0.99\times\tfrac16 + 0.05\times\tfrac56} = \frac{0.165}{0.165 + 0.04167} \approx 0.798 \]</div>
+  <h3>序贯更新与对数空间</h3>
+  <p>上面这种“后验当下一次的先验”就是序贯更新。若 T 次观测在给定假设下条件独立，一次次更新和一次性全部相乘结果相同，顺序也不影响结果：</p>
+  <div class="eq">\[ P(H_k\mid E_1,\dots,E_T) \propto P(H_k)\prod_{t=1}^{T} P(E_t\mid H_k) \]</div>
+  <p>问题出在连乘。2000 个约 \(10^{-3}\) 的似然乘起来约为 \(10^{-6000}\)，而双精度浮点数能表示的最小正数约为 \(10^{-324}\)，结果会变成 0，归一化时就是 0/0。解决办法是改为对数相加：</p>
+  <div class="eq">\[ \begin{aligned}
+  s_k &amp;= \log P(H_k) + \sum_{t} \log P(E_t\mid H_k) \\
+  \log P(H_k\mid E_{1:T}) &amp;= s_k - \operatorname{logsumexp}(\mathbf{s}),\qquad \operatorname{logsumexp}(\mathbf{s}) = m + \log\sum_j e^{s_j - m}
+  \end{aligned} \]</div>
+  <p class="eq-note">其中 \(m=\max_j s_j\)。减去最大值后最大的那一项是 \(e^0=1\)，求和不会下溢成 0，也不会上溢。</p>
+  <p>数字例子：\(\mathbf{s} = (-1000, -1001)\)。直接算 \(e^{-1000}\) 得 0。减去 \(m=-1000\) 后是 \(e^0 + e^{-1} = 1.3679\)，\(\operatorname{logsumexp} = -1000 + \log 1.3679 \approx -999.687\)，后验为 \((0.731, 0.269)\)。</p>
+  <h3>朴素贝叶斯</h3>
+  <p>分类时假设是类别 c，证据是特征向量 \(\mathbf{x}\)。直接估计 \(P(\mathbf{x}\mid c)\) 需要的参数随特征数指数增长。朴素贝叶斯假设<b>给定类别后各特征条件独立</b>，于是似然拆成每个特征的乘积。特征是 0/1 时（伯努利朴素贝叶斯），令 \(\theta_{cj} = P(x_j = 1\mid c)\)：</p>
+  <div class="eq">\[ \log P(c\mid\mathbf{x}) = \log\pi_c + \sum_{j=1}^{D}\Big[x_j\log\theta_{cj} + (1-x_j)\log(1-\theta_{cj})\Big] + \text{常数} \]</div>
+  <p class="eq-note">其中 \(\pi_c = n_c/n\) 是类别先验，常数是 \(-\log P(\mathbf{x})\)，与 c 无关，预测时取 argmax 可以忽略。注意 \(x_j=0\) 的特征也贡献 \(\log(1-\theta_{cj})\)。</p>
+  <p>参数用计数估计，并加 α 平滑：</p>
+  <div class="eq">\[ \theta_{cj} = \frac{\#\{i : y_i = c,\ x_{ij} = 1\} + \alpha}{n_c + 2\alpha} \]</div>
+  <p class="eq-note">分母加 \(2\alpha\) 是因为每个特征有 0 和 1 两种取值，各加 α 个“虚拟样本”。</p>
+  <p><b>小例子。</b>三个特征依次为：含“免费”、含“中奖”、含“会议”。垃圾邮件 2 封：(1,1,0)、(1,0,0)；正常邮件 3 封：(0,0,1)、(1,0,1)、(0,0,1)。取 α=1：</p>
+  <ul>
+    <li>垃圾：计数 (2,1,0)，\(\theta = (3/4,\ 2/4,\ 1/4)\)，先验 2/5。</li>
+    <li>正常：计数 (1,0,3)，\(\theta = (2/5,\ 1/5,\ 4/5)\)，先验 3/5。</li>
+  </ul>
+  <p>新邮件 (1,1,0)：垃圾得分 \(0.4\times0.75\times0.5\times0.75 = 0.1125\)，正常得分 \(0.6\times0.4\times0.2\times0.2 = 0.0096\)，归一化后垃圾的后验约 0.921。</p>
+  <p>新邮件 (1,1,1) 时，若不平滑（α=0），垃圾类里“会议”从未出现，\(\theta=0\)；正常类里“中奖”从未出现，\(\theta=0\)。两类得分都是 0，无法判断。训练集里没见过的组合不代表不可能，平滑给每个事件留了一点概率。加平滑后两类得分为 0.0375 和 0.0384，后验约 0.494 对 0.506。</p>
+  <h3>与 ML 的联系</h3>
+  <p>把伯努利朴素贝叶斯两类的对数后验相减，会得到 \(\log\frac{P(1\mid\mathbf{x})}{P(0\mid\mathbf{x})} = w_0 + \sum_j w_j x_j\)，对 \(\mathbf{x}\) 是线性的，所以 \(P(1\mid\mathbf{x}) = \sigma(w_0 + \mathbf{w}^\top\mathbf{x})\)，形式和逻辑回归一样。区别在于参数怎么来。</p>
+  <ul>
+    <li><b>生成式</b>（朴素贝叶斯）：建模 \(P(\mathbf{x}\mid c)P(c)\)，参数靠计数得到，训练极快，但条件独立假设不成立时权重会有偏。</li>
+    <li><b>判别式</b>（逻辑回归）：直接对 \(P(c\mid\mathbf{x})\) 做极大似然，不对 \(\mathbf{x}\) 的分布做假设，数据足够时通常更准。</li>
+  </ul>
+  <h3>常见错误</h3>
+  <ul>
+    <li>把 \(P(+\mid D)\) 当成 \(P(D\mid +)\)。这两者差了一个先验和归一化。</li>
+    <li>忘记归一化，或者以为似然对假设求和是 1。</li>
+    <li>先连乘再取 log。下溢在相乘时已经发生，之后取 log 只会得到 \(-\infty\)。</li>
+    <li>伯努利朴素贝叶斯只累加 \(x_j=1\) 的项，漏掉 \((1-x_j)\log(1-\theta_{cj})\)。</li>
+    <li>直接写 <code>np.log(1 - theta)</code>。θ 很小时精度损失，用 <code>np.log1p(-theta)</code> 更稳。</li>
+  </ul>
+  <p class="note"><b>提醒：</b>条件独立假设在真实文本里几乎从不成立，比如“免费”和“中奖”常一起出现。朴素贝叶斯的概率值因此常常过于极端，但 argmax 往往仍然是对的。</p>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>患病率从 1% 升到 10%，其他不变，阳性后患病概率怎么变？<br>答：\(0.099/(0.099+0.045) \approx 0.6875\)。先验对结果影响很大。</li>
+    <li>为什么分母可以写成“常数”而不影响分类？<br>答：\(P(E)\) 对每个假设都一样，比较大小或取 argmax 时不起作用；只有要输出真正的概率时才需要它。</li>
+    <li>序贯更新时观测顺序会影响最终后验吗？<br>答：在条件独立的前提下不会，因为最终结果是所有似然的乘积，乘法可交换。</li>
+    <li>logsumexp 为什么要减最大值？<br>答：减去 m 后指数最大为 \(e^0=1\)，求和至少为 1，不会下溢成 0，也不会上溢成 inf。最后再把 m 加回去，数学上结果不变。</li>
+    <li>α 取很大会怎样？<br>答：θ 被拉向 1/2，特征几乎不提供信息，预测退化为只看类别先验。</li>
+  </ol>
+  <h3>本课练习</h3>
+  <ul>
+    <li><code>posterior(prior, likelihood)</code>：两个长度为 K 的数组。逐元素相乘后除以总和，返回和为 1 的后验。用上面的患病例子自查，第一个元素应约为 0.1667。</li>
+    <li><code>sequential_update(prior, likelihoods)</code>：<code>likelihoods</code> 形状为 (T, K)，每行是一次观测在各假设下的似然。在对数空间累加 log 先验与每一行的 log 似然，再用 logsumexp 归一化后取 exp。T=2000、似然在 \(10^{-4}\) 量级时也必须返回有限值且和为 1；把观测顺序倒过来，结果不能变。</li>
+    <li><code>bernoulli_nb_fit(X, y, alpha=1.0)</code>：X 是 (n, D) 的 0/1 矩阵，y 是 0 到 C−1 的整数标签。返回 <code>(log_prior, log_theta)</code>，形状分别为 (C,) 和 (C, D)。先验为 \(\log(n_c/n)\)；θ 按上面的平滑公式计算。α&gt;0 时 θ 严格落在 (0, 1) 内，log θ 不能出现 \(-\infty\)。</li>
+    <li><code>bernoulli_nb_predict(X, log_prior, log_theta)</code>：对每一行按朴素贝叶斯的对数后验公式算出 C 个得分，返回 argmax 得到的类别，形状 (n,)。可以用矩阵乘法一次算完所有样本，\(x_j\) 和 \(1-x_j\) 两部分都要算。</li>
+  </ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/p1_bayes.py
 实现  posterior · sequential_update · bernoulli_nb_fit · bernoulli_nb_predict
@@ -2405,8 +2483,87 @@ for e in range(N):
 
 <section id="pdist" data-title="P.2 常见分布" hidden>
   <h2>P.2 常见分布</h2>
-  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
-  <!-- 正文写在这里 -->
+  <p class="sub">认识最常用的几种分布，知道它们的公式、均值和方差，并能在数值上稳定地算出概率。</p>
+  <h3>为什么重要</h3>
+  <p>ML 里的损失函数大多来自某个分布的负对数似然。二分类的 sigmoid 加交叉熵对应伯努利分布，多分类的 softmax 加交叉熵对应类别分布，回归的 MSE 对应正态分布。权重初始化、VAE、扩散模型里的噪声也都用正态分布。测试集上答对的题数服从二项分布，这是做置信区间和 A/B 检验的起点。</p>
+  <h3>直觉</h3>
+  <p>离散分布回答“某个取值的概率是多少”，用概率质量函数 pmf 表示，所有取值的概率加起来是 1。连续分布在单个点上的概率是 0，只能谈“落在一段区间的概率”，用概率密度函数 pdf 表示，密度对整条实轴积分是 1。密度值本身可以大于 1，比如区间 [0, 0.5] 上的均匀分布，密度处处为 2。</p>
+  <h3>定义与公式</h3>
+  <div class="scroll"><table>
+    <tr><th>分布</th><th>pmf / pdf</th><th>均值</th><th>方差</th><th>典型含义</th></tr>
+    <tr><td>伯努利 \(\mathrm{Bern}(p)\)</td><td>\(p^x(1-p)^{1-x},\ x\in\{0,1\}\)</td><td>\(p\)</td><td>\(p(1-p)\)</td><td>一次成败</td></tr>
+    <tr><td>二项 \(\mathrm{Bin}(n,p)\)</td><td>\(\binom{n}{k}p^k(1-p)^{n-k}\)</td><td>\(np\)</td><td>\(np(1-p)\)</td><td>n 次独立试验的成功数</td></tr>
+    <tr><td>几何 \(\mathrm{Geom}(p)\)</td><td>\((1-p)^{k-1}p,\ k\ge1\)</td><td>\(1/p\)</td><td>\((1-p)/p^2\)</td><td>第几次首次成功</td></tr>
+    <tr><td>泊松 \(\mathrm{Pois}(\lambda)\)</td><td>\(e^{-\lambda}\lambda^k/k!\)</td><td>\(\lambda\)</td><td>\(\lambda\)</td><td>单位时间内的事件数</td></tr>
+    <tr><td>类别 \(\mathrm{Cat}(\boldsymbol{\pi})\)</td><td>\(P(X=i)=\pi_i\)</td><td colspan="2">独热编码下均值 \(\boldsymbol{\pi}\)，协方差 \(\operatorname{diag}(\boldsymbol{\pi}) - \boldsymbol{\pi}\boldsymbol{\pi}^\top\)</td><td>K 选 1</td></tr>
+    <tr><td>均匀 \(U(a,b)\)</td><td>\(1/(b-a),\ a\le x\le b\)</td><td>\((a+b)/2\)</td><td>\((b-a)^2/12\)</td><td>区间内等可能</td></tr>
+    <tr><td>指数 \(\mathrm{Exp}(\lambda)\)</td><td>\(\lambda e^{-\lambda x},\ x\ge0\)</td><td>\(1/\lambda\)</td><td>\(1/\lambda^2\)</td><td>等待时间</td></tr>
+    <tr><td>正态 \(\mathcal{N}(\mu,\sigma^2)\)</td><td>\(\frac{1}{\sigma\sqrt{2\pi}}\exp\!\big(-\frac{(x-\mu)^2}{2\sigma^2}\big)\)</td><td>\(\mu\)</td><td>\(\sigma^2\)</td><td>许多小因素的和</td></tr>
+  </table></div>
+  <h3>几个推导</h3>
+  <p><b>二项分布的均值和方差。</b>把成功数写成 n 个独立伯努利变量之和 \(X = \sum_i B_i\)。每个 \(B_i\) 的均值是 p，方差是 \(\mathbb{E}[B_i^2] - p^2 = p - p^2\)。期望可以逐项相加；独立时方差也可以逐项相加，所以均值为 \(np\)，方差为 \(np(1-p)\)。</p>
+  <p><b>泊松分布的均值。</b>\(k=0\) 那项为 0，从 \(k=1\) 开始，约掉一个 k，再令 \(j=k-1\)：</p>
+  <div class="eq">\[ \mathbb{E}[X] = \sum_{k\ge1} k\,\frac{e^{-\lambda}\lambda^k}{k!} = \lambda\sum_{k\ge1}\frac{e^{-\lambda}\lambda^{k-1}}{(k-1)!} = \lambda\sum_{j\ge0}\frac{e^{-\lambda}\lambda^{j}}{j!} = \lambda \]</div>
+  <p class="eq-note">最后一个求和是泊松 pmf 对所有取值的和，等于 1。</p>
+  <p><b>泊松是二项的极限。</b>令 \(p=\lambda/n\)，n 趋于无穷，\(\lambda\) 固定：</p>
+  <div class="eq">\[ \begin{aligned}
+  \binom{n}{k}\Big(\frac{\lambda}{n}\Big)^k\Big(1-\frac{\lambda}{n}\Big)^{n-k}
+  &amp;= \frac{n(n-1)\cdots(n-k+1)}{n^k}\cdot\frac{\lambda^k}{k!}\cdot\Big(1-\frac{\lambda}{n}\Big)^{n}\cdot\Big(1-\frac{\lambda}{n}\Big)^{-k} \\
+  &amp;\to 1\cdot\frac{\lambda^k}{k!}\cdot e^{-\lambda}\cdot 1
+  \end{aligned} \]</div>
+  <p class="eq-note">第一步把组合数展开，并把 \((1-\lambda/n)^{n-k}\) 拆成两部分。第二步：k 固定时第一个分式有 k 个因子，每个都趋于 1；\((1-\lambda/n)^n \to e^{-\lambda}\)；最后一个因子的指数固定，底数趋于 1。</p>
+  <p>验算：\(\mathrm{Bin}(1000, 0.003)\) 在 \(k=2\) 处约为 0.22415，\(\mathrm{Pois}(3)\) 在 \(k=2\) 处为 \(e^{-3}\cdot 9/2 \approx 0.22404\)，几乎相同。</p>
+  <p><b>指数分布的无记忆性。</b>\(P(X&gt;t) = e^{-\lambda t}\)，所以</p>
+  <div class="eq">\[ P(X&gt;s+t\mid X&gt;s) = \frac{e^{-\lambda(s+t)}}{e^{-\lambda s}} = e^{-\lambda t} = P(X&gt;t) \]</div>
+  <p>例如等车时间服从 \(\lambda=0.5\)（每分钟）的指数分布，再多等 2 分钟以上的概率是 \(e^{-1}\approx 0.368\)，与已经等了多久无关。几何分布是它在离散情形下的对应物，同样无记忆。</p>
+  <h3>正态分布、标准化与 erf</h3>
+  <p>令 \(z = (x-\mu)/\sigma\)，任何正态变量都变成标准正态 \(\mathcal{N}(0,1)\)。所以只需要一个标准正态的分布函数 \(\Phi\)。它没有初等函数表达式，但可以用误差函数 \(\operatorname{erf}(u) = \frac{2}{\sqrt\pi}\int_0^u e^{-t^2}\,dt\) 写出来：</p>
+  <div class="eq">\[ \begin{aligned}
+  \Phi(z) &amp;= \tfrac12 + \int_0^z \tfrac{1}{\sqrt{2\pi}}e^{-s^2/2}\,ds \\
+  &amp;= \tfrac12 + \tfrac{\sqrt2}{\sqrt{2\pi}}\int_0^{z/\sqrt2} e^{-t^2}\,dt \\
+  &amp;= \tfrac12\Big(1 + \operatorname{erf}\big(z/\sqrt2\big)\Big)
+  \end{aligned} \]</div>
+  <p class="eq-note">第一步用对称性，0 左边的概率是 1/2。第二步换元 \(s=\sqrt2\,t\)，\(ds=\sqrt2\,dt\)。第三步认出 \(\frac{1}{\sqrt\pi}\int_0^u e^{-t^2}dt = \frac12\operatorname{erf}(u)\)。</p>
+  <p>几个必须记住的数：\(\Phi(0)=0.5\)，\(\Phi(1)\approx0.8413\)，\(\Phi(1.96)\approx0.975\)。落在 \(\mu\pm\sigma\)、\(\mu\pm2\sigma\)、\(\mu\pm3\sigma\) 内的概率约为 68.27%、95.45%、99.73%，即 68–95–99.7 法则。例如 \(\mathcal{N}(5, 2^2)\) 在 7 处，\(z = 1\)，分布函数约为 0.8413。标准正态在 0 处的密度是 \(1/\sqrt{2\pi}\approx0.3989\)。</p>
+  <h3>为什么要在对数空间计算</h3>
+  <p>算 \(\mathrm{Bin}(2000, 0.5)\) 在 \(k=1000\) 处的概率。组合数 \(\binom{2000}{1000}\approx 2.05\times10^{600}\)，\(0.5^{2000}\approx 10^{-602}\)。双精度浮点数最大约 \(1.8\times10^{308}\)，最小正数约 \(4.9\times10^{-324}\)。<code>0.5**2000</code> 直接得到 0.0；<code>math.comb(2000, 1000)</code> 是精确的 Python 整数，但和浮点数相乘时要先转成浮点，报 <code>OverflowError</code>。两个因子单独都出界，乘积本身却只有 0.0178。</p>
+  <p>办法是取对数，阶乘用 \(\log\Gamma\) 计算，\(\log k! = \log\Gamma(k+1)\)，即 <code>math.lgamma(k + 1)</code>：</p>
+  <div class="eq">\[ \begin{aligned}
+  \log P(X=k) &amp;= \log\Gamma(n+1) - \log\Gamma(k+1) - \log\Gamma(n-k+1) + k\log p + (n-k)\log(1-p) \\
+  \log P_{\text{泊松}}(X=k) &amp;= -\lambda + k\log\lambda - \log\Gamma(k+1)
+  \end{aligned} \]</div>
+  <p>代入 \(n=2000,\ k=1000,\ p=0.5\)，对数概率约为 \(-4.0264\)，取 exp 得 0.017839。中间量都在几千以内，不会出界。</p>
+  <h3>与 ML 的联系</h3>
+  <ul>
+    <li>伯努利的负对数似然 \(-[y\log p + (1-y)\log(1-p)]\) 就是二元交叉熵；类别分布的负对数似然 \(-\log\pi_y\) 就是交叉熵。</li>
+    <li>正态分布的负对数似然里有 \((x-\mu)^2/(2\sigma^2)\)，固定 σ 时就是 MSE（下一课 P.4 详细推）。</li>
+    <li>泊松常用来建模计数数据，比如点击次数、到达次数。</li>
+    <li>模型在 n 道测试题上的答对数服从 \(\mathrm{Bin}(n, p)\)，准确率的标准差是 \(\sqrt{p(1-p)/n}\)。n=1000、p=0.8 时约为 0.0126，差 1 个百分点的两个模型未必真有差别。</li>
+  </ul>
+  <h3>常见错误</h3>
+  <ul>
+    <li>把密度当概率，以为 pdf 不能大于 1。</li>
+    <li>正态分布的参数混淆了 σ 和 σ²。<code>np.random.normal(loc, scale)</code> 的 <code>scale</code> 是标准差。</li>
+    <li>用 <code>math.factorial</code> 或 <code>math.comb</code> 直接和浮点数相乘，n 一大就出错。</li>
+    <li>对数空间里 \(p=0\) 或 \(p=1\) 时出现 \(0\cdot\log 0\)，在浮点数里是 nan。这两种情况要单独处理。</li>
+  </ul>
+  <p class="note"><b>提醒：</b>泊松分布的均值和方差相等。真实计数数据的方差常常明显大于均值（过度离散），这时泊松模型会低估不确定性。</p>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>二项分布什么时候可以用泊松近似？<br>答：n 大、p 小、np 适中时。上面 n=1000、p=0.003 的例子误差约 \(10^{-4}\)。</li>
+    <li>为什么连续分布在单点的概率是 0？<br>答：概率是密度在区间上的积分，区间长度为 0 时积分为 0。</li>
+    <li>\(\Phi(-z)\) 和 \(\Phi(z)\) 有什么关系？<br>答：\(\Phi(-z) = 1 - \Phi(z)\)，由标准正态关于 0 对称得到，erf 是奇函数也能推出来。</li>
+    <li>指数分布为什么叫“无记忆”？<br>答：已经等了 s，再等 t 以上的概率仍是 \(e^{-\lambda t}\)，过去的等待不改变未来的分布。</li>
+    <li>独热编码的类别分布，协方差矩阵为什么非对角元是负的？<br>答：\(\operatorname{Cov}(X_i,X_j) = -\pi_i\pi_j\)。一个类别取 1，其他类别就必须是 0，所以两两负相关。</li>
+  </ol>
+  <h3>本课练习</h3>
+  <p>只能用 <code>math</code> 和 <code>numpy</code>，不能用 scipy。</p>
+  <ul>
+    <li><code>binomial_pmf(k, n, p)</code>：在对数空间用 <code>math.lgamma</code> 算组合数，再加上 \(k\log p + (n-k)\log(1-p)\)，最后取 exp。<code>binomial_pmf(1000, 2000, 0.5)</code> 应约为 0.017839；对所有 k 求和应为 1；\(p=0\) 时 \(k=0\) 的概率必须正好是 1.0，\(p=1\) 时 \(k=n\) 的概率必须正好是 1.0。</li>
+    <li><code>poisson_pmf(k, lam)</code>：同样在对数空间算。\(\mathrm{Pois}(3)\) 在 2 处约为 0.224042；\(k=500,\ \lambda=480\) 时也要得到有限值。</li>
+    <li><code>normal_pdf(x, mu, sigma)</code>：按表中的密度公式写，<code>x</code> 可以是 numpy 数组，返回同形状的数组。</li>
+    <li><code>normal_cdf(x, mu, sigma)</code>：先标准化，再用 \(\tfrac12(1+\operatorname{erf}(z/\sqrt2))\)。<code>math.erf</code> 只接受标量，要让它对数组逐元素生效，比如用 <code>np.vectorize</code> 包一层。</li>
+  </ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/p2_distributions.py
 实现  binomial_pmf · poisson_pmf · normal_pdf · normal_cdf
@@ -2416,8 +2573,88 @@ for e in range(N):
 
 <section id="pmom" data-title="P.3 期望与协方差" hidden>
   <h2>P.3 期望、方差、协方差与相关</h2>
-  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
-  <!-- 正文写在这里 -->
+  <p class="sub">用几个数概括一个分布的位置、离散程度和变量之间的联动，并在数值上把它们算准。</p>
+  <h3>为什么重要</h3>
+  <p>BatchNorm 和 LayerNorm 每一步都在算均值和方差；特征标准化、PCA 和白化都从协方差矩阵出发；Adam 维护梯度的一阶矩和二阶矩的滑动估计。面试里常问“样本方差为什么除以 n−1”“相关为 0 是否意味着独立”。写代码时，方差公式选错会在大数值数据上得到负的方差。</p>
+  <h3>直觉</h3>
+  <p>期望是分布的重心。方差是各点到重心距离平方的平均，衡量分散程度。协方差看两个变量是否“一起偏”：X 高于均值时 Y 也常高于均值，乘积多为正，协方差为正。相关系数把协方差除以两边的标准差，去掉了单位，只剩方向和线性程度。</p>
+  <h3>定义与公式</h3>
+  <div class="eq">\[ \mathbb{E}[X] = \sum_x x\,P(X=x),\qquad \operatorname{Var}(X) = \mathbb{E}\big[(X-\mathbb{E}X)^2\big],\qquad \operatorname{Cov}(X,Y) = \mathbb{E}\big[(X-\mathbb{E}X)(Y-\mathbb{E}Y)\big] \]</div>
+  <p class="eq-note">连续变量把求和换成对密度的积分。\(\operatorname{Var}(X) = \operatorname{Cov}(X,X)\)。</p>
+  <p><b>期望是线性的</b>：\(\mathbb{E}[aX+bY] = a\,\mathbb{E}X + b\,\mathbb{E}Y\)，不需要独立。把方差的定义展开，就得到常用的计算公式：</p>
+  <div class="eq">\[ \begin{aligned}
+  \operatorname{Var}(X) &amp;= \mathbb{E}\big[X^2 - 2X\mu + \mu^2\big] \\
+  &amp;= \mathbb{E}[X^2] - 2\mu\,\mathbb{E}[X] + \mu^2 = \mathbb{E}[X^2] - \mathbb{E}[X]^2
+  \end{aligned} \]</div>
+  <p class="eq-note">其中 \(\mu=\mathbb{E}X\) 是常数，第二步用了期望的线性。</p>
+  <p>同样展开 \(\mathbb{E}\big[(a(X-\mu_X) + b(Y-\mu_Y))^2\big]\)，得到</p>
+  <div class="eq">\[ \operatorname{Var}(aX+bY) = a^2\operatorname{Var}X + b^2\operatorname{Var}Y + 2ab\operatorname{Cov}(X,Y) \]</div>
+  <p>X、Y 独立时 Cov 为 0，方差直接相加。\(a=1,\ b=-1\) 时，正相关会让 \(X-Y\) 的方差变小，这是配对实验比独立两组实验更灵敏的原因。</p>
+  <h3>协方差矩阵与相关系数</h3>
+  <p>随机向量 \(\mathbf{x}\in\mathbb{R}^D\) 的协方差矩阵 \(\Sigma = \mathbb{E}\big[(\mathbf{x}-\boldsymbol{\mu})(\mathbf{x}-\boldsymbol{\mu})^\top\big]\)，第 (i, j) 元是 \(\operatorname{Cov}(x_i,x_j)\)。它对称，而且<b>半正定</b>。对任意向量 \(\mathbf{v}\)：</p>
+  <div class="eq">\[ \mathbf{v}^\top\Sigma\mathbf{v} = \mathbb{E}\big[\mathbf{v}^\top(\mathbf{x}-\boldsymbol{\mu})(\mathbf{x}-\boldsymbol{\mu})^\top\mathbf{v}\big] = \mathbb{E}\big[(\mathbf{v}^\top(\mathbf{x}-\boldsymbol{\mu}))^2\big] = \operatorname{Var}(\mathbf{v}^\top\mathbf{x}) \ge 0 \]</div>
+  <p class="eq-note">第一步把常数 \(\mathbf{v}\) 移进期望；第二步认出 \(\mathbf{v}^\top(\mathbf{x}-\boldsymbol{\mu})\) 是标量，它和自己的转置相乘就是平方。</p>
+  <p>样本版本：设数据矩阵 X 为 (n, D)，每列减去列均值得到 \(X_c\)，则 \(\hat\Sigma = X_c^\top X_c/(n-1)\)，\(\mathbf{v}^\top\hat\Sigma\mathbf{v} = \lVert X_c\mathbf{v}\rVert^2/(n-1) \ge 0\)。</p>
+  <p>相关系数 \(\rho_{XY} = \operatorname{Cov}(X,Y)/(\sigma_X\sigma_Y)\)。由柯西–施瓦茨不等式，\(|\rho|\le1\)。矩阵形式为 \(R_{ij} = \Sigma_{ij}/(\sigma_i\sigma_j)\)，对角线全为 1。</p>
+  <p><b>数字例子。</b>三个样本 \(x = (1,2,3)\)，\(y = (1,3,2)\)。均值都是 2，去中心后 \(x_c=(-1,0,1)\)，\(y_c=(-1,1,0)\)。按 n−1=2 做分母：\(\operatorname{Var}x = 2/2 = 1\)，\(\operatorname{Var}y = 2/2 = 1\)，\(\operatorname{Cov} = (1+0+0)/2 = 0.5\)，所以 \(\rho = 0.5\)。</p>
+  <p><b>相关的局限。</b>它只衡量<b>线性</b>关系。令 X 在 \(\{-1,0,1\}\) 上等可能，\(Y=X^2\)。则 \(\mathbb{E}X=0\)，\(\mathbb{E}[XY]=\mathbb{E}[X^3]=0\)，所以 \(\operatorname{Cov}(X,Y)=0-0\cdot\mathbb{E}Y=0\)，相关为 0。可是 Y 完全由 X 决定：\(P(Y=0\mid X=0)=1\)，而 \(P(Y=0)=1/3\)，两者不独立。独立推出不相关，反过来不成立。</p>
+  <h3>样本方差为什么除以 n−1</h3>
+  <p>设 \(x_1,\dots,x_n\) 独立同分布，均值 μ，方差 σ²。样本均值 \(\bar x\) 的方差是 \(\sigma^2/n\)，所以 \(\mathbb{E}[\bar x^2] = \sigma^2/n + \mu^2\)，而 \(\mathbb{E}[x_i^2] = \sigma^2+\mu^2\)。</p>
+  <div class="eq">\[ \begin{aligned}
+  \mathbb{E}\Big[\sum_i (x_i-\bar x)^2\Big] &amp;= \mathbb{E}\Big[\sum_i x_i^2 - n\bar x^2\Big] \\
+  &amp;= n(\sigma^2+\mu^2) - n\Big(\frac{\sigma^2}{n}+\mu^2\Big) = (n-1)\,\sigma^2
+  \end{aligned} \]</div>
+  <p class="eq-note">第一步展开平方，并用 \(\sum_i x_i = n\bar x\) 合并交叉项；第二步代入上面两个二阶矩。</p>
+  <p>所以除以 n 的估计平均偏小，期望是 \(\frac{n-1}{n}\sigma^2\)；除以 n−1 才无偏。原因是 \(\bar x\) 本身由这组数据算出，离数据比真正的 μ 更近，偏差平方和被低估了。数据里只剩 n−1 个“自由度”。在 numpy 里，<code>np.var</code> 默认分母是 n（<code>ddof=0</code>），<code>np.cov</code> 默认分母是 n−1。</p>
+  <h3>数值稳定性：灾难性抵消与 Welford</h3>
+  <p>公式 \(\mathbb{E}[X^2]-\mathbb{E}[X]^2\) 在纸上正确，在浮点数上可能完全失效。取 4 个数 \(10^9 + (4, 7, 13, 16)\)，真实的总体方差是 \((36+9+9+36)/4 = 22.5\)。用双精度按这个公式算，结果是 \(-128\)。原因是 \(x^2\approx10^{18}\)，在这个量级上相邻两个双精度数相差 128，两个约 \(10^{18}\) 的数相减，有效数字全被抵消掉了。</p>
+  <p>两遍扫描（先求均值，再求偏差平方的平均）是稳定的，但要读两次数据。数据是只能读一遍的流时，用 Welford 算法。维护计数 n、当前均值 \(\mu_n\) 和偏差平方和 \(M_n = \sum_{i\le n}(x_i-\mu_n)^2\)：</p>
+  <div class="eq">\[ \delta = x_n - \mu_{n-1},\qquad \mu_n = \mu_{n-1} + \frac{\delta}{n},\qquad M_n = M_{n-1} + \delta\,(x_n-\mu_n) \]</div>
+  <p class="eq-note">初值 \(\mu_0 = 0,\ M_0 = 0\)。总体方差为 \(M_n/n\)，样本方差为 \(M_n/(n-1)\)。</p>
+  <p>为什么 M 的更新是对的：把旧的 n−1 项写成 \((x_i-\mu_{n-1}) + (\mu_{n-1}-\mu_n)\)，展开时交叉项因 \(\sum_{i&lt;n}(x_i-\mu_{n-1})=0\) 消失：</p>
+  <div class="eq">\[ \begin{aligned}
+  M_n &amp;= M_{n-1} + (n-1)(\mu_n-\mu_{n-1})^2 + (x_n-\mu_n)^2 \\
+  &amp;= M_{n-1} + (n-1)\frac{\delta^2}{n^2} + \frac{(n-1)^2\delta^2}{n^2} = M_{n-1} + \frac{n-1}{n}\delta^2 = M_{n-1} + \delta\,(x_n-\mu_n)
+  \end{aligned} \]</div>
+  <p class="eq-note">第二行代入 \(\mu_n-\mu_{n-1}=\delta/n\) 和 \(x_n-\mu_n=\frac{n-1}{n}\delta\)。</p>
+  <p>手算上面的例子（为了看清楚，去掉 \(10^9\) 偏移，结果相同）：</p>
+  <div class="scroll"><table>
+    <tr><th>n</th><th>x</th><th>δ</th><th>μ</th><th>M</th></tr>
+    <tr><td>1</td><td>4</td><td>4</td><td>4</td><td>0</td></tr>
+    <tr><td>2</td><td>7</td><td>3</td><td>5.5</td><td>0 + 3×1.5 = 4.5</td></tr>
+    <tr><td>3</td><td>13</td><td>7.5</td><td>8</td><td>4.5 + 7.5×5 = 42</td></tr>
+    <tr><td>4</td><td>16</td><td>8</td><td>10</td><td>42 + 8×6 = 90</td></tr>
+  </table></div>
+  <p>\(90/4 = 22.5\)，与真实值一致。它稳定的原因是每一步只处理偏差 δ 和 \(x_n-\mu_n\)，这些量和标准差同一量级，从来不形成 \(x^2\) 这样的巨大数再相减。</p>
+  <h3>与 ML 的联系</h3>
+  <ul>
+    <li>归一化层：减均值、除以 \(\sqrt{\operatorname{Var}+\epsilon}\)，均值和方差都是按某个维度算的矩。</li>
+    <li>PCA：对协方差矩阵做特征分解，方向是特征向量，每个方向上的方差是特征值。半正定保证特征值不为负。</li>
+    <li>流式统计：强化学习里对观测做在线标准化、训练中统计激活分布，都可以用 Welford 这类一遍扫描的算法。</li>
+    <li>特征选择时只看相关系数会漏掉非线性关系，比如上面的 \(Y=X^2\)。</li>
+  </ul>
+  <h3>常见错误</h3>
+  <ul>
+    <li>以为“相关为 0”就是“独立”。</li>
+    <li>混淆 ddof：numpy 的 <code>var</code> 和 <code>cov</code> 默认分母不同，比较结果时要对齐。</li>
+    <li>协方差矩阵方向搞反：<code>np.cov</code> 默认把每一<b>行</b>当一个变量，样本按行排列时要加 <code>rowvar=False</code>。</li>
+    <li>在大偏移数据上用 \(\mathbb{E}[X^2]-\mathbb{E}[X]^2\)，得到负方差，再开平方得到 nan。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>\(\operatorname{Var}(X+X)\) 和 \(\operatorname{Var}(X_1+X_2)\)（两个独立同分布副本）各是多少？<br>答：前者 \(4\operatorname{Var}X\)，因为 X 与自己完全相关；后者 \(2\operatorname{Var}X\)。</li>
+    <li>把 X 的单位从米换成厘米，协方差和相关系数怎么变？<br>答：协方差乘 100，相关系数不变，因为分子分母同时乘 100。</li>
+    <li>样本协方差矩阵在什么情况下一定奇异？<br>答：样本数 n ≤ D 时。\(X_c\) 的秩至多 n−1，所以 \(X_c^\top X_c\) 的秩小于 D。</li>
+    <li>除以 n−1 的样本方差无偏，那样本标准差无偏吗？<br>答：一般不是。开方是凹函数，由詹森不等式 \(\mathbb{E}[\sqrt{s^2}] \le \sqrt{\mathbb{E}[s^2]} = \sigma\)，平均略偏小。</li>
+    <li>Welford 的 M 能变成负数吗？<br>答：数学上每次增量 \(\frac{n-1}{n}\delta^2 \ge 0\)，M 单调不减。代码里增量写成 δ 与 \(x_n-\mu_n\) 的乘积，两者同号，也不涉及大数相减。</li>
+  </ol>
+  <h3>本课练习</h3>
+  <ul>
+    <li><code>mean_var(x, ddof=0)</code>：返回 (均值, 方差)，方差分母为 \(n-\text{ddof}\)。用两遍的方式算即可：先求均值，再对偏差平方求和。</li>
+    <li><code>covariance_matrix(X, ddof=1)</code>：X 形状 (n, D)，每行一个样本。按列减均值得到 \(X_c\)，返回 \(X_c^\top X_c/(n-\text{ddof})\)，形状 (D, D)。结果应与 <code>np.cov(X, rowvar=False)</code> 一致，对称且半正定。</li>
+    <li><code>correlation_matrix(X)</code>：由协方差矩阵除以 \(\sigma_i\sigma_j\) 得到，\(\sigma_i\) 取协方差矩阵对角线的平方根即可，分母里的 ddof 会约掉。对角线必须为 1，结果应与 <code>np.corrcoef(X, rowvar=False)</code> 一致。</li>
+    <li><code>welford(stream)</code>：<code>stream</code> 可能是生成器，只能遍历一次，不能先转成数组再求长度。按上面的递推维护 n、μ、M，返回 (均值, 总体方差 \(M/n\))。判题会在 \(10^9\) 偏移、方差约为 1 的数据上检验精度，朴素公式在那里过不了。</li>
+  </ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/p3_moments.py
 实现  mean_var · covariance_matrix · correlation_matrix · welford
@@ -2427,8 +2664,83 @@ for e in range(N):
 
 <section id="pmle" data-title="P.4 MLE 与 MAP" hidden>
   <h2>P.4 极大似然与最大后验</h2>
-  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
-  <!-- 正文写在这里 -->
+  <p class="sub">从数据估计分布的参数，并看清交叉熵、MSE 和正则化分别来自哪个概率假设。</p>
+  <h3>为什么重要</h3>
+  <p>训练神经网络时最小化的交叉熵和 MSE，都是某个分布下的负对数似然，训练就是在做极大似然估计（MLE）。在损失里加上 L2 或 L1 正则，等价于给参数一个先验后做最大后验估计（MAP）。理解这两者，就能回答“为什么分类用交叉熵”“weight decay 有什么概率解释”这类面试题。</p>
+  <h3>直觉</h3>
+  <p>MLE 问的是：哪个参数让已经看到的数据最不意外？MAP 再加一句：同时参数本身也要合理。数据很少时，MLE 很容易被偶然性带偏，比如抛 3 次硬币全是反面，MLE 会说正面概率为 0。先验像是事先看过的一些“虚拟数据”，把估计往合理的方向拉一点。数据越多，先验的作用越小。</p>
+  <h3>似然与概率的区别</h3>
+  <p>同一个式子 \(p(D\mid\theta)\) 有两种读法。固定 θ、把 D 当变量时，它是概率，对所有可能的 D 求和为 1。固定已观测的 D、把 θ 当变量时，它叫似然 \(L(\theta)\)，对 θ 积分不必为 1，只用来比较不同 θ 的相对好坏。</p>
+  <p>例子：10 次抛硬币得到 7 次正面（按某个固定顺序）。\(L(\theta) = \theta^7(1-\theta)^3\)。\(L(0.5) = 0.5^{10} \approx 0.000977\)，\(L(0.7) = 0.7^7\times0.3^3 \approx 0.002224\)。数据在 θ=0.7 下的可能性约是 θ=0.5 下的 2.28 倍。</p>
+  <h3>伯努利的 MLE</h3>
+  <p>n 次试验中 k 次成功。乘积难求导，先取对数，再令导数为 0：</p>
+  <div class="eq">\[ \begin{aligned}
+  \ell(\theta) &amp;= k\log\theta + (n-k)\log(1-\theta) \\
+  \ell'(\theta) &amp;= \frac{k}{\theta} - \frac{n-k}{1-\theta} = 0 \\
+  k(1-\theta) &amp;= (n-k)\,\theta \;\Rightarrow\; \hat\theta = \frac{k}{n}
+  \end{aligned} \]</div>
+  <p class="eq-note">log 单调递增，最大化 \(\ell\) 与最大化 L 是同一个点。\(\ell''(\theta) = -k/\theta^2 - (n-k)/(1-\theta)^2 &lt; 0\)，所以这是最大值。</p>
+  <h3>高斯的 MLE</h3>
+  <p>数据 \(x_1,\dots,x_n\) 独立地来自 \(\mathcal{N}(\mu,\sigma^2)\)。把每个点的对数密度相加：</p>
+  <div class="eq">\[ \ell(\mu,\sigma^2) = -\frac{n}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2}\sum_{i=1}^n (x_i-\mu)^2 \]</div>
+  <p>对 μ 求导并令其为 0，得 \(\sum_i (x_i-\mu) = 0\)，所以 \(\hat\mu = \bar x\)。再把 \(v=\sigma^2\) 当成变量求导：</p>
+  <div class="eq">\[ \frac{\partial\ell}{\partial v} = -\frac{n}{2v} + \frac{1}{2v^2}\sum_i (x_i-\hat\mu)^2 = 0 \;\Rightarrow\; \hat\sigma^2 = \frac{1}{n}\sum_{i=1}^n (x_i-\bar x)^2 \]</div>
+  <p>分母是 n。上一课已经证明这个估计的期望是 \(\frac{n-1}{n}\sigma^2\)，所以 MLE 的方差估计有偏，n 大时偏差趋于 0。</p>
+  <p><b>数字例子。</b>\(x=(1,2,6)\)：\(\hat\mu = 3\)，偏差平方和 \(4+1+9 = 14\)，\(\hat\sigma^2 = 14/3 \approx 4.667\)，无偏估计是 \(14/2 = 7\)。</p>
+  <h3>负对数似然、交叉熵与 MSE</h3>
+  <p>优化器习惯做最小化，所以把对数似然取负并除以 n，得到平均负对数似然（NLL）。对高斯分布：</p>
+  <div class="eq">\[ \text{NLL}(\mu,\sigma^2) = \frac12\log(2\pi\sigma^2) + \frac{1}{2\sigma^2}\cdot\frac1n\sum_{i=1}^n (x_i-\mu)^2 \]</div>
+  <p>代入上面的例子与 MLE，第二项是 \(\frac{14/3}{2\cdot14/3} = \tfrac12\)，\(\text{NLL} = \tfrac12\log(2\pi\cdot 14/3) + \tfrac12 \approx 2.189\)。</p>
+  <ul>
+    <li><b>回归</b>：假设 \(y = f_\theta(\mathbf{x}) + \varepsilon\)，\(\varepsilon\sim\mathcal{N}(0,\sigma^2)\)，σ 固定。NLL 中只有 \(\frac{1}{2\sigma^2}\cdot\frac1n\sum(y_i - f_\theta(\mathbf{x}_i))^2\) 依赖 θ，所以<b>最小二乘就是高斯噪声下的 MLE</b>。</li>
+    <li><b>二分类</b>：\(y\sim\mathrm{Bern}(p_\theta(\mathbf{x}))\)，NLL 是 \(-[y\log p + (1-y)\log(1-p)]\)，即二元交叉熵。</li>
+    <li><b>多分类</b>：\(y\sim\mathrm{Cat}(\boldsymbol{\pi}_\theta(\mathbf{x}))\)，NLL 是 \(-\log\pi_y\)，即交叉熵。语言模型的预训练损失就是这个。</li>
+  </ul>
+  <h3>MAP 与 Beta–伯努利共轭</h3>
+  <p>MAP 最大化后验。分母 \(p(D)\) 与 θ 无关，可以丢掉：</p>
+  <div class="eq">\[ \hat\theta_{\text{MAP}} = \arg\max_\theta\, p(D\mid\theta)\,p(\theta) = \arg\max_\theta\,\big[\log p(D\mid\theta) + \log p(\theta)\big] \]</div>
+  <p>伯努利参数常用 Beta 先验，密度 \(p(\theta)\propto\theta^{a-1}(1-\theta)^{b-1}\)。乘上似然 \(\theta^k(1-\theta)^{n-k}\)，指数直接相加：</p>
+  <div class="eq">\[ p(\theta\mid D) \propto \theta^{k+a-1}(1-\theta)^{n-k+b-1} \;\Rightarrow\; \theta\mid D \sim \mathrm{Beta}(a+k,\ b+n-k) \]</div>
+  <p>后验和先验同属 Beta 族，这叫共轭。a 和 b 可以理解为事先看到的成功与失败次数。仿照伯努利 MLE 的求导，得到后验的众数，也就是 MAP：</p>
+  <div class="eq">\[ \hat\theta_{\text{MAP}} = \frac{k+a-1}{n+a+b-2},\qquad \text{后验均值} = \frac{k+a}{n+a+b} \]</div>
+  <p class="eq-note">众数公式要求 \(a+k&gt;1\) 且 \(b+n-k&gt;1\)，否则后验密度在端点处最大。\(a=b=1\) 是均匀先验，此时 MAP 等于 MLE \(k/n\)。</p>
+  <p><b>数字例子。</b>10 次中 7 次成功，先验 \(\mathrm{Beta}(11,11)\)，相当于事先看过 10 次成功、10 次失败。后验为 \(\mathrm{Beta}(18, 14)\)，MAP 为 \((7+10)/(10+20) = 17/30 \approx 0.567\)，比 MLE 的 0.7 更靠近 0.5。若 3 次全失败、先验 \(\mathrm{Beta}(2,2)\)，MAP 为 \(1/5\)，不会像 MLE 那样给出 0。</p>
+  <h3>高斯先验就是 L2 正则</h3>
+  <p>线性回归 \(y_i = \mathbf{w}^\top\mathbf{x}_i + \varepsilon_i\)，噪声方差 σ²，先验 \(\mathbf{w}\sim\mathcal{N}(\mathbf{0}, \tau^2 I)\)。MAP 最小化负对数后验：</p>
+  <div class="eq">\[ \begin{aligned}
+  -\log p(\mathbf{w}\mid D) &amp;= \frac{1}{2\sigma^2}\sum_i (y_i-\mathbf{w}^\top\mathbf{x}_i)^2 + \frac{1}{2\tau^2}\lVert\mathbf{w}\rVert_2^2 + \text{常数} \\
+  &amp;\propto \sum_i (y_i-\mathbf{w}^\top\mathbf{x}_i)^2 + \lambda\lVert\mathbf{w}\rVert_2^2,\qquad \lambda = \sigma^2/\tau^2
+  \end{aligned} \]</div>
+  <p class="eq-note">第一行：似然项来自高斯噪声，先验项来自 \(\log\mathcal{N}(\mathbf{w};\mathbf{0},\tau^2I)\)，与 w 无关的部分归入常数。第二行：整体乘以 \(2\sigma^2\)，不改变最小值点。</p>
+  <p>这正是岭回归。先验越窄（τ 越小），λ 越大，正则越强。若改用拉普拉斯先验 \(p(w_j)\propto\exp(-|w_j|/b)\)，负对数先验是 \(\lVert\mathbf{w}\rVert_1/b\)，同样乘以 \(2\sigma^2\) 后得到 L1 正则（Lasso），\(\lambda = 2\sigma^2/b\)。拉普拉斯密度在 0 处有尖峰，倾向于把一部分权重压到恰好为 0。</p>
+  <h3>类别分布与加 α 平滑</h3>
+  <p>K 个类别，计数 \(c_1,\dots,c_K\)，总数 N。在约束 \(\sum_i\pi_i=1\) 下最大化 \(\sum_i c_i\log\pi_i\)，用拉格朗日乘子得 \(c_i/\pi_i = \lambda\)，于是 \(\hat\pi_i = c_i/N\)。没出现过的类别概率为 0，用它算交叉熵会得到无穷大。加 α 平滑：</p>
+  <div class="eq">\[ \hat\pi_i = \frac{c_i + \alpha}{N + K\alpha} \]</div>
+  <p class="eq-note">分母加 \(K\alpha\) 保证总和仍为 1。它恰好是 \(\mathrm{Dirichlet}(\alpha,\dots,\alpha)\) 先验下的后验均值，也是 \(\mathrm{Dirichlet}(\alpha+1,\dots,\alpha+1)\) 先验下的 MAP。Dirichlet 是 Beta 在 K 类上的推广。</p>
+  <p>例子：计数 (5, 0, 3)，α=1，得 \((6, 1, 4)/11 \approx (0.545, 0.091, 0.364)\)。P.1 里朴素贝叶斯的平滑就是 K=2 的情形。</p>
+  <h3>常见错误</h3>
+  <ul>
+    <li>把似然当成参数的概率，说“θ=0.7 的概率是 0.0022”。</li>
+    <li>高斯 MLE 的方差用了 n−1。MLE 的分母是 n；n−1 是无偏估计，两者是不同的估计量。</li>
+    <li>NLL 里漏掉 \(\tfrac12\log(2\pi\sigma^2)\)。σ 固定时它是常数，不影响 μ 的最优点；但要比较不同 σ，或者要报告 NLL 数值时，必须保留。</li>
+    <li>Beta 先验的 MAP 写成后验均值 \((k+a)/(n+a+b)\)。众数和均值相差“减 1”和“减 2”。</li>
+    <li>以为 MAP 是“贝叶斯方法”的全部。MAP 只取后验的一个点，丢掉了不确定性。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>数据量趋于无穷时 MAP 和 MLE 的关系？<br>答：先验项不随 n 增长，似然项随 n 线性增长，先验影响趋于 0，两者趋于一致（先验在真值附近不为 0 的前提下）。</li>
+    <li>为什么分类不用 MSE 而用交叉熵？<br>答：交叉熵是伯努利或类别分布的 NLL，符合标签的概率模型；配合 sigmoid 或 softmax，梯度是 \(p-y\)，不会在输出饱和时变得很小。</li>
+    <li>Beta(11,11) 先验比 Beta(2,2) 强在哪里？<br>答：它相当于多看了 20 次虚拟试验，需要更多真实数据才能把估计从 0.5 拉开。</li>
+    <li>L2 正则的 λ 变大，对应先验发生了什么变化？<br>答：\(\lambda=\sigma^2/\tau^2\)，λ 变大即 τ 变小，先验更集中在 0 附近，更相信权重应该很小。</li>
+    <li>高斯 MLE 的 \(\hat\sigma^2\) 在 n=1 时是多少？<br>答：0。单个点离自己的均值距离为 0，NLL 会趋于 \(-\infty\)。这是 MLE 在小样本上过拟合的极端例子。</li>
+  </ol>
+  <h3>本课练习</h3>
+  <ul>
+    <li><code>gaussian_mle(x)</code>：返回 \((\hat\mu, \hat\sigma^2)\)，即样本均值和分母为 n 的方差。</li>
+    <li><code>gaussian_nll(x, mu, var)</code>：返回平均负对数似然，按上面的 NLL 公式实现，注意第三个参数是方差而不是标准差。自查：单个点 0 在 \(\mathcal{N}(0,1)\) 下的 NLL 是 \(\tfrac12\log(2\pi)\)；在 MLE 处稍微改动 μ 或方差，NLL 都应变大。</li>
+    <li><code>bernoulli_map(k, n, a, b)</code>：返回 Beta 后验的众数 \((k+a-1)/(n+a+b-2)\)。自查：\(a=b=1\) 时等于 \(k/n\)；7/10 配 \(\mathrm{Beta}(11,11)\) 得 17/30。</li>
+    <li><code>categorical_mle(counts, alpha=0.0)</code>：输入各类计数数组，返回 \((c_i+\alpha)/(N+K\alpha)\)。α=0 时就是频率，计数为 0 的类得到 0；α&gt;0 时所有概率为正且和为 1。</li>
+  </ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/p4_mle.py
 实现  gaussian_mle · gaussian_nll · bernoulli_map · categorical_mle
@@ -2438,8 +2750,31 @@ for e in range(N):
 
 <section id="pci" data-title="P.5 置信区间" hidden>
   <h2>P.5 大数定律、中心极限定理与置信区间</h2>
-  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
-  <!-- 正文写在这里 -->
+  <p class="sub">测试集上算出的一个准确率只是一次抽样的结果，这一课教你给它配上误差范围。</p>
+  <h3>为什么重要</h3>
+  <p>你在 1000 条测试样本上测得准确率 0.85，换一批 1000 条样本，结果多半不会正好是 0.85。两个模型差 0.5 个百分点，到底是真的更好，还是抽样的运气？要回答这个问题，就要知道“样本均值”这个随机变量会怎样波动。大数定律说它最终会靠近真值，中心极限定理说它在真值附近的波动近似正态，置信区间把这个波动写成一个可以报告的范围。面试里常问的“标准误是什么”“95% 置信区间怎么解释”“bootstrap 怎么做”，都在这一课。</p>
+  <h3>直觉</h3>
+  <p>单个样本很吵。把 n 个样本平均一下，正的噪声和负的噪声会互相抵消一部分，平均值比单个样本稳定。样本越多抵消得越充分，但抵消的速度比较慢：标准差按 \(1/\sqrt{n}\) 缩小。想把误差减半，样本要变成 4 倍。</p>
+  <h3>样本均值的期望与方差</h3>
+  <p>设 \(X_1,\dots,X_n\) 独立同分布，均值 \(\mu\)，方差 \(\sigma^2\)。样本均值 \(\bar X = \frac{1}{n}\sum_{i=1}^n X_i\)。</p>
+  <div class="eq">\[ \begin{aligned}
+  \mathbb{E}[\bar X] &amp;= \tfrac{1}{n}\textstyle\sum_{i} \mathbb{E}[X_i] = \tfrac{1}{n}\cdot n\mu = \mu \\
+  \operatorname{Var}(\bar X) &amp;= \tfrac{1}{n^2}\operatorname{Var}\big(\textstyle\sum_{i} X_i\big) = \tfrac{1}{n^2}\textstyle\sum_{i}\operatorname{Var}(X_i) = \tfrac{1}{n^2}\cdot n\sigma^2 = \tfrac{\sigma^2}{n}
+  \end{aligned} \]</div>
+  <p class="eq-note">第一行用了期望的线性性。第二行先把常数 \(1/n\) 提出来变成 \(1/n^2\)；再用“独立变量之和的方差等于方差之和”，这一步需要独立（至少两两不相关）；最后 n 个 \(\sigma^2\) 相加。</p>
+  <p>所以 \(\bar X\) 的标准差是 \(\sigma/\sqrt{n}\)，这个量叫<b>标准误</b>（standard error，SE）。实际中 \(\sigma\) 未知，用样本标准差 \(s\) 代替，得到 \(\widehat{\mathrm{SE}} = s/\sqrt{n}\)。</p>
+  <div class="eq">\[ s = \sqrt{\frac{1}{n-1}\sum_{i=1}^n (x_i - \bar x)^2} \]</div>
+  <p class="eq-note">分母用 \(n-1\)（numpy 里是 <code>ddof=1</code>），这样 \(s^2\) 是 \(\sigma^2\) 的无偏估计。</p>
+  <h3>大数定律</h3>
+  <p>弱大数定律说，对任意 \(\varepsilon &gt; 0\)，\(P(|\bar X_n - \mu| &gt; \varepsilon) \to 0\)。在方差有限时，用切比雪夫不等式一步就能证：</p>
+  <div class="eq">\[ P\big(|\bar X_n - \mu| &gt; \varepsilon\big) \le \frac{\operatorname{Var}(\bar X_n)}{\varepsilon^2} = \frac{\sigma^2}{n\varepsilon^2} \xrightarrow{\,n\to\infty\,} 0 \]</div>
+  <p>它只告诉你“会收敛”，没告诉你收敛时 \(\bar X\) 的分布长什么样。这是中心极限定理的工作。</p>
+  <h3>中心极限定理</h3>
+  <p>若 \(X_1,\dots,X_n\) 独立同分布，且方差 \(\sigma^2\) 有限，则</p>
+  <div class="eq">\[ \frac{\bar X_n - \mu}{\sigma/\sqrt{n}} \xrightarrow{\ d\ } \mathcal{N}(0,1) \]</div>
+  <p class="eq-note">其中 \(\xrightarrow{d}\) 表示依分布收敛。通俗地说，n 足够大时 \(\bar X_n\) 近似服从 \(\mathcal{N}(\mu,\ \sigma^2/n)\)，不管原来的总体是什么形状。</p>
+  <p>两个条件都要看。独立同分布不满足时（例如样本之间强相关），有效样本量比 n 小，\(\sigma^2/n\) 会低估真实方差。方差无穷时定理不成立，典型反例是柯西分布，它的样本均值仍是同样的柯西分布，取多少样本都不会变窄。“n 多大才够”没有统一答案，总体越偏斜，需要的 n 越大。</p>
+  <p>下面的演示每次从选定的总体抽 n 个样本、算一个均值，重复很多次，画出这些均值的直方图。先选“指数分布”，把 n 从 1 慢慢拖到 30，看直方图怎样从右偏变得对称。</p>
   <div class="demo">
     <div class="row"><label for="clt-dist">总体分布</label>
       <select id="clt-dist"><option value="exp">指数分布（右偏）</option><option value="uni">均匀分布</option><option value="ber">伯努利 p=0.1</option></select>
@@ -2449,6 +2784,60 @@ for e in range(N):
     <canvas id="clt-canvas" width="640" height="220" aria-label="样本均值的分布"></canvas>
     <pre id="clt-out" style="margin:10px 0 0"></pre>
   </div>
+  <p>再试两件事。第一，把 n 从 25 拖到 100，直方图的宽度大约缩到一半，这就是 \(1/\sqrt{n}\)。第二，换成“伯努利 p=0.1”，n 较小时均值只能取少数几个值，形状也明显偏斜，要更大的 n 才像正态。</p>
+  <h3>置信区间</h3>
+  <p>由中心极限定理，\(P\big(-z \le \frac{\bar X - \mu}{\sigma/\sqrt n} \le z\big) \approx 0.95\)，其中 \(z = \Phi^{-1}(0.975) \approx 1.959964\)，\(\Phi\) 是标准正态的分布函数。把不等式里的 \(\mu\) 解出来，再用 \(s\) 代替 \(\sigma\)：</p>
+  <div class="eq">\[ \bar x \;\pm\; z_{1-\alpha/2}\,\frac{s}{\sqrt{n}},\qquad z_{1-\alpha/2} = \Phi^{-1}\!\big(1 - \tfrac{\alpha}{2}\big) \]</div>
+  <p class="eq-note">其中置信水平为 \(1-\alpha\)。95% 时 \(\alpha = 0.05\)，取 \(\Phi^{-1}(0.975)\)。因为正态分布对称，两侧各留 \(\alpha/2\)。</p>
+  <p><b>怎么解释。</b>真值 \(\mu\) 是固定的数，区间才是随机的。正确的说法是：如果把“抽样并算区间”这个过程重复很多次，大约 95% 的区间会覆盖 \(\mu\)。对已经算出来的某一个区间，频率学派的框架里它要么包含 \(\mu\)，要么不包含，没有“95% 的概率”可言。</p>
+  <h3>例子：手算一个 95% 区间</h3>
+  <p>数据 4, 5, 6, 7, 8。逐步计算：</p>
+  <div class="eq">\[ \begin{aligned}
+  \bar x &amp;= 30/5 = 6 \\
+  s^2 &amp;= \tfrac{(-2)^2+(-1)^2+0^2+1^2+2^2}{5-1} = \tfrac{10}{4} = 2.5,\quad s \approx 1.5811 \\
+  \widehat{\mathrm{SE}} &amp;= 1.5811/\sqrt{5} \approx 0.7071 \\
+  \text{半宽} &amp;= 1.959964 \times 0.7071 \approx 1.3859 \;\Rightarrow\; [4.6141,\ 7.3859]
+  \end{aligned} \]</div>
+  <p>说明一点。n = 5 这么小，严格做法是用自由度 4 的 t 分布分位数（约 2.776），区间会更宽。本课的练习按正态近似写，用 z。</p>
+  <h3>bootstrap：没有公式时怎么办</h3>
+  <p>均值有现成的标准误公式，中位数、AUC、F1 就没有简单公式。bootstrap 的想法是把手里的样本当成总体的替身。从这 n 个数里<b>有放回地</b>抽 n 个，算一次统计量；重复 B 次，得到 B 个统计量。它们的分布近似“统计量的抽样分布”。</p>
+  <p><b>百分位区间</b>就是取这 B 个值的 2.5% 和 97.5% 分位数（95% 时）。有放回很关键：不放回抽 n 个只是把原数据重新排列，每次统计量都一样。</p>
+  <pre><code>for b in 1..B:
+    idx  = 从 0..n-1 有放回地抽 n 个下标
+    t[b] = stat_fn(x[idx])
+区间 = (quantile(t, (1-conf)/2), quantile(t, 1-(1-conf)/2))</code></pre>
+  <h3>与 ML 的联系</h3>
+  <ul>
+    <li><b>指标的误差范围。</b>准确率是 0/1 变量的均值。1000 条样本、准确率 0.85 时，\(\widehat{\mathrm{SE}} = \sqrt{0.85\times0.15/1000} \approx 0.0113\)，95% 区间约为 \(0.85 \pm 0.022\)，即 \([0.828,\ 0.872]\)。另一个模型 0.855，落在这个范围里，单凭这次测试说明不了它更好。</li>
+    <li><b>模型比较。</b>两个模型在同一个测试集上评估时，对每条样本的差值做 bootstrap（成对重抽样），比各自算区间再看是否重叠更准确。</li>
+    <li><b>没有解析公式的指标。</b>AUC、BLEU、F1 这类指标常用 bootstrap 报区间。</li>
+    <li><b>训练本身。</b>小批量梯度是全量梯度的样本均值，批量越大噪声越小，噪声的标准差也按 \(1/\sqrt{B}\) 缩小。</li>
+  </ul>
+  <h3>常见错误</h3>
+  <ul>
+    <li>把标准差 \(s\) 当成标准误。区间宽度要用 \(s/\sqrt{n}\)，少除 \(\sqrt n\) 区间会宽很多。</li>
+    <li>样本方差用了 <code>ddof=0</code>。numpy 的 <code>np.std</code> 默认就是 0，要显式写 <code>ddof=1</code>。</li>
+    <li>把 95% 区间说成“真值有 95% 的概率在这里”。</li>
+    <li>z 取 1.645。那是单侧 95% 或双侧 90% 的分位数，双侧 95% 是 1.96。</li>
+    <li>样本明显相关（例如同一个用户的多条记录）时直接套 \(\sigma/\sqrt n\)，区间会偏窄。</li>
+    <li>bootstrap 每次重抽都新建随机数生成器并传同一个 seed，结果所有重抽样完全一样。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>样本量从 100 增加到 400，区间宽度怎么变？变成原来的一半，因为宽度正比于 \(1/\sqrt{n}\)，\(\sqrt{400/100} = 2\)。</li>
+    <li>中心极限定理要求总体是正态的吗？不要求。它要求独立同分布和有限方差，说的是样本均值的分布近似正态。</li>
+    <li>大数定律和中心极限定理的区别？前者说 \(\bar X\) 收敛到 \(\mu\)；后者进一步说偏差 \(\bar X - \mu\) 的大小是 \(\sigma/\sqrt n\) 量级，且形状近似正态。</li>
+    <li>置信水平从 95% 提高到 99%，区间怎么变？变宽。z 从约 1.96 变成约 2.576，想更有把握覆盖真值，就要付出区间更宽的代价。</li>
+    <li>bootstrap 能凭空增加信息吗？不能。它只是用已有样本估计抽样分布，样本本身不具代表性时，bootstrap 区间同样会错。</li>
+    <li>为什么 bootstrap 均值区间的宽度与正态近似差不多？两者估计的是同一个抽样分布。对均值，重抽样得到的均值的标准差大约就是 \(s/\sqrt n\)。</li>
+  </ol>
+  <h3>本课练习</h3>
+  <p><b>norm_ppf(p)</b>：返回标准正态分位数 \(\Phi^{-1}(p)\)，\(0 &lt; p &lt; 1\)，误差小于 1e-6。先写出分布函数</p>
+  <div class="eq">\[ \Phi(z) = \tfrac{1}{2}\Big(1 + \operatorname{erf}\big(z/\sqrt{2}\big)\Big) \]</div>
+  <p class="eq-note">\(\operatorname{erf}\) 在 Python 里是 <code>math.erf</code>。</p>
+  <p>\(\Phi\) 单调递增，所以可以二分。在 \([-10,\ 10]\) 上开始，每次看中点的 \(\Phi\) 比 p 大还是小，舍掉一半区间。区间长 20，二分 50 次左右就远小于 1e-6。验收会检查 p = 0.975、0.5、0.05、0.995 这几个点。</p>
+  <p><b>mean_ci(x, conf=0.95)</b>：返回 (lo, hi) = \(\bar x \mp z\cdot s/\sqrt n\)。z 用你自己的 <code>norm_ppf(1 - (1-conf)/2)</code>，s 用 <code>ddof=1</code>。用 4, 5, 6, 7, 8 检查，应得到约 (4.6141, 7.3859)。验收还会重复抽很多组正态样本，看区间覆盖真值的比例是否接近 95%。</p>
+  <p><b>bootstrap_ci(x, stat_fn, n_boot=2000, conf=0.95, seed=0)</b>：百分位 bootstrap。只在函数开头建一次 <code>rng = np.random.default_rng(seed)</code>，之后所有随机数都从它来，这样同一个 seed 结果完全相同。每次有放回抽 n 个、调用 <code>stat_fn</code> 得到一个数，最后取 \((1-\text{conf})/2\) 和 \(1-(1-\text{conf})/2\) 两个分位数。<code>stat_fn</code> 可能是 <code>np.mean</code>，也可能是 <code>np.median</code>，按“传入一维数组、返回一个数”来调用最稳妥。</p>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/p5_ci.py
 实现  norm_ppf · mean_ci · bootstrap_ci
@@ -2458,8 +2847,95 @@ for e in range(N):
 
 <section id="ptest" data-title="P.6 假设检验" hidden>
   <h2>P.6 假设检验与 A/B 测试</h2>
-  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
-  <!-- 正文写在这里 -->
+  <p class="sub">实验组比对照组好了一点，这一课教你判断这点差别能不能用运气解释。</p>
+  <h3>为什么重要</h3>
+  <p>上线一个新的推荐模型，点击率从 20% 变成 25%。这是模型真的更好，还是这几天的用户恰好爱点？A/B 测试、模型评估、特征是否有用，背后都是同一套思路：先假设“没有差别”，再看数据在这个假设下有多罕见。ML 岗位的面试经常问 p 值的定义、两类错误、样本量和功效，以及做了很多次检验以后怎么办。</p>
+  <h3>直觉</h3>
+  <p>像法庭审案。原假设是“被告无罪”（没有差别），默认成立。只有证据足够强，强到“如果他无罪，出现这样的证据几乎不可能”，才判有罪（拒绝原假设）。证据不够时判无罪，只代表证据不足，并不证明他清白。</p>
+  <h3>基本概念</h3>
+  <ul>
+    <li><b>原假设 \(H_0\)</b>：没有效应，例如两组点击率相等 \(p_1 = p_2\)。<b>备择假设 \(H_1\)</b>：有效应，例如 \(p_1 \ne p_2\)（双侧）。</li>
+    <li><b>检验统计量</b> T：把数据压成一个数，在 \(H_0\) 下它的分布已知，例如近似 \(\mathcal{N}(0,1)\)。</li>
+    <li><b>p 值</b>：假设 \(H_0\) 成立，得到与观测值一样极端或更极端的统计量的概率。双侧 z 检验里 \(p = P(|Z| \ge |z_{\text{obs}}|) = 2\big(1-\Phi(|z_{\text{obs}}|)\big)\)。</li>
+    <li><b>显著性水平 \(\alpha\)</b>：事先定好的门槛，常取 0.05。\(p \le \alpha\) 时拒绝 \(H_0\)。</li>
+  </ul>
+  <div class="scroll"><table>
+    <tr><th></th><th>\(H_0\) 为真</th><th>\(H_0\) 为假</th></tr>
+    <tr><td>拒绝 \(H_0\)</td><td>第一类错误（假阳性），概率 \(\alpha\)</td><td>正确，概率为功效 \(1-\beta\)</td></tr>
+    <tr><td>不拒绝 \(H_0\)</td><td>正确</td><td>第二类错误（假阴性），概率 \(\beta\)</td></tr>
+  </table></div>
+  <p><b>检验功效</b> \(1-\beta\) 是真有效应时你能检测出来的概率。效应越大、样本越多、\(\alpha\) 越宽松，功效越高。实验前要先估算样本量，保证功效够用，否则真实的改进也常常测不出来。</p>
+  <p class="note">p 值的常见误解：p 值<b>不是</b> \(H_0\) 为真的概率；p 值小不代表效应大，样本极大时很小的差别也会显著；\(p &gt; 0.05\) 不代表 \(H_0\) 为真，可能只是样本不够。</p>
+  <h3>两比例 z 检验</h3>
+  <p>对照组 \(n_1\) 人里有 \(x_1\) 次转化，实验组 \(n_2\) 人里有 \(x_2\) 次。在 \(H_0: p_1 = p_2\) 下两组共用一个比例，所以用合并比例估计它，再算差值的标准误：</p>
+  <div class="eq">\[ \hat p = \frac{x_1 + x_2}{n_1 + n_2},\qquad \mathrm{SE} = \sqrt{\hat p(1-\hat p)\Big(\frac{1}{n_1} + \frac{1}{n_2}\Big)},\qquad z = \frac{\hat p_1 - \hat p_2}{\mathrm{SE}} \]</div>
+  <p class="eq-note">其中 \(\hat p_1 = x_1/n_1\)，\(\hat p_2 = x_2/n_2\)。每组比例的方差是 \(p(1-p)/n\)，两组独立，差的方差是两者之和。由中心极限定理，\(H_0\) 下 z 近似服从 \(\mathcal{N}(0,1)\)。</p>
+  <p><b>例子。</b>对照组 200/1000，实验组 250/1000。</p>
+  <div class="eq">\[ \begin{aligned}
+  \hat p_1 &amp;= 0.20,\quad \hat p_2 = 0.25,\quad \hat p = 450/2000 = 0.225 \\
+  \mathrm{SE} &amp;= \sqrt{0.225 \times 0.775 \times (0.001 + 0.001)} = \sqrt{0.00034875} \approx 0.018675 \\
+  z &amp;= (0.20 - 0.25)/0.018675 \approx -2.6774 \\
+  p &amp;= 2\big(1 - \Phi(2.6774)\big) \approx 2 \times 0.00371 \approx 0.00742
+  \end{aligned} \]</div>
+  <p>\(p \approx 0.0074 &lt; 0.05\)，在 5% 水平上拒绝“两组相同”。z 是负的，只是因为我们用对照组减实验组。</p>
+  <h3>Welch t 检验</h3>
+  <p>比较两组连续指标（例如延迟、停留时长）的均值。经典的 Student t 检验假设两组方差相等，但实验组和对照组的方差常常不同，样本量也不同，这时等方差假设会让第一类错误率偏离 \(\alpha\)。Welch t 检验对每组单独估方差：</p>
+  <div class="eq">\[ t = \frac{\bar a - \bar b}{\sqrt{s_a^2/n_a + s_b^2/n_b}},\qquad \nu = \frac{\big(s_a^2/n_a + s_b^2/n_b\big)^2}{\dfrac{(s_a^2/n_a)^2}{n_a-1} + \dfrac{(s_b^2/n_b)^2}{n_b-1}} \]</div>
+  <p class="eq-note">其中 \(s_a^2, s_b^2\) 是样本方差（分母 \(n-1\)）。\(\nu\) 是 Welch–Satterthwaite 自由度，一般不是整数。t 在 \(H_0\) 下近似服从自由度为 \(\nu\) 的 t 分布。</p>
+  <p>例子：a = (5.1, 4.9, 5.6, 5.8, 6.0, 5.2)，b = (4.1, 4.5, 4.0, 4.8, 4.4, 4.2, 4.6, 4.3)。\(\bar a \approx 5.4333\)，\(\bar b = 4.3625\)，\(s_a^2 \approx 0.18667\)，\(s_b^2 = 0.07125\)。于是 \(s_a^2/n_a \approx 0.031111\)，\(s_b^2/n_b \approx 0.0089063\)，和为 0.040017，开方约 0.20004。\(t \approx 1.0708/0.20004 \approx 5.3530\)。自由度分子 \(0.040017^2 \approx 0.0016014\)，分母 \(0.031111^2/5 + 0.0089063^2/7 \approx 0.00019358 + 0.00001133\)，得 \(\nu \approx 7.815\)。</p>
+  <h3>多重检验</h3>
+  <p>每次检验都有 \(\alpha\) 的假阳性概率。同时检验 m 个都为真的原假设（例如 20 个指标、20 个用户分群），若相互独立，至少出现一次假阳性的概率是</p>
+  <div class="eq">\[ P(\text{至少一次假阳性}) = 1 - (1-\alpha)^m,\qquad m = 20:\ 1 - 0.95^{20} \approx 0.642 \]</div>
+  <p>也就是说，什么都没改，看 20 个指标，大约有 64% 的机会至少有一个“显著”。</p>
+  <p><b>Bonferroni</b> 控制族错误率（FWER，至少一次假阳性的概率）。做法是每个检验用 \(\alpha/m\) 作门槛。由并集上界 \(P(\cup A_i) \le \sum P(A_i) = m\cdot\alpha/m = \alpha\)，不需要独立性。代价是很保守，功效低。</p>
+  <p><b>Benjamini–Hochberg（BH）</b> 控制错误发现率（FDR），即被拒绝的假设里假阳性所占比例的期望。在检验相互独立或正相关时，它保证 FDR 不超过 \(\alpha\)。步骤：</p>
+  <ol>
+    <li>把 m 个 p 值升序排列，\(p_{(1)} \le p_{(2)} \le \dots \le p_{(m)}\)。</li>
+    <li>找<b>最大</b>的 k，使 \(p_{(k)} \le \frac{k}{m}\alpha\)。</li>
+    <li>拒绝排名前 k 的所有假设（即使其中有的 \(p_{(i)}\) 本身没过自己的门槛）。没有这样的 k 就一个也不拒绝。</li>
+  </ol>
+  <p><b>例子。</b>p = (0.01, 0.04, 0.03, 0.005, 0.20)，\(\alpha = 0.05\)，m = 5。</p>
+  <div class="scroll"><table>
+    <tr><th>排名 k</th><th>p 值</th><th>门槛 \(\frac{k}{5}\times 0.05\)</th><th>满足？</th></tr>
+    <tr><td>1</td><td>0.005</td><td>0.01</td><td>是</td></tr>
+    <tr><td>2</td><td>0.01</td><td>0.02</td><td>是</td></tr>
+    <tr><td>3</td><td>0.03</td><td>0.03</td><td>是（等号成立）</td></tr>
+    <tr><td>4</td><td>0.04</td><td>0.04</td><td>是（等号成立）</td></tr>
+    <tr><td>5</td><td>0.20</td><td>0.05</td><td>否</td></tr>
+  </table></div>
+  <p>最大的 k 是 4，所以拒绝 0.005、0.01、0.03、0.04 这 4 个，按原顺序就是前 4 个。对比 Bonferroni：门槛是 \(0.05/5 = 0.01\)，只拒绝 0.01 和 0.005 两个。</p>
+  <p>为什么强调“最大”？看 p = (0.03, 0.001, 0.035, 0.2)。排序后第 2 名 0.03 大于 \(\frac{2}{4}\times0.05 = 0.025\)，不满足；第 3 名 0.035 却小于等于 \(\frac{3}{4}\times0.05 = 0.0375\)，满足。最大的 k 是 3，前 3 个全部拒绝。若在第一个不满足处停下，就只会拒绝 1 个。</p>
+  <h3>A/B 测试的常见坑</h3>
+  <ul>
+    <li><b>偷看结果、提前停止。</b>每天看一次 p 值，一旦小于 0.05 就停，相当于做了很多次检验，假阳性率会远高于 \(\alpha\)。要么事先定好样本量跑完再看，要么使用专门为序贯检验设计的方法。</li>
+    <li><b>样本比例不匹配（SRM）。</b>计划 50/50 分流，实际两组人数差得明显，通常说明分流或埋点有 bug，这时实验结果不可信。可以对分组人数做一个拟合优度检验来发现它。</li>
+    <li><b>分析单位与随机化单位不一致。</b>按用户分流、却按点击事件计算方差，同一用户的事件彼此相关，标准误被低估。</li>
+    <li><b>事后挑指标、挑分群。</b>这就是上面的多重检验问题。</li>
+    <li><b>新奇效应。</b>用户对新界面的短期兴趣不代表长期效果。</li>
+  </ul>
+  <h3>常见错误</h3>
+  <ul>
+    <li>两比例检验用了各自的比例算 SE，却声称是合并比例检验。两种都存在，本课的练习用合并比例。</li>
+    <li>双侧 p 值忘了乘 2，或者对负的 z 直接算 \(1-\Phi(z)\)，应先取绝对值。</li>
+    <li>Welch 的方差用了 <code>ddof=0</code>。</li>
+    <li>BH 在第一个不满足的排名处停下，或者忘了把结果按原输入顺序还回去。</li>
+    <li>把“不显著”写成“没有差别”。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>p = 0.03 是否意味着 \(H_0\) 为真的概率是 3%？不是。p 值是在 \(H_0\) 成立的前提下算的条件概率，它不能反过来给出 \(H_0\) 的概率；那需要先验，属于贝叶斯的问题。</li>
+    <li>样本量加大，第一类错误率会变吗？不会，它由 \(\alpha\) 决定。变的是功效，样本越大功效越高。</li>
+    <li>两比例 z 检验为什么用合并比例？因为 SE 是在 \(H_0\) 下计算的，\(H_0\) 说两组比例相同，用全部数据估计这个共同比例最准确。</li>
+    <li>什么时候用 Bonferroni，什么时候用 BH？每一个假阳性代价都很高、要求一个也别错时用 Bonferroni；做大规模筛选（很多特征、很多基因），能接受发现里混入少量假阳性时用 BH，功效高得多。</li>
+    <li>Welch 的自由度为什么不是整数？它是用矩匹配把两个方差之和近似成一个缩放的卡方分布得到的，结果只是一个近似参数，不需要是整数。</li>
+    <li>为什么偷看会增加假阳性？p 值在 \(H_0\) 下会随数据积累上下波动，看的次数越多，越有机会碰到某一次碰巧小于 0.05 的时刻。</li>
+  </ol>
+  <h3>本课练习</h3>
+  <p>需要标准正态分布函数时，用 \(\Phi(z) = \frac{1}{2}\big(1+\operatorname{erf}(z/\sqrt 2)\big)\) 自己写一个。</p>
+  <p><b>two_proportion_ztest(x1, n1, x2, n2)</b>：返回 (z, 双侧 p)。z 的符号按 \(\hat p_1 - \hat p_2\)，SE 用合并比例。用上面的例子检查，应得到 z ≈ −2.6774、p ≈ 0.00742。两组比例完全相同时 z = 0、p = 1。</p>
+  <p><b>welch_t(a, b)</b>：返回 (t, df)。均值差用 a 减 b，样本方差 <code>ddof=1</code>，df 用 Welch–Satterthwaite 公式，不取整。上面的例子应得到 t ≈ 5.3530、df ≈ 7.8150。</p>
+  <p><b>bonferroni(pvals, alpha=0.05)</b>：返回与输入等长的布尔数组，\(p_i \le \alpha/m\) 的位置为 True。注意是“小于等于”。</p>
+  <p><b>benjamini_hochberg(pvals, alpha=0.05)</b>：返回与输入<b>同序</b>的布尔数组。思路是先记下排序的下标（<code>np.argsort</code>），在排好序的 p 值上逐个比较 \(p_{(k)} \le k\alpha/m\)，找满足条件的最大 k，再把排序后前 k 个对应的原位置标为 True。所有都不满足时返回全 False。用上面两个例子都检查一遍。</p>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/p6_testing.py
 实现  two_proportion_ztest · welch_t · bonferroni · benjamini_hochberg
@@ -2469,8 +2945,89 @@ for e in range(N):
 
 <section id="pinfo" data-title="P.7 信息论" hidden>
   <h2>P.7 信息论：熵、交叉熵、互信息</h2>
-  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
-  <!-- 正文写在这里 -->
+  <p class="sub">语言模型的损失、困惑度和特征选择里的互信息，都建立在“平均有多意外”这一个量上。</p>
+  <h3>为什么重要</h3>
+  <p>训练语言模型时最小化的是交叉熵，报告的是困惑度。分类器用交叉熵损失，RLHF 用 KL 惩罚，决策树用信息增益选特征，特征选择用互信息。这些量都从同一个定义出发。把熵理解透，这些损失函数就不需要死记。</p>
+  <h3>直觉</h3>
+  <p>一件事越不可能发生，发生时你越吃惊，它带来的信息越多。“明天太阳升起”几乎没有信息，“明天下冰雹”信息很多。自信息衡量单个结果的意外程度，熵是这个意外程度的平均值，也就是你对一个随机变量平均有多“猜不准”。</p>
+  <h3>自信息与熵</h3>
+  <div class="eq">\[ I(x) = -\log p(x),\qquad H(X) = \mathbb{E}\big[-\log p(X)\big] = -\sum_x p(x)\log p(x) \]</div>
+  <p class="eq-note">其中对数以 2 为底时单位是比特（bit），以 e 为底时单位是奈特（nat）。两者只差一个常数，\(H_{\text{bit}} = H_{\text{nat}}/\ln 2\)，1 比特约等于 0.693 奈特。</p>
+  <p>为什么是 \(-\log p\)？我们希望两件独立事件同时发生的信息量等于各自信息量之和。独立时 \(p(x,y) = p(x)p(y)\)，只有对数能把乘积变成和。</p>
+  <p><b>约定</b> \(0\cdot\log 0 = 0\)。因为 \(\lim_{p\to 0^+} p\log p = 0\)，不可能发生的结果对平均意外程度没有贡献。代码里直接算 <code>0 * np.log(0)</code> 会得到 <code>nan</code>，要先把 p = 0 的项去掉。</p>
+  <h3>数值例子</h3>
+  <ul>
+    <li>公平硬币：\(H = -2\times 0.5\log_2 0.5 = 1\) 比特。猜一次硬币需要一个“是/否”问题。</li>
+    <li>8 个等可能结果：\(H = -8\times\frac18\log_2\frac18 = \log_2 8 = 3\) 比特，正好是 3 个二进制位。</li>
+    <li>偏硬币 (0.9, 0.1)：\(H = -0.9\log_2 0.9 - 0.1\log_2 0.1 \approx 0.137 + 0.332 = 0.469\) 比特。结果更好猜，熵更小。</li>
+    <li>确定事件 (1, 0)：\(H = 0\)，没有任何不确定性。</li>
+  </ul>
+  <h3>熵的最大值是 log K</h3>
+  <p>K 个取值的分布里，均匀分布的熵最大。设 \(u(x) = 1/K\)，计算 p 到 u 的 KL：</p>
+  <div class="eq">\[ \begin{aligned}
+  \mathrm{KL}(p\,\Vert\,u) &amp;= \sum_x p(x)\log\frac{p(x)}{1/K} \\
+  &amp;= \sum_x p(x)\log p(x) + \log K\sum_x p(x) \\
+  &amp;= \log K - H(p) \;\ge\; 0
+  \end{aligned} \]</div>
+  <p class="eq-note">第一步代入定义；第二步把 \(\log(p\cdot K)\) 拆成两项；第三步用 \(\sum_x p(x) = 1\) 并认出熵。KL 非负，所以 \(H(p) \le \log K\)，等号只在 \(p = u\) 时成立。</p>
+  <h3>联合熵与条件熵</h3>
+  <div class="eq">\[ H(X,Y) = -\sum_{x,y} p(x,y)\log p(x,y),\qquad H(Y\mid X) = -\sum_{x,y} p(x,y)\log p(y\mid x) \]</div>
+  <p>条件熵是“已经知道 X 以后，Y 还剩多少不确定性”。把 \(p(x,y) = p(x)\,p(y\mid x)\) 代进联合熵，对数拆开，就得到链式法则：</p>
+  <div class="eq">\[ H(X,Y) = -\sum_{x,y} p(x,y)\big[\log p(x) + \log p(y\mid x)\big] = H(X) + H(Y\mid X) \]</div>
+  <p class="eq-note">第一项对 y 求和后剩下 \(-\sum_x p(x)\log p(x) = H(X)\)，第二项就是条件熵的定义。</p>
+  <h3>交叉熵与 KL</h3>
+  <div class="eq">\[ H(p,q) = -\sum_x p(x)\log q(x) = H(p) + \mathrm{KL}(p\,\Vert\,q) \]</div>
+  <p class="eq-note">真实分布是 p，你却按 q 来编码或预测，平均要付出的意外程度就是交叉熵。多出来的部分正是 KL。推导见 <a href="#kl" data-go="kl">4.1 课</a> KL 散度。</p>
+  <p>例子（以 2 为底）：\(p = (0.5, 0.5)\)，\(q = (0.9, 0.1)\)。\(H(p,q) = -0.5\log_2 0.9 - 0.5\log_2 0.1 \approx 0.076 + 1.661 = 1.737\) 比特。\(H(p) = 1\)，所以 \(\mathrm{KL}(p\Vert q) \approx 0.737\) 比特。换成奈特是 \(0.737\times 0.693 \approx 0.511\)，与 <a href="#kl" data-go="kl">4.1 课</a>的结果一致。</p>
+  <p>训练时 p 是数据分布，固定不变，\(H(p)\) 是常数。所以最小化交叉熵和最小化 \(\mathrm{KL}(p\Vert q)\) 是同一个优化问题。</p>
+  <h3>互信息</h3>
+  <p>知道 Y 以后，X 的不确定性减少了多少：</p>
+  <div class="eq">\[ \begin{aligned}
+  I(X;Y) &amp;= H(X) - H(X\mid Y) \\
+  &amp;= -\sum_{x,y} p(x,y)\log p(x) + \sum_{x,y} p(x,y)\log p(x\mid y) \\
+  &amp;= \sum_{x,y} p(x,y)\log\frac{p(x,y)}{p(x)\,p(y)} = \mathrm{KL}\big(p(x,y)\,\Vert\,p(x)p(y)\big)
+  \end{aligned} \]</div>
+  <p class="eq-note">第二行把 \(H(X)\) 里的 \(p(x)\) 写成 \(\sum_y p(x,y)\)，两项都变成对 \((x,y)\) 的求和；第三行合并对数，并用 \(p(x\mid y) = p(x,y)/p(y)\)。</p>
+  <p>从最后一行能直接读出两个性质。互信息非负，因为它是 KL。X 与 Y 独立时 \(p(x,y) = p(x)p(y)\)，每个对数都是 \(\log 1 = 0\)，互信息为 0。表达式对 X、Y 对称，所以 \(I(X;Y) = I(Y;X)\)。</p>
+  <ul>
+    <li>X = Y，公平硬币：联合表是 \(\begin{pmatrix}0.5 &amp; 0\\ 0 &amp; 0.5\end{pmatrix}\)。\(H(X) = 1\)，知道 Y 就知道 X，\(H(X\mid Y) = 0\)，所以 \(I = 1\) 比特。用求和公式算：两个非零项都是 \(0.5\log_2\frac{0.5}{0.25} = 0.5\)，和为 1。</li>
+    <li>有噪声的复制：联合表 \(\begin{pmatrix}0.4 &amp; 0.1\\ 0.1 &amp; 0.4\end{pmatrix}\)，即 Y 有 80% 的概率等于 X。两个边缘都是 (0.5, 0.5)，\(H(X) = 1\)。给定 Y 后 X 是 (0.8, 0.2) 的分布，\(H(X\mid Y) \approx 0.722\)。所以 \(I \approx 0.278\) 比特。</li>
+  </ul>
+  <h3>语言模型的交叉熵与困惑度</h3>
+  <p>一段文本有 T 个 token，模型给每个真实 token 的概率是 \(q(x_t\mid x_{&lt;t})\)。训练损失是平均负对数似然（NLL），它就是交叉熵的样本估计。困惑度是它的指数：</p>
+  <div class="eq">\[ \mathcal{L} = -\frac{1}{T}\sum_{t=1}^{T}\ln q(x_t\mid x_{&lt;t}),\qquad \mathrm{PPL} = \exp(\mathcal{L}) = \Big(\prod_{t=1}^{T} q(x_t\mid x_{&lt;t})\Big)^{-1/T} \]</div>
+  <p class="eq-note">PyTorch 的 <code>F.cross_entropy</code> 用自然对数，单位是奈特，所以这里用 exp。用以 2 为底的损失时要换成 \(2^{\mathcal{L}}\)。</p>
+  <p><b>均匀分布的困惑度是 V。</b>如果模型对词表里 V 个词一律给 \(1/V\)，每个 token 的 NLL 都是 \(-\ln(1/V) = \ln V\)，平均还是 \(\ln V\)，于是 \(\mathrm{PPL} = e^{\ln V} = V\)。所以困惑度可以读成“模型平均在多少个词之间犹豫”。完美预测时每个概率都是 1，NLL 为 0，PPL 为 1。</p>
+  <p><b>例子。</b>4 个 token 的概率分别是 0.5、0.25、0.125、0.5。乘积是 \(1/128\)，\(\mathrm{PPL} = 128^{1/4} \approx 3.364\)。用对数算：NLL 依次约为 0.693、1.386、2.079、0.693，平均 1.213，\(e^{1.213} \approx 3.364\)，两种算法一致。</p>
+  <h3>与 ML 的联系</h3>
+  <ul>
+    <li><b>分类与语言模型损失</b>：交叉熵，等价于最小化数据分布到模型的 KL。</li>
+    <li><b>决策树</b>：信息增益 \(H(Y) - H(Y\mid \text{特征})\) 就是特征与标签的互信息。</li>
+    <li><b>特征选择</b>：按 \(I(\text{特征};\ \text{标签})\) 排序。它能捕捉非线性关系，例如 X 关于 0 对称、\(Y = X^2\) 时相关系数为 0，但 Y 完全由 X 决定，互信息大于 0。</li>
+    <li><b>对齐训练</b>：KL 惩罚（<a href="#kl" data-go="kl">4.1 课</a>）。</li>
+  </ul>
+  <h3>常见错误</h3>
+  <ul>
+    <li>直接算 <code>p * np.log(p)</code>，p 里有 0 时得到 <code>nan</code>。</li>
+    <li>交叉熵参数顺序写反。\(H(p,q)\) 里 p 是权重，q 在对数里。</li>
+    <li>混用底数，比特和奈特混在一起比较。</li>
+    <li>困惑度先对每个 token 取 exp 再平均。正确顺序是先平均 NLL，再取 exp。</li>
+    <li>算互信息时边缘分布求错方向。行和是 \(p(x)\)，列和是 \(p(y)\)。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>交叉熵能小于熵吗？不能。\(H(p,q) = H(p) + \mathrm{KL}(p\Vert q)\)，KL 非负，所以 \(H(p,q) \ge H(p)\)，q = p 时取等号。</li>
+    <li>q 在 p 有概率的地方给了 0，交叉熵是多少？无穷大，因为出现了 \(-\log 0\)。这也是模型输出要经过 softmax，保证每个概率都严格为正的原因之一。</li>
+    <li>困惑度 20 的直观含义？平均来说，模型的不确定程度相当于在 20 个等可能的词里均匀地猜。</li>
+    <li>互信息为 0 说明什么？X 与 Y 独立。相关系数为 0 只说明没有线性关系，比互信息为 0 弱。</li>
+    <li>\(H(X\mid Y)\) 能比 \(H(X)\) 大吗？不能，平均意义上多知道信息不会增加不确定性，因为 \(H(X) - H(X\mid Y) = I(X;Y) \ge 0\)。</li>
+  </ol>
+  <h3>本课练习</h3>
+  <p>所有函数的 <code>base</code> 是对数的底，可用换底公式 \(\log_b z = \ln z/\ln b\)，base = 2 得到比特，base = e 得到奈特。</p>
+  <p><b>entropy(p, base=2)</b>：\(-\sum p\log p\)，只对 p &gt; 0 的项求和。验收会检查公平硬币 1 比特、(1, 0) 为 0、8 个等概率为 3 比特、以 e 为底时公平硬币为 \(\ln 2\)。</p>
+  <p><b>cross_entropy(p, q, base=2)</b>：\(-\sum p\log q\)，同样只对 p &gt; 0 的项求和（p = 0 的项按约定为 0）。验收会检查它等于熵加 KL，以及 q = p 时等于熵。</p>
+  <p><b>mutual_information(joint, base=2)</b>：joint 是二维数组，元素和为 1。先用行和、列和求两个边缘分布，再对 joint &gt; 0 的格子累加 \(p(x,y)\log\frac{p(x,y)}{p(x)p(y)}\)。用独立的外积表（应为 0）和对角表（应为 1 比特）检查，转置后结果应不变。</p>
+  <p><b>perplexity(token_logprobs)</b>：输入是每个 token 的自然对数概率（都 \(\le 0\)），返回 \(\exp(-\text{平均值})\)。全部是 \(-\ln V\) 时应返回 V，全部是 0 时返回 1。</p>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/p7_info.py
 实现  entropy · cross_entropy · mutual_information · perplexity
@@ -2480,8 +3037,80 @@ for e in range(N):
 
 <section id="psamp" data-title="P.8 采样方法" hidden>
   <h2>P.8 采样方法：逆变换、拒绝采样、重要性采样</h2>
-  <p class="sub">（副标题：一句话说明这一课解决什么问题）</p>
-  <!-- 正文写在这里 -->
+  <p class="sub">计算机只会产生均匀随机数，这一课教你把它变成任意分布的样本，以及用别的分布的样本估计期望。</p>
+  <h3>为什么重要</h3>
+  <p>很多量写成期望 \(\mathbb{E}_p[f(X)]\)，却积不出解析解，例如高维后验下的平均、策略在所有可能回答上的平均奖励。蒙特卡洛的办法是抽样、取平均。生成模型本身也要采样，语言模型每生成一个 token 就是一次从类别分布的采样。本教程里的 PPO、GRPO 用到重要性比率，投机解码用到拒绝采样，这一课把这两个工具的原理讲清楚。</p>
+  <h3>直觉</h3>
+  <ul>
+    <li><b>逆变换</b>：把 [0, 1] 上的均匀数当作“分位数”，问目标分布在这个分位数处的值是多少。</li>
+    <li><b>拒绝采样</b>：在目标密度曲线下面均匀地撒点。撒到曲线下方的留下，上方的扔掉，留下的点的横坐标就服从目标分布。</li>
+    <li><b>重要性采样</b>：从一个好抽的分布 q 抽样，每个样本带一个权重 p/q，抽多了的压低权重，抽少了的抬高权重。</li>
+  </ul>
+  <h3>蒙特卡洛估计的误差</h3>
+  <p>从 p 抽 n 个独立样本，用 \(\hat\mu = \frac1n\sum_i f(x_i)\) 估计 \(\mathbb{E}_p[f]\)。由 <a href="#pci" data-go="pci">P.5 课</a>，它无偏，标准差是 \(\sigma_f/\sqrt{n}\)，其中 \(\sigma_f^2 = \operatorname{Var}_p(f(X))\)。误差按 \(1/\sqrt n\) 下降，与维度无关；但要多一位有效数字，样本要多 100 倍。下面三种方法的差别，主要体现在能不能抽到样本、以及 \(\sigma_f\) 变大还是变小。</p>
+  <h3>逆变换采样</h3>
+  <p>设 F 是连续、严格递增的分布函数，\(U \sim \mathrm{Uniform}(0,1)\)，令 \(X = F^{-1}(U)\)。</p>
+  <div class="eq">\[ \begin{aligned}
+  P(X \le x) &amp;= P\big(F^{-1}(U) \le x\big) \\
+  &amp;= P\big(U \le F(x)\big) \\
+  &amp;= F(x)
+  \end{aligned} \]</div>
+  <p class="eq-note">第二步两边同时作用单调递增的 F，不等号方向不变；第三步用均匀分布的性质 \(P(U \le a) = a\)，\(0 \le a \le 1\)。所以 X 的分布函数正是 F。</p>
+  <p><b>指数分布。</b>\(F(x) = 1 - e^{-\lambda x}\)，\(x \ge 0\)。令 \(u = F(x)\) 并解出 x：</p>
+  <div class="eq">\[ u = 1 - e^{-\lambda x} \;\Rightarrow\; e^{-\lambda x} = 1 - u \;\Rightarrow\; x = -\frac{\ln(1-u)}{\lambda} \]</div>
+  <p>例子：\(\lambda = 2\)，\(u = 0.5\) 得 \(x = \ln 2/2 \approx 0.347\)，正好是 Exp(2) 的中位数；\(u = 0.9\) 得 \(x = \ln 10/2 \approx 1.151\)。</p>
+  <p>逆变换要求 \(F^{-1}\) 能写出来或容易算。正态分布的 \(F^{-1}\) 没有闭式，离散分布可以用“累积概率表 + 查找”实现同样的想法，语言模型按概率抽 token 就是这样。</p>
+  <h3>拒绝采样</h3>
+  <p>目标密度 p 难以直接抽样，但能算值。找一个能抽样的提议分布 q 和常数 M，使处处 \(p(x) \le M\,q(x)\)。每一轮：</p>
+  <ol>
+    <li>从 q 抽 x，再抽 \(u \sim \mathrm{Uniform}(0,1)\)。</li>
+    <li>若 \(u \le \dfrac{p(x)}{M\,q(x)}\) 就接受 x，否则丢弃。</li>
+  </ol>
+  <p>推导接受率和接受样本的分布：</p>
+  <div class="eq">\[ \begin{aligned}
+  P(\text{接受}) &amp;= \int q(x)\,\frac{p(x)}{M\,q(x)}\,dx = \frac{1}{M}\int p(x)\,dx = \frac{1}{M} \\
+  p(x \mid \text{接受}) &amp;= \frac{q(x)\cdot\frac{p(x)}{M q(x)}}{1/M} = p(x)
+  \end{aligned} \]</div>
+  <p class="eq-note">第一行对提议点 x 取平均，每个 x 被接受的概率是 \(p/(Mq)\)，q 被约掉。第二行用贝叶斯公式，分子是“抽到 x 并被接受”的密度，分母是总接受率。条件 \(p \le Mq\) 保证接受概率不超过 1。</p>
+  <p><b>例子：Beta(2, 2)。</b>密度 \(p(x) = 6x(1-x)\)，\(x\in[0,1]\)，在 \(x = 0.5\) 处取最大值 1.5。提议分布用均匀分布，\(q(x) = 1\)，取 \(M = 1.5\)，条件成立。\(x = 0.5\) 时接受概率是 \(1.5/1.5 = 1\)；\(x = 0.2\) 时是 \(6\times0.2\times0.8/1.5 = 0.64\)。整体接受率 \(1/M = 2/3\)，要得到 n 个样本，平均要提议 1.5n 次。</p>
+  <p>M 越大浪费越多，所以要让 Mq 尽量贴着 p。高维时很难找到贴得紧的 q，M 往往随维度指数增长，拒绝采样就不实用了。另外 p 只知道到相差一个常数也能用：若 \(\tilde p = Z p\) 且 \(\tilde p \le Mq\)，接受的样本仍服从 p，接受率变成 \(Z/M\)。</p>
+  <h3>重要性采样</h3>
+  <p>只能从 q 抽样，想估计 \(\mathbb{E}_p[f]\)。在积分里乘再除一个 q：</p>
+  <div class="eq">\[ \mathbb{E}_p[f(X)] = \int f(x)\,p(x)\,dx = \int f(x)\,\frac{p(x)}{q(x)}\,q(x)\,dx = \mathbb{E}_q\big[f(X)\,w(X)\big],\quad w = \frac{p}{q} \]</div>
+  <p class="eq-note">要求 p &gt; 0 的地方 q 也 &gt; 0，否则那部分永远抽不到。估计量 \(\frac1n\sum_i f(x_i)w(x_i)\)，\(x_i \sim q\)，是无偏的。</p>
+  <p><b>权重的方差决定成败。</b>估计是无偏的，但方差可能很大。看一个能精确算的例子：\(p = \mathcal{N}(0,1)\)，\(q = \mathcal{N}(0,\sigma^2)\)。直接积分可得</p>
+  <div class="eq">\[ \mathbb{E}_q[w^2] = \int \frac{p(x)^2}{q(x)}\,dx = \frac{\sigma^2}{\sqrt{2\sigma^2 - 1}}\quad(\sigma^2 &gt; \tfrac12) \]</div>
+  <p class="eq-note">\(\mathbb{E}_q[w] = 1\)，所以 \(\operatorname{Var}_q(w) = \mathbb{E}_q[w^2] - 1\)。</p>
+  <p>\(\sigma = 1\) 时 q = p，方差为 0。\(\sigma = 2\) 时 \(\mathbb{E}[w^2] = 4/\sqrt7 \approx 1.51\)，方差约 0.51，还能接受。\(\sigma^2 \le 1/2\) 时积分发散，方差无穷大。经验是 <b>q 宁可比 p 宽，不能比 p 窄</b>：q 的尾巴太薄，偶尔抽到尾部的样本权重会极大，一个样本就能主宰整个平均。若希望专门估计某个 f，理想的 q 正比于 \(|f|\,p\)，也就是在 f 和 p 都大的地方多抽。</p>
+  <p><b>自归一化版本。</b>很多时候只知道 \(\tilde p = Z p\)，Z 未知（例如贝叶斯后验的归一化常数）。用 \(\tilde w = \tilde p/q\)，并用权重之和归一化：</p>
+  <div class="eq">\[ \hat\mu_{\text{SN}} = \frac{\sum_i f(x_i)\,\tilde w(x_i)}{\sum_i \tilde w(x_i)} \]</div>
+  <p class="eq-note">分子分母同时带着 Z，相除后 Z 被约掉。分母的期望是 nZ，所以 n 增大时估计收敛到正确值；但有限 n 下它是比值的期望，一般有偏。</p>
+  <h3>与本教程的联系</h3>
+  <ul>
+    <li><b>PPO 与 GRPO（4.5、<a href="#grpo" data-go="grpo">4.6 课</a>）。</b>样本由旧策略 \(\pi_{\text{old}}\) 生成，却要优化新策略 \(\pi_\theta\) 下的期望，于是给每个样本乘重要性比率 \(r = \pi_\theta(a\mid s)/\pi_{\text{old}}(a\mid s)\)。裁剪 r 的作用之一，就是不让权重过大导致方差爆炸。</li>
+    <li><b>投机解码（<a href="#spec" data-go="spec">5.4 课</a>）。</b>草稿模型 q 先猜一个 token x，目标模型 p 以 \(\min\big(1,\ p(x)/q(x)\big)\) 的概率接受它；被拒绝时从归一化后的 \(\max(0,\ p - q)\) 重新抽。这是拒绝采样的一个变体，保证最终输出的分布正好是 p。</li>
+    <li><b>语言模型采样（5.1 到 <a href="#topp" data-go="topp">5.3 课</a>）。</b>温度、top-k、top-p 先改造类别分布，最后从这个类别分布抽一个 token。原理上，可以用累积概率表做离散的逆变换采样。</li>
+  </ul>
+  <h3>常见错误</h3>
+  <ul>
+    <li>逆变换写成 \(-\ln(u)/\lambda\) 本身没错（\(1-U\) 也是均匀分布），但 <code>rng.random()</code> 的取值范围是 [0, 1)，可能取到 0，\(\ln 0\) 是负无穷。用 \(1-u\) 就落在 (0, 1]，更安全。</li>
+    <li>拒绝采样每轮只抽一个点，n 大时很慢。应该成批提议、成批判断。</li>
+    <li>拒绝采样的 M 取小了，\(p \le Mq\) 在某些地方不成立，样本分布就错了，而且代码不会报错。</li>
+    <li>重要性权重算成 q/p。</li>
+    <li>p 只知道到一个常数，却用了普通重要性采样，结果会差一个常数倍。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>拒绝采样里 M 的最好取法？取 \(\max_x p(x)/q(x)\)，这是满足条件的最小 M，接受率最高。</li>
+    <li>拒绝采样和重要性采样都不能直接从 p 抽，区别在哪？拒绝采样产生真正服从 p 的样本，代价是丢掉一部分；重要性采样不丢样本，得到的是带权重的样本，只能用来估计期望。</li>
+    <li>重要性采样的方差能比直接从 p 采样还小吗？能。q 选得好（例如接近 \(|f|p\)）时方差可以更小，这是它在估计稀有事件概率时常用的原因。</li>
+    <li>为什么 PPO 要求新旧策略不能差太远？差得越远，比率 r 的方差越大，单个样本可能有极大权重，梯度估计就不稳定。</li>
+    <li>蒙特卡洛误差为什么按 \(1/\sqrt n\) 下降？估计量是 n 个独立同分布量的均值，由 <a href="#pci" data-go="pci">P.5 课</a>，均值的标准差是 \(\sigma/\sqrt n\)。</li>
+  </ol>
+  <h3>本课练习</h3>
+  <p><b>sample_exponential(lam, n, rng)</b>：用逆变换法从 Exp(λ) 抽 n 个样本，返回长度为 n 的数组。均匀数只能来自 <code>rng.random(n)</code>，不能调用 <code>rng.exponential</code>。注意上面关于 \(\ln 0\) 的提醒。验收会检查均值约为 \(1/\lambda\)、方差约为 \(1/\lambda^2\)，以及 \(P(X &gt; 1) \approx e^{-\lambda}\)。</p>
+  <p><b>rejection_sample(target_pdf, proposal_sample, proposal_pdf, M, n, rng)</b>：返回 (样本, 接受率)。<code>proposal_sample(m, rng)</code> 一次返回 m 个提议点，<code>target_pdf</code> 与 <code>proposal_pdf</code> 接受数组、逐元素返回密度。循环里成批提议，再对每个点抽一个均匀数 u，按 \(u \le p(x)/(Mq(x))\) 判断，把接受的点攒起来，直到够 n 个。接受率等于累计接受数除以累计提议数。最后截取前 n 个，使返回的样本<b>恰好</b>是 n 个。用 Beta(2, 2)、均匀提议、M = 1.5 检查，样本均值应约为 0.5、方差约为 0.05，接受率约为 2/3。</p>
+  <p><b>importance_estimate(f, x, p_pdf, q_pdf, self_normalized=False)</b>：x 已经是从 q 抽好的样本。先算权重 \(w = p(x)/q(x)\)。普通版本返回 \(f(x)\cdot w\) 的平均值；自归一化版本返回 \(\sum f w/\sum w\)。验收会把 p 乘以 5，此时普通版本的结果也应乘以 5，自归一化版本应不受影响。</p>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/p8_sampling.py
 实现  sample_exponential · rejection_sample · importance_estimate
