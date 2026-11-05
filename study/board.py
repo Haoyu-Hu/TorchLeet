@@ -51,6 +51,16 @@ TASKS = {
     "4.5": ("4 Alignment", "PPO-RLHF", "ppo-rlhf", "s4_5_ppo.py", ["generate_sequences", "compute_gae", "ppo_step"]),
     "4.6": ("4 Alignment", "GRPO", "grpo", "s4_6_grpo.py",
             ["generate_group_completions", "compute_group_advantages", "grpo_loss"]),
+    "5.1": ("5 Decoding & Inference", "温度采样", "temperature-sampling", "s5_1_temperature.py", ["temperature_sample"]),
+    "5.2": ("5 Decoding & Inference", "Top-k 采样", "top-k-sampling", "s5_2_top_k.py", ["top_k_sample"]),
+    "5.3": ("5 Decoding & Inference", "Top-p 采样", "top-p-sampling", "s5_3_top_p.py", ["top_p_sample"]),
+    "5.4": ("5 Decoding & Inference", "投机解码", "speculative-decoding", "s5_4_speculative.py",
+            ["DraftModel", "TargetModel", "standard_decode", "speculative_decode"]),
+    "5.5": ("5 Decoding & Inference", "连续批处理", "continuous-batching", "s5_5_continuous_batching.py",
+            ["Request", "ContinuousBatchScheduler"]),
+    "5.6": ("5 Decoding & Inference", "推理引擎", "inference-engine", "s5_6_inference_engine.py",
+            ["SimpleTokenizer", "KVCache", "MultiHeadAttention", "FeedForward", "TransformerBlock",
+             "MiniTransformer", "top_p_sample", "InferenceEngine"]),
 }
 APPLIED = {
     "A.1": ("评估指标", "a1-metrics", "a1_metrics.py"),
@@ -150,6 +160,11 @@ def tl(a):
         sys.exit(__doc__)
     if not b["graded"]:
         sys.exit("这题没有自动判题。请对照 notebook 里的测试单元自查，再看 SOLN 解答。")
+    sys.path.insert(0, str(ROOT))
+    import applied_checks as _A
+    if pid in _A.CHECKS:                       # 本教程自建的题：直接用对应编号的提交桩
+        tid = next(t for t, v in list(TASKS.items()) + list(APPLIED.items()) if (v[2] if len(v) == 5 else v[1]) == pid)
+        return main_check(tid)
     if not f.exists():
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(b["starter"])
@@ -203,6 +218,11 @@ def applied(cmd, tid, a, spec=None):
     d = passed(); d[pid] = {"partial": False}
     PROGRESS.write_text(json.dumps(d))
     print("\n  🎉 全部通过！\n")
+
+
+def main_check(tid):
+    sys.argv = [sys.argv[0], "check", tid]
+    return main()
 
 
 def main():

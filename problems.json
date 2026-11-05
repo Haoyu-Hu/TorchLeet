@@ -849,8 +849,10 @@
    "frequency": "emerging",
    "company_confidence": {},
    "llm_path_order": null,
-   "graded": false,
-   "entries": [],
+   "graded": true,
+   "entries": [
+    "RMSNorm"
+   ],
    "hints": null
   },
   {

@@ -121,9 +121,9 @@ Build an LLM from scratch, one question at a time. Recommended order:
 ### 4. Alignment & Fine-Tuning
 | Problem | Companies | Links |
 |---------|-----------|-------|
-| Implement KL Divergence Loss | | |
+| Implement KL Divergence Loss | | [Q](study/submissions/s4_1_kl.py)（study 自建判题：`python study/board.py check 4.1`） |
 | Implement LoRA | Meta, Google, Anthropic, OpenAI | [Q](v3/alignment-training/lora/lora.ipynb) / [S](v3/alignment-training/lora/lora_SOLN.ipynb) |
-| Apply SFT on SmolLM | | |
+| Apply SFT on SmolLM | | [Q](study/submissions/s4_3_sft.py)（study 自建判题：`python study/board.py check 4.3`） |
 | Implement DPO Loss | Anthropic, OpenAI, DeepMind, Meta | [Q](v3/alignment-training/dpo/dpo.ipynb) / [S](v3/alignment-training/dpo/dpo_SOLN.ipynb) |
 | Implement PPO for RLHF | Anthropic, OpenAI, DeepMind, Meta | [Q](v3/alignment-training/ppo-rlhf/ppo-rlhf.ipynb) / [S](v3/alignment-training/ppo-rlhf/ppo-rlhf_SOLN.ipynb) |
 | Implement GRPO (DeepSeek-R1) | DeepMind, Anthropic, OpenAI | [Q](v3/alignment-training/grpo/grpo.ipynb) / [S](v3/alignment-training/grpo/grpo_SOLN.ipynb) |
@@ -169,7 +169,7 @@ Core PyTorch and classical ML fundamentals.
 | Implement K-Means Clustering | Easy | [Q](v3/classical-ml/kmeans/kmeans.ipynb) / [S](v3/classical-ml/kmeans/kmeans_SOLN.ipynb) |
 | Implement KNN in PyTorch | Easy | [Q](v3/classical-ml/knn/knn.ipynb) / [S](v3/classical-ml/knn/knn_SOLN.ipynb) |
 | Implement Logistic Regression | Easy | [Q](v3/classical-ml/logistic-regression/logistic-regression.ipynb) / [S](v3/classical-ml/logistic-regression/logistic-regression_SOLN.ipynb) |
-| KL Divergence Loss | Easy | |
+| KL Divergence Loss | Easy | [Q](study/submissions/s4_1_kl.py)（study 自建判题：`python study/board.py check 4.1`） |
 | RMS Norm | Easy | [Q](llm/RMS-Norm/rms-norm.ipynb) / [S](llm/RMS-Norm/rms-norm_SOLN.ipynb) |
 | Byte Pair Encoding | Easy | [Q](llm/Byte-Pair-Encoder/BPE-q3.ipynb) / [S](llm/Byte-Pair-Encoder/BPE-q3-SOLN.ipynb) |
 | CNN Parameter Initialization | Medium | [Q](torch/medium/cnn-param-init/CNN_ParamInit.ipynb) / [S](torch/medium/cnn-param-init/CNN_ParamInit_SOLN.ipynb) |
@@ -212,7 +212,7 @@ Company-tagged questions from real ML/AI interviews. Sorted by topic.
 | Implement PPO for RLHF | Hard | Anthropic, OpenAI, DeepMind, Meta | [Q](v3/alignment-training/ppo-rlhf/ppo-rlhf.ipynb) / [S](v3/alignment-training/ppo-rlhf/ppo-rlhf_SOLN.ipynb) |
 | Gradient Checkpointing | Hard | Meta, Google, NVIDIA, Tesla | [Q](v3/alignment-training/gradient-checkpointing/gradient-checkpointing.ipynb) / [S](v3/alignment-training/gradient-checkpointing/gradient-checkpointing_SOLN.ipynb) |
 | Implement GRPO (DeepSeek-R1) | Expert | DeepMind, Anthropic, OpenAI | [Q](v3/alignment-training/grpo/grpo.ipynb) / [S](v3/alignment-training/grpo/grpo_SOLN.ipynb) |
-| Apply SFT on SmolLM | Hard | | |
+| Apply SFT on SmolLM | Hard | | [Q](study/submissions/s4_3_sft.py)（study 自建判题：`python study/board.py check 4.3`） |
 
 ### LLM Inference & Systems
 | Problem | Difficulty | Companies | Links |

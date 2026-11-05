@@ -97,6 +97,12 @@ python study/site/build_site.py --session-id <会话ID>
 python study/build_bank.py
 ```
 
+## 公式渲染与题库
+
+- 讲义里的公式用 **MathJax 3.2.2**（`tex-svg-full`，从 cdnjs 加载）渲染：行内 `\( … \)`，独立公式 `<div class="eq">\[ … \]</div>`。不要用 `$…$`，也不要把公式放进 `<pre>`/`<code>`（MathJax 会跳过）。页面只在切到某一课时排版那一课；过宽的行内公式在窄屏上会自动改成单独一行。
+- 云会话本身访问不了 cdnjs。本地测试可以用 `npm pack mathjax@3.2.2` 拿到同一个文件，再把页面里的脚本地址换成本地路径。
+- `python study/build_bank.py` 生成题库：仓库原有的 68 题，加上本教程自建的 12 题（`study/applied_checks.py` 里登记的题，在页面“TorchLeet 题库 → 本教程自建”）。凡是 `study/board.py` 登记过的题，题库里的起始代码直接用 `study/submissions/` 里的提交桩，保证网页、看板、本机三处一致。
+
 ## 排错
 
 | 现象 | 可能原因与处理 |

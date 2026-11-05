@@ -18,7 +18,7 @@ python study/board.py hint 1.1
 | 2 Core Transformer | MHA · GQA · KV Cache · Sliding Window | ✅ 看板就绪（提交桩 `s2_*.py`） |
 | 3 Full Model | 架构总览 · RoPE+GQA 注意力块 · 组装 SmolLM（`s3_*.py`） | ✅ 看板就绪 |
 | 4 Alignment | KL · LoRA · SFT · DPO · PPO-RLHF · GRPO（`s4_*.py`；4.1、4.3 为本仓库自建判题） | ✅ 看板就绪 |
-| 5 Decoding & Inference | 采样 · 投机解码 · 连续批处理 · 推理引擎 | 待开讲 |
+| 5 Decoding & Inference | 温度 · Top-k · Top-p · 投机解码 · 连续批处理 · 推理引擎（`s5_*.py`） | ✅ 看板就绪 |
 | 6 Systems | MoE | 待开讲 |
 | Basics | 线性回归 → CNN/RNN/LSTM → 经典 ML | 待开讲 |
 

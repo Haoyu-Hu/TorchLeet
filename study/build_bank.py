@@ -4,7 +4,7 @@
 只读取"题目"notebook（不含 _SOLN 答案），也不需要安装 PyTorch。
     python study/build_bank.py
 """
-import ast, json, re
+import ast, json, re, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -99,13 +99,62 @@ def starter(pid, title, entries, code):
     return text.rstrip() + "\n"
 
 
+def board_tasks():
+    """study/board.py 里登记的题目：pid -> (编号, 标题, 提交桩文件)。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("board", ROOT / "study" / "board.py")
+    b = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(b)
+    out = {}
+    for tid, (_, title, pid, f, _names) in b.TASKS.items():
+        out[pid] = (tid, title, f)
+    for tid, (title, pid, f) in b.APPLIED.items():
+        out[pid] = (tid, title, f)
+    return out
+
+
+def custom_problems(tasks):
+    """本教程自建的判题（study/applied_checks.py），也放进题库。"""
+    import importlib.util, inspect
+    sys.path.insert(0, str(ROOT / "study"))
+    spec = importlib.util.spec_from_file_location("applied_checks", ROOT / "study" / "applied_checks.py")
+    A = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(A)
+    out = []
+    for pid, sp in A.CHECKS.items():
+        if pid not in tasks:
+            continue                                      # 自检题等不进题库
+        tid, title, f = tasks[pid]
+        stub = (ROOT / "study" / "submissions" / f).read_text()
+        doc = (ast.get_docstring(ast.parse(stub)) or "").strip()
+        is_torch = pid.startswith("s")
+        out.append({
+            "id": pid, "title": f"{tid} {title}", "description": doc.splitlines()[0] if doc else title,
+            "difficulty": "medium" if is_torch else "easy", "tracks": ["study"], "category": "study",
+            "companies": [], "order": None,
+            "question": f"study/submissions/{f}", "colab": "",
+            "graded": True, "entries": sp["entries"], "device": "cpu", "extras": [],
+            "hints": sp["hints"],
+            "checks": [{"name": fn.__name__.replace("check_", "").replace("_", " "),
+                        "doc": (inspect.getdoc(fn) or "").strip()} for fn in sp["checks"]],
+            "statement": doc + f"\n\n讲义见在线教程的 {tid}。依赖：" + ("PyTorch。" if is_torch else "numpy / pandas，不需要 PyTorch。"),
+            "starter": stub,
+        })
+    return out
+
+
 def main():
     P = json.loads((ROOT / "problems.json").read_text())["problems"]
-    bank = []
+    tasks = board_tasks()
+    bank, from_stub = [], []
     for p in P:
         spec = read_spec(p["id"])
         md, code = split_cells(ROOT / p["question"])
         entries = (spec or {}).get("entries") or p.get("entries") or []
+        st = starter(p["id"], p["title"], entries, code)
+        if p["id"] in tasks:                              # 教程里有干净的提交桩，就用它
+            st = (ROOT / "study" / "submissions" / tasks[p["id"]][2]).read_text()
+            from_stub.append(p["id"])
         bank.append({
             "id": p["id"], "title": p["title"], "description": p["description"],
             "difficulty": p["difficulty"], "tracks": p["tracks"], "category": p.get("category", ""),
@@ -116,11 +165,13 @@ def main():
             "hints": (spec or {}).get("hints") or p.get("hints", []),
             "checks": (spec or {}).get("checks", []),
             "statement": "\n\n".join(md),
-            "starter": starter(p["id"], p["title"], entries, code),
+            "starter": st,
         })
+    bank += custom_problems(tasks)
     (ROOT / "study" / "problem_bank.json").write_text(json.dumps(bank, ensure_ascii=False, indent=1))
     g = sum(b["graded"] for b in bank)
     print(f"{len(bank)} 题，其中 {g} 题有自动判题 → study/problem_bank.json")
+    print(f"  使用教程提交桩作为起始代码：{len(from_stub)} 题")
 
 
 if __name__ == "__main__":
