@@ -21,7 +21,7 @@ python study/board.py hint 1.1
 | 5 Decoding & Inference | 温度 · Top-k · Top-p · 投机解码 · 连续批处理 · 推理引擎（`s5_*.py`） | ✅ 看板就绪 |
 | 6 MoE | MoE 层 · 路由、负载均衡与专家容量（`s6_*.py`；6.2 为自建判题） | ✅ 看板就绪 |
 | 概率与统计 | 贝叶斯 · 常见分布 · 期望与协方差 · MLE/MAP · 置信区间 · 假设检验 · 信息论 · 采样（`p*_*.py`，只需 numpy） | ✅ 看板就绪 |
-| Basics | 线性回归 → CNN/RNN/LSTM → 经典 ML | 待开讲 |
+| Basics | 训练循环 · Dataset/DataLoader · 流式与分布式数据加载 · 激活与损失 · 初始化 · CNN · RNN · LSTM · 自编码器 · 训练工程 · 经典 ML（`b*_*.py`，编号 B.1~B.11；B.2s、B.3、B.3d 为自建判题，对应 `v3/data-loading` 的三道未入库题） | ✅ 看板就绪 |
 
 ## TorchLeet 全题库
 
