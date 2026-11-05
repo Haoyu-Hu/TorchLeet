@@ -3120,9 +3120,127 @@ for e in range(N):
 <section id="b1" data-title="B.1 训练循环" hidden>
   <h2>B.1 训练循环与线性回归</h2>
   <p class="sub">从最小的模型讲清 PyTorch 训练的五步：前向、损失、清梯度、反向、更新。</p>
-  <p>（待写）</p>
+  <h3>直觉</h3>
+  <p>训练一个模型，就像蒙着眼睛下山。你看不到山谷在哪里，只能用脚感受脚下的坡度（梯度），然后朝下坡方向迈一小步（学习率）。走一步、再摸一次坡、再走一步，反复下去。PyTorch 把这件事拆成五个动作，每一轮都按同样的顺序做：</p>
+  <ol>
+    <li><b>前向</b>：把一批输入喂给模型，得到预测。</li>
+    <li><b>算损失</b>：用一个数衡量预测离目标有多远。</li>
+    <li><b>清梯度</b>：把上一轮留下的梯度清掉。</li>
+    <li><b>反向</b>：从损失出发，用链式法则算出每个参数的梯度。</li>
+    <li><b>更新</b>：优化器按梯度把每个参数挪一小步。</li>
+  </ol>
+  <p>线性回归是最小的例子。模型只有两个数，斜率 w 和截距 b，整个流程却和训练一个大模型完全一样。</p>
+  <h3>nn.Module 与 parameters()</h3>
+  <p>PyTorch 里的模型都继承 <code>nn.Module</code>。它做两件事：在 <code>__init__</code> 里登记子层和参数；在 <code>forward</code> 里写计算。调用 <code>model(x)</code> 时会自动走到 <code>forward(x)</code>。</p>
+  <ul>
+    <li><b>登记靠属性赋值。</b>在 <code>__init__</code> 里写 <code>self.xxx = nn.Linear(...)</code>，Module 会记下这个子层，它的权重就会出现在 <code>model.parameters()</code> 里。只写成局部变量的层不会被登记，优化器看不到它。</li>
+    <li><b>先调用 <code>super().__init__()</code>。</b>登记表是在父类的初始化里建立的。漏了这一句，给 <code>self</code> 赋一个子层时会报 <code>AttributeError: cannot assign module before Module.__init__() call</code>（本机实测）。</li>
+    <li><code>model.named_parameters()</code> 会给出名字，例如 <code>linear.weight</code>、<code>linear.bias</code>，调试时很方便。</li>
+  </ul>
+  <p><code>nn.Linear(in_features, out_features)</code> 计算 \(\mathbf{y} = \mathbf{x}A^\top + \mathbf{b}\)。权重 A 的形状是 <code>(out_features, in_features)</code>，偏置形状是 <code>(out_features,)</code>，两者默认都从 \(\mathcal{U}(-\sqrt{k}, \sqrt{k})\) 初始化，\(k = 1/\text{in\_features}\)（源码文档字符串）。输入的最后一维必须等于 <code>in_features</code>，前面可以有任意多维。</p>
+<pre><code>x       (B, 1)        一批 B 个样本，每个 1 个特征
+weight  (1, 1)        out_features × in_features
+bias    (1,)
+y_hat   (B, 1)        x @ weight.T + bias</code></pre>
+  <h3>损失：均方误差</h3>
+  <p>对 N 个样本，预测 \(\hat y_i = w x_i + b\)，均方误差是</p>
+  <div class="eq">\[ L(w, b) = \frac{1}{N}\sum_{i=1}^{N} \big(\hat y_i - y_i\big)^2 \]</div>
+  <p class="eq-note">其中 \(\hat y_i - y_i\) 叫残差。平方让正负误差都算作代价，并且让大误差付出更多。<code>nn.MSELoss()</code> 默认 <code>reduction="mean"</code>，就是这个公式。</p>
+  <h3>梯度的推导</h3>
+  <p>对 w 求偏导，用链式法则，逐步来：</p>
+  <div class="eq">\[ \begin{aligned}
+  \frac{\partial L}{\partial w} &amp;= \frac{1}{N}\sum_i \frac{\partial}{\partial w}\big(\hat y_i - y_i\big)^2 \\
+  &amp;= \frac{1}{N}\sum_i 2\big(\hat y_i - y_i\big)\cdot\frac{\partial \hat y_i}{\partial w} \\
+  &amp;= \frac{2}{N}\sum_i \big(\hat y_i - y_i\big)\,x_i
+  \end{aligned} \]</div>
+  <p class="eq-note">第一步把求导移进求和号（求导是线性的）；第二步对平方用链式法则，外层导数是 \(2(\hat y_i - y_i)\)；第三步代入 \(\partial \hat y_i/\partial w = x_i\)。同理 \(\partial \hat y_i/\partial b = 1\)，所以 \(\dfrac{\partial L}{\partial b} = \dfrac{2}{N}\sum_i (\hat y_i - y_i)\)。</p>
+  <p>读法：残差越大，梯度越大；某个样本的 \(x_i\) 越大，它对 w 的梯度贡献越大。<code>loss.backward()</code> 做的正是这件事，只是由 autograd 自动完成。</p>
+  <h3>小例子：手算一步</h3>
+  <p>两个数据点 \((1, 3)\)、\((2, 5)\)，它们正好落在 \(y = 2x + 1\) 上。从 \(w = 0,\ b = 0\) 出发，学习率 \(\eta = 0.1\)。</p>
+  <ol>
+    <li>前向：预测都是 0，残差是 \(-3\) 和 \(-5\)。</li>
+    <li>损失：\(L = (9 + 25)/2 = 17\)。</li>
+    <li>梯度：\(\partial L/\partial w = \frac{2}{2}\big((-3)(1) + (-5)(2)\big) = -13\)，\(\partial L/\partial b = \frac{2}{2}(-3 - 5) = -8\)。</li>
+    <li>更新：\(w \leftarrow 0 - 0.1\times(-13) = 1.3\)，\(b \leftarrow 0 - 0.1\times(-8) = 0.8\)。</li>
+    <li>再前向：预测 2.1 和 3.4，残差 \(-0.9\)、\(-1.6\)，损失降到 \((0.81 + 2.56)/2 = 1.685\)。</li>
+  </ol>
+  <p>这组数用 <code>nn.Linear</code>、<code>nn.MSELoss</code> 和 <code>optim.SGD(lr=0.1)</code> 在本机跑过，梯度和更新后的值与手算一致。</p>
+  <h3>PyTorch 里的五步</h3>
+<pre><code>for epoch in range(epochs):
+    pred = model(X)              # 1 前向      (B, 1)
+    loss = criterion(pred, y)    # 2 损失      标量
+    optimizer.zero_grad()        # 3 清梯度
+    loss.backward()              # 4 反向      每个参数的 .grad 被填好
+    optimizer.step()             # 5 更新      参数按 .grad 改变</code></pre>
+  <p>第 3 步只要放在 <code>backward()</code> 之前就行，放在循环开头也很常见。<code>criterion(pred, y)</code> 的两个张量形状要一致，都是 <code>(B, 1)</code>。</p>
+  <h3>为什么要 zero_grad：梯度会累加</h3>
+  <p><code>backward()</code> 不会覆盖 <code>.grad</code>，它把新算出的梯度<b>加到</b>已有的值上。本机实验：\(w = 1\)，对 \(3w\) 调用一次 <code>backward()</code>，<code>w.grad</code> 是 3；不清零再调用一次，变成 6。如果每轮都忘了清，第 t 轮用的是前 t 轮梯度之和，步子越走越大，训练很快就乱了。</p>
+  <p>累加这个设计也有用处。显存放不下大批量时，可以把一大批拆成几小批，各自 <code>backward()</code>，攒够了再 <code>step()</code> 一次、清零一次，这叫梯度累积。若每小批的损失是均值，记得把损失除以小批数，结果才与一次大批量相同。</p>
+  <p class="note">本机 torch 里 <code>Optimizer.zero_grad</code> 的签名是 <code>zero_grad(set_to_none=True)</code>：默认把 <code>.grad</code> 设成 <code>None</code>，而不是填 0。所以清零后马上读 <code>p.grad</code> 会得到 <code>None</code>，这是正常的。</p>
+  <h3>学习率：太大就发散</h3>
+  <p>看一个一维的例子。只有一个数据点 \(x = 2,\ y = 4\)，模型 \(\hat y = wx\)，损失 \(L(w) = (2w - 4)^2\)，最优解 \(w^* = 2\)。</p>
+  <div class="eq">\[ \begin{aligned}
+  L'(w) &amp;= 2(2w - 4)\cdot 2 = 8(w - 2) \\
+  w_{t+1} &amp;= w_t - \eta\cdot 8(w_t - 2) \\
+  w_{t+1} - 2 &amp;= (1 - 8\eta)\,(w_t - 2)
+  \end{aligned} \]</div>
+  <p class="eq-note">第一步求导；第二步写出梯度下降；第三步两边减去 2，看离最优解的误差 \(e_t = w_t - 2\)。每一步误差乘以 \(1 - 8\eta\)。</p>
+  <p>所以只有 \(|1 - 8\eta| &lt; 1\)，即 \(0 &lt; \eta &lt; 0.25\) 时才收敛。从 \(w_0 = 0\) 出发跑 4 步（本机用 <code>optim.SGD</code> 实测）：</p>
+  <div class="scroll"><table>
+    <tr><th>\(\eta\)</th><th>\(1 - 8\eta\)</th><th>\(w_1, w_2, w_3, w_4\)</th><th>表现</th></tr>
+    <tr><td>0.1</td><td>0.2</td><td>1.6，1.92，1.984，1.9968</td><td>单调逼近 2</td></tr>
+    <tr><td>0.2</td><td>−0.6</td><td>3.2，1.28，2.432，1.7408</td><td>来回摆动，但在收敛</td></tr>
+    <tr><td>0.3</td><td>−1.4</td><td>4.8，−1.92，7.488，−5.6832</td><td>越摆越远，发散</td></tr>
+  </table></div>
+  <p>8 这个数是 \(L''(w)\)，即曲率。一般地，曲率越大，能用的学习率越小。多维时由最陡的那个方向决定上限。训练中损失突然变成 <code>nan</code> 或 <code>inf</code>，首先怀疑学习率太大。</p>
+  <h3>model.train()、model.eval() 与 torch.no_grad()</h3>
+  <p>这三个经常被混淆，它们管的是两件不同的事。</p>
+  <div class="scroll"><table>
+    <tr><th></th><th>作用</th><th>影响谁</th></tr>
+    <tr><td><code>model.train()</code> / <code>model.eval()</code></td><td>设置 <code>self.training</code> 标志，并递归设置所有子模块</td><td>只影响行为随模式变化的层，例如 Dropout、BatchNorm</td></tr>
+    <tr><td><code>with torch.no_grad():</code></td><td>在这个块里不记录计算图</td><td>所有运算；结果的 <code>requires_grad</code> 为 False，省显存、更快</td></tr>
+  </table></div>
+  <p>本机实验：<code>nn.Dropout(0.5)</code> 在 eval 模式下原样输出全 1 的输入；在 train 模式下一部分位置变 0，其余放大成 2。<code>eval()</code> 并不关闭梯度，<code>no_grad()</code> 也不切换 Dropout。验证和推理时两个都要用：先 <code>model.eval()</code>，再在 <code>torch.no_grad()</code> 里前向。回到训练前记得 <code>model.train()</code>。新建的模型默认处于训练模式。</p>
+  <h3>优化器：SGD、动量与 Adam</h3>
+  <p><b>普通 SGD</b>：\(\theta_t = \theta_{t-1} - \gamma\, g_t\)，其中 \(g_t\) 是当前梯度，\(\gamma\) 是学习率。</p>
+  <p><b>动量</b>像一个滚下山的球，会保留之前的速度。PyTorch 源码 <code>torch/optim/sgd.py</code> 的写法（不开 nesterov 时）：</p>
+  <div class="eq">\[ \begin{aligned}
+  \mathbf{b}_t &amp;= \mu\,\mathbf{b}_{t-1} + (1 - \tau)\,g_t \qquad (t &gt; 1;\ \ \mathbf{b}_1 = g_1) \\
+  \theta_t &amp;= \theta_{t-1} - \gamma\,\mathbf{b}_t
+  \end{aligned} \]</div>
+  <p class="eq-note">其中 \(\mu\) 是 <code>momentum</code>，\(\tau\) 是 <code>dampening</code>，两者默认都是 0。源码注释特别说明：PyTorch 把学习率乘在缓冲区外面，而 Sutskever 等人和一些其他框架写成 \(v_{t+1} = \mu v_t + \text{lr}\cdot g_{t+1}\)、\(p_{t+1} = p_t - v_{t+1}\)；并且缓冲区第一步直接取梯度，不是从 0 开始。</p>
+  <p>例子：\(\mu = 0.9\)，梯度一直是 1，学习率 1。缓冲区依次是 1、1.9、2.71（本机实测），会趋向 \(1/(1-\mu) = 10\)。所以在方向一致的地方，动量把步长放大到约 10 倍；在来回振荡的方向上，正负梯度相互抵消。</p>
+  <p><b>Adam</b> 给每个参数维护两个滑动平均：梯度的一阶矩 m 和梯度平方的二阶矩 v，再用 v 的平方根给每个坐标单独缩放步长。与论文 Algorithm 1 和 <code>torch/optim/adam.py</code> 的文档一致：</p>
+  <div class="eq">\[ \begin{aligned}
+  m_t &amp;= \beta_1 m_{t-1} + (1 - \beta_1)\,g_t, \qquad v_t = \beta_2 v_{t-1} + (1 - \beta_2)\,g_t^2 \\
+  \hat m_t &amp;= \frac{m_t}{1 - \beta_1^t}, \qquad \hat v_t = \frac{v_t}{1 - \beta_2^t} \\
+  \theta_t &amp;= \theta_{t-1} - \gamma\,\frac{\hat m_t}{\sqrt{\hat v_t} + \epsilon}
+  \end{aligned} \]</div>
+  <p class="eq-note">其中 \(m_0 = v_0 = 0\)，\(g_t^2\) 是逐元素平方。论文给的默认值 \(\gamma = 0.001\)、\(\beta_1 = 0.9\)、\(\beta_2 = 0.999\)、\(\epsilon = 10^{-8}\)，也是 PyTorch 的默认值。</p>
+  <p><b>偏差修正在做什么。</b>m 和 v 从 0 起步，前几步会偏小。看第一步：\(m_1 = (1-\beta_1)g_1\)，除以 \(1 - \beta_1\) 正好还原成 \(g_1\)；同理 \(\hat v_1 = g_1^2\)。于是第一步的更新量是 \(\gamma\, g_1/(|g_1| + \epsilon) \approx \gamma\cdot\operatorname{sign}(g_1)\)。本机实测：梯度为 −13 或 −0.01 时，第一步都让参数移动约 0.001。不做修正的话，\(m_1/\sqrt{v_1} = 0.1 g_1/(\sqrt{0.001}\,|g_1|) \approx 3.16\operatorname{sign}(g_1)\)，第一步会大三倍多，论文也指出缺少修正会让初始步长大得多。</p>
+  <p><b>AdamW。</b>在 Adam 里加 <code>weight_decay</code>，源码是把 \(\lambda\theta\) 加进梯度，它会跟着梯度一起被 \(\sqrt{\hat v}\) 缩放。Loshchilov 与 Hutter 指出，对 SGD 来说 L2 正则和权重衰减可以通过重新参数化变得等价，对 Adam 这类自适应方法则不等价。AdamW 把衰减从梯度里拿出来，直接 \(\theta \leftarrow \theta - \gamma\lambda\theta\)，再做 Adam 那一步（<code>torch/optim/adamw.py</code> 的文档；本机版本默认 <code>weight_decay=1e-2</code>）。</p>
+  <h3>常见错误</h3>
+  <ul>
+    <li>忘了 <code>super().__init__()</code>，或者把层存成局部变量。后者不报错，但 <code>parameters()</code> 是空的，模型永远不学。</li>
+    <li>忘了 <code>zero_grad()</code>，梯度一轮轮累加，损失震荡或发散。</li>
+    <li>把 <code>step()</code> 放在 <code>backward()</code> 之前，用的是上一轮的梯度。</li>
+    <li>预测是 <code>(B, 1)</code>、目标是 <code>(B,)</code>。<code>MSELoss</code> 会广播成 <code>(B, B)</code>，结果是错的，PyTorch 只给一个 UserWarning（本机实测）。</li>
+    <li>输入是 float64（例如直接从 numpy 来），权重是 float32，前向报 <code>mat1 and mat2 must have the same dtype</code>。</li>
+    <li>评估时没开 <code>torch.no_grad()</code>，白白建图、占显存；或者只开了 <code>no_grad()</code> 没调 <code>eval()</code>，Dropout 还在随机丢弃。</li>
+    <li>用 <code>loss</code> 张量本身累加做日志，计算图一直被引用，显存越来越大。记录时用 <code>loss.item()</code>。</li>
+  </ul>
+  <h3>要想清楚 / 面试常追问</h3>
+  <ol class="q">
+    <li>为什么 <code>backward()</code> 默认累加而不是覆盖？一个参数可能出现在计算图的多条路径上，链式法则要求把各路径的梯度相加，累加是自然的实现；它也让梯度累积这种技巧不需要额外代码。</li>
+    <li>上面的一维例子里，学习率上限为什么是 0.25？误差每步乘以 \(1 - 8\eta\)，要求其绝对值小于 1，得 \(\eta &lt; 2/8\)。一般形式是 \(\eta &lt; 2/L''\)。</li>
+    <li>线性回归有闭式解，为什么还用梯度下降？这里是为了练训练循环。数据量和参数量大时，闭式解要解一个大线性方程组，梯度下降可以一批一批地处理数据。</li>
+    <li><code>eval()</code> 之后还能反向传播吗？能。<code>eval()</code> 只改变 Dropout、BatchNorm 等层的行为，不影响 autograd。</li>
+    <li>Adam 第一步的步长大约是多少？约等于学习率，与梯度大小无关，原因是偏差修正后 \(\hat m_1/\sqrt{\hat v_1} = \operatorname{sign}(g_1)\)。</li>
+    <li>MSE 对离群点敏感，为什么？梯度和残差成正比，一个大残差会主导整个梯度。<a href="#b4" data-go="b4">B.4 课</a>的 Huber 损失就是为此设计的。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>LinearRegressionModel</b>：继承 <code>nn.Module</code>，构造时不接收参数。输入形状 <code>(B, 1)</code>，输出形状 <code>(B, 1)</code>。<code>__init__</code> 里需要一个输入 1 维、输出 1 维的线性层，并且存成 <code>self</code> 的属性；<code>forward</code> 把输入交给它。起始代码里的 <code>torch.nn.layer()</code> 只是占位，并不存在，而且起始代码漏了 <code>super().__init__()</code>，这两处都要改。</p>
+  <p>验收会检查四件事：批大小为 4 时输出是 <code>(4, 1)</code>；批大小换成 1、3、8 也都正确，所以不要在代码里写死批大小；对输出求和再反向，每个参数都要收到非零梯度；用 Adam（学习率 1e-3）在一个固定的随机小批量上训练 40 步、损失用 MSE，损失必须下降。训练循环和打印放在 <code>if __name__ == "__main__":</code> 里，不要在模块顶层跑训练。</p>
   <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/optim/sgd.py" target="_blank" rel="noopener">PyTorch 源码：torch/optim/sgd.py</a> <span class="sub">（SGD 与动量的更新公式）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/linear.py" target="_blank" rel="noopener">PyTorch 源码：nn.Linear</a> <span class="sub">（y = xA^T + b，默认初始化）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1412.6980" target="_blank" rel="noopener">Kingma &amp; Ba，Adam: A Method for Stochastic Optimization</a> <span class="sub">（Adam 更新规则与偏差修正）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1711.05101" target="_blank" rel="noopener">Loshchilov &amp; Hutter，Decoupled Weight Decay Regularization</a> <span class="sub">（AdamW：权重衰减与 L2 的区别）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b1_lin_regression.py
@@ -3133,9 +3251,81 @@ for e in range(N):
 <section id="b2" data-title="B.2 Dataset 与 DataLoader" hidden>
   <h2>B.2 Dataset 与 DataLoader</h2>
   <p class="sub">map 式与可迭代式两种数据集，DataLoader 如何分批、打乱、多进程加载。</p>
-  <p>（待写）</p>
+  <h3>直觉</h3>
+  <p>把训练数据想成一个仓库。<b>Dataset</b> 是仓库的目录，回答“第 i 件货是什么”或者“下一件货是什么”。<b>DataLoader</b> 是搬运队，按批把货拿出来、装箱（拼成张量）、可以打乱顺序，还可以多叫几个人（多进程）一起搬，让 GPU 不必等数据。模型只关心一批一批的张量，读文件、解析、打乱、并行这些事都交给这两个类。</p>
+  <p>Dataset 有两种。<b>map 式</b>像一本有页码的书，可以随便翻到第 i 页；<b>可迭代式</b>（IterableDataset）像一条传送带，只能从头往后一件件取，适合数据大到放不进内存、或者本来就是流的情形。</p>
+  <h3>map 式 Dataset</h3>
+  <p>继承 <code>torch.utils.data.Dataset</code>，实现两个方法：</p>
+  <ul>
+    <li><code>__getitem__(i)</code>：返回第 i 个样本，常见是一个 <code>(x, y)</code> 元组。源码文档说所有子类都应当实现它。</li>
+    <li><code>__len__()</code>：返回样本总数。文档说它是“可选”的，但 DataLoader 的默认采样器要用它来生成索引，所以实际上几乎总要实现。</li>
+  </ul>
+  <p>数据不大时，惯用做法是在 <code>__init__</code> 里把文件读一次，转成 float32 张量存起来，<code>__getitem__</code> 只做索引。数据很大时，<code>__init__</code> 只存文件路径或偏移量，<code>__getitem__</code> 再去读那一条。Dataset 只负责单个样本，<b>不要在里面分批，也不要在里面打乱</b>，这两件事归 DataLoader 管。</p>
+  <h3>DataLoader 的主要参数</h3>
+  <p>以下默认值来自本机 torch 源码中 DataLoader 的文档字符串：</p>
+  <div class="scroll"><table>
+    <tr><th>参数</th><th>默认</th><th>含义</th></tr>
+    <tr><td><code>batch_size</code></td><td>1</td><td>每批几个样本。设为 <code>None</code> 时关闭自动分批，逐个样本产出。</td></tr>
+    <tr><td><code>shuffle</code></td><td>False</td><td>为 True 时每个 epoch 重新打乱。只适用于 map 式；对 IterableDataset 传 True 会报 ValueError（本机实测）。</td></tr>
+    <tr><td><code>sampler</code></td><td>None</td><td>自定义取索引的顺序，与 <code>shuffle</code> 互斥。<a href="#b3" data-go="b3">B.3 课</a>的分布式采样器就通过它传入。</td></tr>
+    <tr><td><code>num_workers</code></td><td>0</td><td>加载用的子进程数，0 表示在主进程里加载。</td></tr>
+    <tr><td><code>collate_fn</code></td><td>默认拼接</td><td>把一个样本列表合成一个批。</td></tr>
+    <tr><td><code>drop_last</code></td><td>False</td><td>最后一批不满时是否丢掉。</td></tr>
+  </table></div>
+  <p>批的数量：N 个样本、批大小 B 时，</p>
+  <div class="eq">\[ n_{\text{batch}} = \begin{cases} \lceil N / B \rceil, &amp; \texttt{drop\_last=False} \\ \lfloor N / B \rfloor, &amp; \texttt{drop\_last=True} \end{cases} \]</div>
+  <p class="eq-note">例如 N = 10、B = 4：不丢时是 4 + 4 + 2，共 3 批；丢掉最后不满的一批，剩 2 批。本机实测 <code>len(DataLoader(...))</code> 分别是 3 和 2。</p>
+  <h3>默认的 collate：样本怎么拼成批</h3>
+  <p>DataLoader 先按索引取出 B 个样本，得到一个列表 <code>[(x0, y0), (x1, y1), ...]</code>，再交给 <code>collate_fn</code>。默认的做法是保持元组结构、把同一位置的张量沿新的第 0 维堆叠：</p>
+<pre><code>dataset[i]              (x, y)       x: (1,)    y: ()        单个样本
+取 4 个样本              list 长度 4
+默认 collate 之后        (bx, by)     bx: (4, 1) by: (4,)</code></pre>
+  <p>上面的形状是本机实测。可以看到 y 是标量时，批出来是 <code>(4,)</code>，而线性层的输出是 <code>(4, 1)</code>，两者喂给 <code>MSELoss</code> 会被广播成 <code>(4, 4)</code>，结果错误（见 <a href="#b1" data-go="b1">B.1 课</a>）。所以让单个样本的 y 也是 <code>(1,)</code>，批出来就是 <code>(B, 1)</code>，与预测对齐。</p>
+  <p>样本长短不一时（例如句子），默认堆叠会因形状不同而失败，这时要自己写 <code>collate_fn</code>，在里面补齐。例如 <code>pad_sequence([torch.ones(2), torch.ones(3)], batch_first=True)</code> 返回形状 <code>(2, 3)</code>，短的那条后面补 0。</p>
+  <h3>IterableDataset：流式数据</h3>
+  <p>继承 <code>torch.utils.data.IterableDataset</code>，只实现 <code>__iter__</code>，返回一个迭代器。最省事的写法是把 <code>__iter__</code> 写成<b>生成器函数</b>（函数体里用 <code>yield</code>）。这样有两个好处：</p>
+  <ul>
+    <li><b>惰性</b>：读一行、产出一个样本，内存里同时只有很少的数据，与文件大小无关。</li>
+    <li><b>每个 epoch 从头开始</b>：每次 <code>for</code> 循环都会重新调用 <code>__iter__</code>，得到一个新的生成器。若把文件在 <code>__init__</code> 里打开、在 <code>__iter__</code> 里接着读，第二个 epoch 文件指针已在末尾，一行也读不到。</li>
+  </ul>
+  <p>解析一行 CSV 的思路：去掉行尾换行，按逗号切开，每段转成 float，前面几列做成 x，最后一列做成 y。<code>torch.tensor</code> 接收 Python float 列表时得到 float32。</p>
+  <h3>多进程加载与 get_worker_info</h3>
+  <p><code>num_workers &gt; 0</code> 时，DataLoader 启动若干子进程，每个子进程拿到 Dataset 对象的<b>一份拷贝</b>。</p>
+  <ul>
+    <li><b>map 式</b>不会重复：主进程的采样器决定索引，再把不同的索引分给不同的 worker。</li>
+    <li><b>可迭代式</b>会重复：每个 worker 都完整地跑一遍自己那份 <code>__iter__</code>。源码文档原话的意思是，每个 worker 有一份不同的数据集拷贝，通常需要分别配置每份拷贝，以免各 worker 返回重复数据。本机实验：一个产出 0 到 5 的 IterableDataset，<code>num_workers=2</code> 时每个数都出现两次，共 12 个。</li>
+  </ul>
+  <p>解决办法是在 <code>__iter__</code> 里调用 <code>torch.utils.data.get_worker_info()</code>。在主进程里它返回 <code>None</code>；在 worker 里返回的对象带有 <code>id</code>（本 worker 编号）、<code>num_workers</code>（总数）、<code>seed</code> 和 <code>dataset</code>（本进程里的那份拷贝）。拿到 id 和总数 W 后，有两种常见的分片方式：</p>
+  <ul>
+    <li><b>按行号取模</b>：第 i 行只由 \(i \bmod W\) 号 worker 产出。不需要事先知道总行数，适合逐行读的文件。</li>
+    <li><b>连续切块</b>：源码文档的例子用的是这种，把区间 \([\text{start}, \text{end})\) 切成长度 \(\lceil (\text{end}-\text{start})/W \rceil\) 的几段。需要事先知道总长度。</li>
+  </ul>
+  <p>按取模分片时，worker k 拿到的行数是</p>
+  <div class="eq">\[ n_k = \Big\lceil \frac{N - k}{W} \Big\rceil,\qquad \sum_{k=0}^{W-1} n_k = N \]</div>
+  <p class="eq-note">其中 N 是总行数。例如 N = 37、W = 2：worker 0 拿第 0, 2, …, 36 行，共 19 行；worker 1 拿第 1, 3, …, 35 行，共 18 行；合起来恰好 37 行。若不分片，会读出 74 行。</p>
+  <p>多 worker 时，DataLoader 轮流从各 worker 取结果，所以顺序和单进程不同，各 worker 的行交错出现。另外，本机源码里每个 worker 启动时会用 <code>base_seed + worker_id</code> 给 Python 的 <code>random</code> 和 torch 设种子，所以各 worker 的随机数不同。</p>
+  <p class="note">DataLoader 的文档还提醒：对 IterableDataset，<code>len(dataloader)</code> 只是根据 <code>len(dataset)</code> 和批大小做的估计，PyTorch 相信用户代码自己处理好了多进程分片，无法检查。分片写错不会报错，只会让数据重复或缺失。</p>
+  <h3>常见错误</h3>
+  <ul>
+    <li>把 CSV 的表头当成一行数据，<code>len</code> 多 1，或者解析表头时报错。</li>
+    <li>从 pandas 或 numpy 直接转张量得到 float64，模型权重是 float32，前向时报 dtype 不一致。</li>
+    <li>在 Dataset 里自己打乱或分批，与 DataLoader 的 <code>shuffle</code>、<code>batch_size</code> 重复，形状也会多出一维。</li>
+    <li>对 IterableDataset 传 <code>shuffle=True</code>，直接报错。流式数据的打乱见 <a href="#b3" data-go="b3">B.3 课</a>。</li>
+    <li><code>__iter__</code> 里先 <code>readlines()</code> 把整个文件读进列表，失去了流式的意义。</li>
+    <li>多 worker 时没用 <code>get_worker_info()</code> 分片，每条数据出现 <code>num_workers</code> 次。</li>
+    <li>分片时只处理了 worker 情形，忘了 <code>get_worker_info()</code> 在主进程返回 <code>None</code>，单进程时访问 <code>.id</code> 报错。</li>
+  </ul>
+  <h3>要想清楚 / 面试常追问</h3>
+  <ol class="q">
+    <li>什么时候用 map 式，什么时候用可迭代式？能按下标随机访问、知道总数时用 map 式，打乱和多进程都由 DataLoader 自动处理；数据是流、或者大到只能顺序读时用可迭代式，代价是打乱和分片要自己做。</li>
+    <li>为什么 map 式多进程不会重复，可迭代式会？map 式由主进程的采样器分配索引；可迭代式没有索引，每个 worker 只能从自己那份拷贝的头部开始迭代。</li>
+    <li><code>num_workers</code> 越大越好吗？不是越大越好。每个 worker 是一个进程，有自己的内存拷贝和启动开销。数据加载已经比 GPU 计算快时，再加 worker 没有收益。</li>
+    <li><code>drop_last=True</code> 有什么用？保证每批大小相同。某些层（如训练模式下的 BatchNorm）在批太小时统计量不可靠，多卡训练也常要求各卡批大小一致。</li>
+    <li>按取模分片，每个 worker 是不是只读了 1/W 的文件？不是。每个 worker 仍要从头扫一遍文件，只是丢掉不属于自己的行，节省的是解析和后续处理。真正的大规模场景会把数据预先切成很多文件，按文件分给 worker。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>LinearRegressionDataset(path)</b>：继承 <code>torch.utils.data.Dataset</code>，构造参数是 CSV 文件路径。文件第一行是表头 <code>X,y</code>，下面每行一个样本。读文件用 pandas、csv 模块或别的办法都可以，验收不看读法。要求：<code>len(ds)</code> 等于数据行数（不含表头）；<code>ds[i]</code> 返回一对 <code>(X, y)</code>，两者都是浮点张量；第 i 项的值必须是文件第 i 行的值，保持文件顺序，不能在 Dataset 里打乱；用 <code>DataLoader(ds, batch_size=4, shuffle=False)</code> 遍历 10 行数据时应得到 3 批，第一批 X 和 y 各 4 行，所有行恰好出现一次。验收会自己生成一个临时 CSV，不依赖仓库里的 <code>data.csv</code>。建议 X 取成形状 <code>(1,)</code>、y 也取成 <code>(1,)</code>，这样批出来是 <code>(B, 1)</code>，能直接喂给 <code>nn.Linear(1, 1)</code> 和 <code>MSELoss</code>。注意 dtype 用 float32。</p>
+  <p><b>StreamingDataset(filepath)</b>：继承 <code>IterableDataset</code>。文件没有表头，每行全是数字，最后一列是 y。每行产出 <code>(x, y)</code>：x 是除最后一列外所有列组成的一维浮点张量，y 是最后一列的标量张量。验收会检查：37 行、每行 3 个特征的文件能读出 37 个样本，第 5 行的 x 是 <code>[50, 51, 52]</code>、y 是 5；单进程时按文件顺序产出；同一个对象第二次迭代仍然读出全部 37 行；<code>__iter__</code> 必须是生成器函数（函数体里直接 <code>yield</code>），写成 <code>return iter(列表)</code> 或者返回另一个辅助生成器都不算；用 <code>DataLoader(ds, batch_size=None, num_workers=2)</code> 读时，37 个 y 恰好各出现一次。思路：在 <code>__iter__</code> 里取 worker 信息，主进程时当作只有一个 worker；打开文件，边数行号边判断这行是否归本 worker，归自己才解析并产出。文件要在 <code>__iter__</code> 里打开，用 <code>with</code> 保证关闭。</p>
   <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/data/dataset.py" target="_blank" rel="noopener">PyTorch 源码：torch/utils/data/dataset.py</a> <span class="sub">（Dataset 与 IterableDataset 的接口）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/data/dataloader.py" target="_blank" rel="noopener">PyTorch 源码：torch/utils/data/dataloader.py</a> <span class="sub">（batch_size、shuffle、num_workers、collate_fn、get_worker_info 的文档字符串）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b2_custom_dataset.py
@@ -3150,9 +3340,79 @@ for e in range(N):
 <section id="b3" data-title="B.3 大规模数据加载" hidden>
   <h2>B.3 大规模数据加载：Shuffle Buffer 与分布式采样</h2>
   <p class="sub">数据大到放不进内存、要分给多张卡时，怎样近似打乱，怎样让每张卡拿到不重叠的数据。</p>
-  <p>（待写）</p>
+  <h3>为什么要打乱，为什么流式数据打乱不了</h3>
+  <p>随机梯度下降默认每一批都是从整个数据集里随机抽的，这样一批的梯度才是全体梯度的无偏估计。真实数据往往是排好序的：按时间、按来源、按标签存放。如果按文件顺序读，开头一段全是猫、后面一段全是狗，模型前半程只学猫，后半程又被拉向狗，损失曲线会大起大落。</p>
+  <p>map 式数据集打乱很容易，把下标 0 到 N−1 随机排列一下，按新顺序去取就行（<a href="#b2" data-go="b2">B.2 课</a>的 <code>shuffle=True</code>）。流式数据没有下标，只能从头往后读。要做完美的全局打乱，必须先把全部数据读进来，这正是流式想避免的。所以流式数据用一个折中办法：<b>shuffle buffer</b>（缓冲区打乱）。</p>
+  <h3>Shuffle buffer 的原理</h3>
+  <p>想象一个能装 B 张牌的小桶。先从牌堆顶上连续摸 B 张放进桶里。之后每摸一张新牌，就先从桶里随机抽一张打出去，再把新牌放进空出来的位置。牌堆摸完后，把桶里剩下的牌打乱，全部打出。</p>
+  <ul>
+    <li><b>内存</b>：任何时刻桶里最多 B 个样本，与数据集大小无关。</li>
+    <li><b>不重不漏</b>：每个样本进桶一次、出桶一次。</li>
+    <li><b>B = 1</b>：桶里只有一张，没有选择余地，输出顺序与输入相同。</li>
+    <li><b>B ≥ N</b>：全部数据都在桶里，退化成完全打乱，内存也退化成 O(N)。</li>
+  </ul>
+  <p>PyTorch 的 <code>ShufflerIterDataPipe</code> 就是这样实现的：桶满后用 <code>randint</code> 选一个位置，把那里的元素换出来产出，新元素放进去；源数据耗尽后，每次随机弹出一个直到桶空。它的文档也写明，<code>buffer_size</code> 为 1 时不打乱，要完全打乱需要 <code>buffer_size</code> 不小于数据集大小，默认值是 10000。</p>
+  <h3>局部性：一个样本最多能提前多少</h3>
+  <p>缓冲区打乱只是“局部”打乱。把输入按 0, 1, 2, … 编号，输出位置也从 0 开始数。</p>
+  <div class="eq">\[ \begin{aligned}
+  &amp;\text{产出第 } p \text{ 个样本之前，已读入 } B + p \text{ 个，编号 } 0, \dots, B + p - 1 \\
+  &amp;\Rightarrow\ \text{位置 } p \text{ 上的样本编号 } i \le p + B - 1 \\
+  &amp;\Rightarrow\ p \ge i - (B - 1)
+  \end{aligned} \]</div>
+  <p class="eq-note">第一行：先装满 B 个，此后每读入一个新样本才产出一个，而产出发生在新样本放进桶之前，所以产出时桶里只有编号小于 \(B + p\) 的样本。第二、三行是同一件事的两种写法：样本 i 最多比原位置提前 \(B - 1\) 个位置。</p>
+  <p>反方向没有上限。每一轮桶里的 B 个位置被选中的机会相等，一个样本连续 k 轮都没被选中的概率是</p>
+  <div class="eq">\[ P(\text{再等 } k \text{ 轮仍在桶里}) = \Big(1 - \frac{1}{B}\Big)^{k} \]</div>
+  <p class="eq-note">例如 B = 20、k = 20 时约为 \(0.95^{20} \approx 0.358\)。所以样本可能被推迟很久，但最多只能提前 \(B - 1\) 位。用 B = 20 在 400 个样本上模拟一次，最大提前量正好是 19 位，最大推迟量是 89 位。</p>
+  <p><b>例子：排好序的数据。</b>前 1000 个是猫，后 1000 个是狗，B = 100，批大小 32。第一只狗的编号是 1000，由上面的不等式，它最早出现在位置 \(1000 - 99 = 901\)。所以位置 0 到 900 这 901 个输出必定全是猫，前 28 个整批（\(28 \times 32 = 896\)）没有一只狗。缓冲区远小于“同类数据连续的长度”时，打乱几乎不起作用。实际做法是两层打乱：把数据切成很多分片文件，先随机打乱分片的读取顺序，再在样本层面用缓冲区打乱。</p>
+  <h3>分布式训练：每张卡拿不同的数据</h3>
+  <p>数据并行训练里有 R 个进程（rank 0 到 R−1），每个进程有一份完整的模型，各自吃一部分数据，再同步梯度。采样器要保证三件事：各 rank 的数据<b>不重叠</b>，合起来<b>覆盖全部</b>，每个 rank 的<b>样本数相同</b>。最后一条很重要：每一步都要所有 rank 一起同步梯度，某个 rank 多一批，它就会在同步处一直等别的 rank。<code>DistributedSampler</code> 源码注释也说，补齐或截断是为了让每个 rank 拿到同样多的数据。</p>
+  <h3>DistributedSampler 怎么做（drop_last=False）</h3>
+  <p>以下按本机 torch 源码 <code>torch/utils/data/distributed.py</code> 逐步说明。设数据集大小为 N。</p>
+  <div class="eq">\[ \begin{aligned}
+  n_{\text{rank}} &amp;= \Big\lceil \frac{N}{R} \Big\rceil, \qquad T = n_{\text{rank}} \cdot R \\
+  \text{补齐个数} &amp;= T - N \;\lt\; R
+  \end{aligned} \]</div>
+  <p class="eq-note">其中 \(n_{\text{rank}}\) 是每个 rank 的样本数，也就是 <code>__len__</code> 的返回值；T 是补齐后的总长度。向上取整多出来的不到一整轮，所以补齐个数小于 R。</p>
+  <ol>
+    <li><b>排列</b>：<code>shuffle=True</code> 时新建 <code>torch.Generator()</code>，用 <code>seed + epoch</code> 设种子，调用 <code>torch.randperm(N, generator=g)</code>；否则就是 <code>0..N-1</code>。</li>
+    <li><b>补齐</b>：把列表头部的元素接到尾部，直到长度为 T。若补齐个数比 N 还多（数据集极小），源码会把整个列表重复若干遍再截取。</li>
+    <li><b>跨步取</b>：rank r 取第 r, r+R, r+2R, … 个，即切片 <code>indices[rank:T:R]</code>。</li>
+  </ol>
+  <p><b>例子：N = 10，R = 4，不打乱。</b>\(n_{\text{rank}} = \lceil 10/4 \rceil = 3\)，T = 12，补 2 个。列表补成 <code>[0, 1, …, 9, 0, 1]</code>，四个 rank 依次拿到 <code>[0, 4, 8]</code>、<code>[1, 5, 9]</code>、<code>[2, 6, 0]</code>、<code>[3, 7, 1]</code>（本机实测）。补上的 0 和 1 位于第 10、11 位，分给了 rank 2 和 rank 3，每个 rank 至多一个重复。若改成连续切块，补出来的重复样本会集中到最后一个 rank 上。</p>
+  <p><b>drop_last=True</b> 时反过来截断：\(n_{\text{rank}} = \lceil (N - R)/R \rceil\)，只保留前 T 个。N = 10、R = 4 时每个 rank 2 个，丢掉 2 个样本。</p>
+  <h3>为什么所有 rank 要用同一个种子</h3>
+  <p>各 rank 是独立的进程，彼此不通信。它们能拿到互不重叠的切片，前提是对同一个排列做跨步切片。若 \(\pi\) 是共同的排列，rank r 拿 \(\{\pi_j : j \equiv r \pmod R\}\)。不同 rank 对应的位置 j 互不相交，而 \(\pi\) 是一一映射，所以拿到的样本也互不相交。</p>
+  <p>反例（本机实测，N = 10、R = 2）：两个 rank 都用 seed 0 时，分别拿到 <code>[4, 7, 3, 0, 6]</code> 和 <code>[1, 5, 9, 8, 2]</code>，正好分完。若 rank 1 误用 seed 1，它拿到 <code>[6, 2, 8, 3, 4]</code>，与 rank 0 重复了 3、4、6，样本 1、5、9 则谁也没拿到。所以源码文档要求 seed 在所有进程间相同。</p>
+  <h3>set_epoch 为什么每轮都要调用</h3>
+  <p>采样器自己不知道现在是第几轮。<code>self.epoch</code> 初始为 0，只有 <code>set_epoch</code> 会改它。种子是 <code>seed + epoch</code>，不调用的话每一轮的种子都是 <code>seed + 0</code>，每轮看到的顺序一模一样。本机实测：N = 10、R = 2 的 rank 0，epoch 0 是 <code>[4, 7, 3, 0, 6]</code>，再来一次仍是这个，epoch 1 变成 <code>[5, 1, 0, 9, 7]</code>。</p>
+  <p>源码文档的警告：在分布式模式下，要在<b>每个 epoch 开始、创建 DataLoader 迭代器之前</b>调用 <code>set_epoch</code>，否则总是同一个顺序。用 <code>seed + epoch</code> 而不用全局随机数还有一个好处：同一个 epoch 的顺序是确定的，各 rank 自然一致，从检查点恢复训练时也能复现。</p>
+<pre><code>sampler = DistributedSampler(ds, num_replicas=R, rank=r, shuffle=True, seed=0)
+loader  = DataLoader(ds, batch_size=32, sampler=sampler)   # 不能再传 shuffle
+for epoch in range(E):
+    sampler.set_epoch(epoch)        # 在迭代 loader 之前
+    for batch in loader: ...</code></pre>
+  <p>传了 <code>sampler</code> 又传 <code>shuffle=True</code>，DataLoader 会报 <code>sampler option is mutually exclusive with shuffle</code>（本机实测）。</p>
+  <h3>常见错误</h3>
+  <ul>
+    <li>缓冲区打乱时先把新样本放进桶、再从 B + 1 个里随机抽。这会让样本最多提前 B 位，内存也多一个，违反上面的局部性界。</li>
+    <li>源数据耗尽后忘了把桶里剩下的样本吐出来，最后 B 个样本丢失。</li>
+    <li>“缓冲区打乱”写成先 <code>list(base)</code> 再整体打乱，内存变成 O(N)。</li>
+    <li>分布式采样按连续块切分，与 PyTorch 的跨步方式不一致，补齐样本也全落在最后一个 rank。</li>
+    <li>每个 rank 用不同的种子，或者用全局随机数打乱，各 rank 的数据重叠又遗漏。</li>
+    <li>忘了每轮调用 <code>set_epoch</code>，每个 epoch 顺序相同。</li>
+    <li>评估时用带补齐的分布式采样，重复的几个样本被算了两次，指标有轻微偏差。</li>
+  </ul>
+  <h3>要想清楚 / 面试常追问</h3>
+  <ol class="q">
+    <li>缓冲区大小怎么选？越大越接近全局打乱，代价是内存和“预热”时间：第一个样本要等读满 B 个才产出。应当让 B 明显大于数据中同类样本连续出现的长度。</li>
+    <li>缓冲区打乱和多 worker 一起用会怎样？每个 worker 有自己的缓冲区，只在自己那片数据里打乱。各 worker 的随机种子不同（<a href="#b2" data-go="b2">B.2 课</a>），所以不会产生同样的打乱顺序。</li>
+    <li>为什么 DistributedSampler 用跨步而不是连续切块？两种方式都能做到不重叠。跨步时补齐的样本分散到不同 rank，每个 rank 至多多一个重复；本题要求与 PyTorch 逐元素一致，所以必须用跨步。</li>
+    <li>R 能整除 N 时还会补齐吗？不会。此时 \(T = N\)，补齐个数为 0，所有 rank 合起来恰好是全部样本，各一次。</li>
+    <li>不调用 <code>set_epoch</code> 会报错吗？不会，只会每轮顺序相同。这类错误不报错，只会悄悄让训练效果变差，所以面试常问。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>ShuffleBufferDataset(base_dataset, buffer_size)</b>：继承 <code>IterableDataset</code>，包装一个可迭代数据集，<code>__iter__</code> 按上面“小桶”的规则产出样本。随机数用 Python 的 <code>random</code> 模块即可。验收用一个产出 0, 1, 2, … 的数据集检查四个性质：500 个样本、B = 50 时每个数恰好出现一次，且顺序与输入不同；B = 1 时输出顺序与输入完全相同；B = 20、400 个样本时，任何位置 p 上的样本 i 都满足 \(p \ge i - 19\)，也就是上面的局部性界；B = 25、300 个样本时，任何时刻“已从源数据读入的个数减去已产出的个数”不超过 25。后两条会抓住两种常见写法：先把整个源数据读进列表，和先放新样本再从 B + 1 个里抽。也别忘了源数据读完后把桶里剩下的打乱吐出。</p>
+  <p><b>SimpleDistributedSampler(dataset, num_replicas, rank, shuffle=True, seed=0)</b>：继承 <code>Sampler</code>，行为要与 <code>torch.utils.data.DistributedSampler</code>（<code>drop_last=False</code>）逐元素一致。需要实现 <code>set_epoch(epoch)</code>、<code>__len__</code>、<code>__iter__</code>，epoch 初始为 0。<code>__iter__</code> 返回本 rank 的下标迭代器。验收会检查：N = 10、4 个 rank、不打乱时正好是上面例子里的四个列表，且 <code>len</code> 都是 3；在 (N, R) 为 (103, 4)、(64, 8)、(7, 3)，epoch 为 0 和 3，seed = 5 的每一种组合下，每个 rank 的输出与 PyTorch 完全相同；同一个 epoch 调用两次结果相同，换 epoch 结果不同；N = 50、2 个 rank 时两边不重叠且合起来覆盖全部。要逐元素一致，生成器、种子、<code>randperm</code> 的调用方式都要和上面说的源码步骤一样，<code>randperm</code> 得到张量后转成 Python 列表再补齐和切片。</p>
   <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/data/distributed.py" target="_blank" rel="noopener">PyTorch 源码：DistributedSampler</a> <span class="sub">（补齐、按 rank 跨步取索引、seed + epoch）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/data/datapipes/iter/combinatorics.py" target="_blank" rel="noopener">PyTorch 源码：ShufflerIterDataPipe</a> <span class="sub">（缓冲区式打乱的实现）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b3_shuffle_buffer.py
@@ -3167,9 +3427,109 @@ for e in range(N):
 <section id="b4" data-title="B.4 激活与损失" hidden>
   <h2>B.4 激活函数、Softmax 与损失函数</h2>
   <p class="sub">非线性从哪里来；softmax 的数值稳定写法；为什么对离群点要用 Huber 损失。</p>
-  <p>（待写）</p>
+  <h3>直觉：为什么需要非线性</h3>
+  <p>线性层只会做旋转、拉伸、平移。把很多个线性层叠起来，结果还是一个线性层，再深也只能画直线（高维里是超平面）。激活函数在层与层之间加一道“弯折”，网络才能拼出曲线、拐角和复杂的决策边界。</p>
+  <p>两层线性等于一层，推导只有一步：</p>
+  <div class="eq">\[ W_2\big(W_1\mathbf{x} + \mathbf{b}_1\big) + \mathbf{b}_2 = \underbrace{(W_2 W_1)}_{W}\,\mathbf{x} + \underbrace{(W_2\mathbf{b}_1 + \mathbf{b}_2)}_{\mathbf{b}} \]</div>
+  <p class="eq-note">左边展开括号，用矩阵乘法的结合律把 \(W_2 W_1\) 合成一个矩阵 W，常数项合成 \(\mathbf{b}\)。本机用随机的 \(W_1\in\mathbb{R}^{4\times3}\)、\(W_2\in\mathbb{R}^{2\times4}\) 验证过两边相等。中间插一个非线性函数 \(\phi\)，写成 \(W_2\,\phi(W_1\mathbf{x} + \mathbf{b}_1) + \mathbf{b}_2\)，就合不起来了。</p>
+  <h3>常用激活函数</h3>
+  <div class="scroll"><table>
+    <tr><th>名字</th><th>定义</th><th>导数</th><th>值域</th><th>特点</th></tr>
+    <tr><td>ReLU</td><td>\(\max(0, x)\)</td><td>\(x&gt;0\) 时 1，\(x&lt;0\) 时 0</td><td>\([0, \infty)\)</td><td>计算便宜，正半轴梯度恒为 1</td></tr>
+    <tr><td>LeakyReLU</td><td>\(x \ge 0\) 时 x，否则 \(a x\)</td><td>1 或 a</td><td>\((-\infty, \infty)\)</td><td>负半轴留一点梯度，PyTorch 默认 \(a = 0.01\)</td></tr>
+    <tr><td>GELU</td><td>\(x\,\Phi(x)\)</td><td>\(\Phi(x) + x\,\varphi(x)\)</td><td>约 \([-0.17, \infty)\)</td><td>光滑，负半轴有小的负值</td></tr>
+    <tr><td>tanh</td><td>\(\dfrac{e^x - e^{-x}}{e^x + e^{-x}}\)</td><td>\(1 - \tanh^2 x\)</td><td>\((-1, 1)\)</td><td>以 0 为中心，两端饱和</td></tr>
+    <tr><td>sigmoid</td><td>\(\sigma(x) = \dfrac{1}{1 + e^{-x}}\)</td><td>\(\sigma(x)\big(1 - \sigma(x)\big)\)</td><td>\((0, 1)\)</td><td>可当概率用，导数最大只有 0.25</td></tr>
+  </table></div>
+  <p class="eq-note">其中 \(\Phi\)、\(\varphi\) 是标准正态分布的分布函数和密度。定义与默认值来自本机 torch 源码中各模块的文档字符串；GELU 还提供 <code>approximate="tanh"</code> 的近似版本 \(0.5x\big(1 + \tanh(\sqrt{2/\pi}\,(x + 0.044715x^3))\big)\)。GELU 的最小值约为 −0.17，是对 \(x\Phi(x)\) 求极值得到的数值。</p>
+  <p><b>几个数。</b>本机计算：\(\tanh(1) \approx 0.7616\)，导数 \(1 - 0.7616^2 \approx 0.42\)；\(\tanh(3) \approx 0.9951\)，导数只剩约 0.0099。\(\sigma(2) \approx 0.8808\)，\(\sigma(-2) \approx 0.1192\)。\(\mathrm{GELU}(1) \approx 0.8413\)，\(\mathrm{GELU}(-1) \approx -0.1587\)，\(\mathrm{GELU}'(0) = 0.5\)。ReLU 在 0 点不可导，PyTorch 在 \(x = 0\) 处给的梯度是 0（本机实测）。</p>
+  <p><b>sigmoid 导数的推导。</b></p>
+  <div class="eq">\[ \begin{aligned}
+  \sigma'(x) &amp;= \frac{d}{dx}\big(1 + e^{-x}\big)^{-1} = \frac{e^{-x}}{(1 + e^{-x})^2} \\
+  &amp;= \frac{1}{1 + e^{-x}}\cdot\frac{e^{-x}}{1 + e^{-x}} = \sigma(x)\big(1 - \sigma(x)\big)
+  \end{aligned} \]</div>
+  <p class="eq-note">第一步用链式法则，外层 \(u^{-1}\) 的导数是 \(-u^{-2}\)，内层 \(1 + e^{-x}\) 的导数是 \(-e^{-x}\)；第二步把分式拆成两个因子，第二个因子等于 \(1 - \sigma(x)\)。乘积 \(s(1-s)\) 在 \(s = 0.5\) 即 \(x = 0\) 时最大，为 0.25。</p>
+  <p><b>梯度消失。</b>反向传播时，每过一层 sigmoid 梯度至少乘一个不超过 0.25 的数。10 层下来最多剩 \(0.25^{10} \approx 9.5\times10^{-7}\)，前面的层几乎学不动。tanh 的导数最大是 1，但输入一大就饱和。ReLU 在正半轴导数恒为 1，没有这个问题，所以成为深层网络的默认选择。它的问题是“死亡”：某个神经元的输入对所有样本都小于 0，它的梯度永远是 0，再也恢复不了。LeakyReLU 和 GELU 在负半轴保留了梯度。</p>
+  <p><b>PReLU 与初始化。</b>He 等人把 LeakyReLU 的斜率 a 变成可学习参数，称为 PReLU，论文里 a 初始化为 0.25。同一篇论文推导了 ReLU 网络的初始化：权重取均值为 0、标准差为 \(\sqrt{2/n_l}\) 的高斯分布，\(n_l\) 是该层的输入连接数。这个 2 的直觉是 ReLU 把一半的输入置零，方差减半，要乘 2 补回来。</p>
+  <h3>Softmax：把分数变成概率</h3>
+  <div class="eq">\[ \operatorname{softmax}(\mathbf{z})_i = \frac{e^{z_i}}{\sum_{j} e^{z_j}} \]</div>
+  <p class="eq-note">其中 \(\mathbf{z}\) 叫 logits，可以是任意实数。每个输出都在 (0, 1) 内，总和为 1。PyTorch 的 <code>dim</code> 参数指定沿哪一维归一化，沿该维的每个切片和为 1。</p>
+  <p><b>平移不变性。</b>给所有 \(z_j\) 同时减去同一个常数 c，结果不变：</p>
+  <div class="eq">\[ \frac{e^{z_i - c}}{\sum_j e^{z_j - c}} = \frac{e^{z_i}\,e^{-c}}{e^{-c}\sum_j e^{z_j}} = \frac{e^{z_i}}{\sum_j e^{z_j}} \]</div>
+  <p class="eq-note">第一步用 \(e^{a-b} = e^a e^{-b}\)，把 \(e^{-c}\) 从每一项里提出来；第二步分子分母的 \(e^{-c}\) 约掉。</p>
+  <p><b>为什么要减最大值。</b>float32 能表示的最大数约为 \(3.4\times10^{38}\)，对应 \(\ln \approx 88.72\)。本机实测 \(e^{88} \approx 1.65\times10^{38}\)，\(e^{89}\) 就是 <code>inf</code>。直接算 \(\mathbf{z} = (1000, 1001, 1002)\)：三个指数都是 <code>inf</code>，\(\infty/\infty\) 得到 <code>nan</code>。反过来 \((-1000, -1001, -1002)\) 的指数全部下溢为 0，\(0/0\) 也是 <code>nan</code>。</p>
+  <p>取 \(c = \max_j z_j\)，减完后最大的一项是 0，其余都 \(\le 0\)：</p>
+  <ul>
+    <li>指数都在 (0, 1] 内，不会上溢。</li>
+    <li>分母里至少有一项 \(e^0 = 1\)，分母 \(\ge 1\)，不会出现 0/0。</li>
+  </ul>
+  <p>用 (1000, 1001, 1002) 演算：减去 1002 得 (−2, −1, 0)，指数是 0.1353、0.3679、1，和为 1.5032，结果 (0.0900, 0.2447, 0.6652)，与 <code>torch.softmax</code> 一致。负的那一行减去最大值 −1000 后是 (0, −1, −2)，得到同样三个数的反序。</p>
+  <p><b>要 log 概率时用 log_softmax。</b>由平移不变性，\(\log p_i = z_i - m - \log\sum_j e^{z_j - m}\)，其中 \(m = \max_j z_j\)。本机实测：对 (1000, 0) 先 softmax 再 log 得到 \((0, -\infty)\)，<code>F.log_softmax</code> 给出正确的 \((0, -1000)\)。</p>
+  <h3>交叉熵与它的梯度</h3>
+  <p>多分类时，目标是 one-hot 向量 \(\mathbf{y}\)（正确类别 k 处为 1），损失是正确类别的负对数概率：</p>
+  <div class="eq">\[ L = -\sum_i y_i \log p_i = -\log p_k = -z_k + \log\sum_j e^{z_j} \]</div>
+  <p>对 logit \(z_i\) 求导：</p>
+  <div class="eq">\[ \begin{aligned}
+  \frac{\partial L}{\partial z_i} &amp;= -\mathbb{1}[i = k] + \frac{e^{z_i}}{\sum_j e^{z_j}} \\
+  &amp;= p_i - y_i
+  \end{aligned} \]</div>
+  <p class="eq-note">第一步：\(-z_k\) 对 \(z_i\) 求导，只有 \(i = k\) 时为 −1；\(\log\sum_j e^{z_j}\) 求导得 \(e^{z_i}/\sum_j e^{z_j}\)。第二步认出 softmax 和 one-hot。</p>
+  <p>梯度就是“预测概率减去目标”，又简单又有界，每个分量都在 [−1, 1] 内。例子：\(\mathbf{z} = (2, 1, 0)\)，正确类别是 0。\(\mathbf{p} = (0.6652, 0.2447, 0.0900)\)，损失 \(-\ln 0.6652 \approx 0.4076\)，梯度 \((-0.3348,\ 0.2447,\ 0.0900)\)。本机用 <code>F.cross_entropy</code> 反向传播得到的数一样。</p>
+  <p class="note"><code>F.cross_entropy</code> / <code>nn.CrossEntropyLoss</code> 的输入是<b>未归一化的 logits</b>（源码文档原话），内部会做 log_softmax。先自己 softmax 一遍再传进去，等于做了两次 softmax，梯度会变小且有偏。</p>
+  <h3>回归损失：MSE、MAE 与 Huber</h3>
+  <p>记残差 \(r = \hat y - y\)。三种逐元素损失：</p>
+  <div class="eq">\[ \ell_{\text{MSE}} = r^2,\qquad \ell_{\text{MAE}} = |r|,\qquad \ell_{\delta}(r) = \begin{cases} \tfrac12 r^2, &amp; |r| \le \delta \\ \delta\big(|r| - \tfrac12\delta\big), &amp; |r| &gt; \delta \end{cases} \]</div>
+  <p class="eq-note">其中 \(\delta &gt; 0\) 是分界点。PyTorch 文档把边界写在 \(|r| &lt; \delta\) 一侧，下面会看到两段在边界上取值相同，所以写哪边都一样。</p>
+  <p>它们的导数决定了对离群点的态度：</p>
+  <div class="eq">\[ \ell_{\text{MSE}}' = 2r,\qquad \ell_{\text{MAE}}' = \operatorname{sign}(r),\qquad \ell_\delta'(r) = \begin{cases} r, &amp; |r| \le \delta \\ \delta\operatorname{sign}(r), &amp; |r| &gt; \delta \end{cases} \]</div>
+  <p class="eq-note">Huber 的导数就是把 r 截断到 \([-\delta, \delta]\)。MSE 的梯度随残差无限增长，一个离群点能主导整批梯度；MAE 的梯度大小恒为 1，在 0 附近不光滑，接近最优点时也不会变小；Huber 小误差像 MSE，大误差像 MAE。</p>
+  <p><b>数值对比。</b>残差 (0.5, −0.2, 3, −10)，δ = 1，本机计算：</p>
+  <div class="scroll"><table>
+    <tr><th></th><th>0.5</th><th>−0.2</th><th>3</th><th>−10</th><th>平均</th></tr>
+    <tr><td>MSE \(r^2\)</td><td>0.25</td><td>0.04</td><td>9</td><td>100</td><td>27.32</td></tr>
+    <tr><td>MAE \(|r|\)</td><td>0.5</td><td>0.2</td><td>3</td><td>10</td><td>3.425</td></tr>
+    <tr><td>Huber</td><td>0.125</td><td>0.02</td><td>2.5</td><td>9.5</td><td>3.036</td></tr>
+  </table></div>
+  <p>MSE 的平均值几乎全由 −10 这一项贡献。再看估计一个位置参数：数据 (1, 2, 3, 4, 100)，使 MSE 最小的是均值 22，使 MAE 最小的是中位数 3，使 Huber（δ = 1）最小的也是 3（本机数值搜索）。一个离群点把均值拉走了，Huber 不受影响。</p>
+  <p><b>在 |r| = δ 处连续，一阶导也连续。</b>两段在 \(r = \delta\) 处的值和斜率：</p>
+  <div class="eq">\[ \begin{aligned}
+  \text{值：}&amp;\quad \tfrac12\delta^2 \quad\text{与}\quad \delta\big(\delta - \tfrac12\delta\big) = \tfrac12\delta^2 \\
+  \text{斜率：}&amp;\quad \frac{d}{dr}\tfrac12 r^2\Big|_{r=\delta} = \delta \quad\text{与}\quad \frac{d}{dr}\delta\big(r - \tfrac12\delta\big) = \delta
+  \end{aligned} \]</div>
+  <p class="eq-note">\(r = -\delta\) 处对称。线性段里那个 \(-\tfrac12\delta^2\) 的常数，正是为了让两段在接口处对上。二阶导从 1 跳到 0，不连续，所以 Huber 是一阶光滑的。</p>
+  <h3>Huber 与 SmoothL1 的关系</h3>
+  <p>本机 torch 源码文档给出 <code>SmoothL1Loss</code> 的定义：\(|r| &lt; \beta\) 时为 \(0.5r^2/\beta\)，否则为 \(|r| - 0.5\beta\)。和 Huber 对比可得</p>
+  <div class="eq">\[ \operatorname{SmoothL1}_\beta(r) = \frac{\ell_{\delta = \beta}(r)}{\beta} \]</div>
+  <p class="eq-note">β = 1 时两者完全相同。本机验证：β = δ = 2 时，SmoothL1 的四个值 (0.0625, 0.01, 2, 9) 正好是 Huber 的一半。</p>
+  <ul>
+    <li>SmoothL1 的线性段斜率恒为 1；Huber 的线性段斜率是 δ。</li>
+    <li>β → 0 时 SmoothL1 趋于 L1 损失，Huber 趋于常数 0。</li>
+    <li>β → ∞ 时 SmoothL1 趋于常数 0，Huber 在每一点都变成二次段 \(\tfrac12 r^2\)。</li>
+  </ul>
+  <p>以上三条可以由两个定义直接推出。注意 δ 很大时 Huber 等于 \(\tfrac12 r^2\)，只是 <code>MSELoss</code> 的一半，梯度也差一倍。<code>nn.HuberLoss</code> 默认 <code>delta=1.0</code>、<code>reduction="mean"</code>。Huber 损失出自 Huber 1964 年关于位置参数稳健估计的论文。</p>
+  <h3>常见错误</h3>
+  <ul>
+    <li>softmax 不减最大值，大 logits 时出 <code>nan</code>。</li>
+    <li>求最大值时用了 <code>x.max(dim=...)</code>，它返回 (值, 下标) 的命名元组，不是张量。要取 <code>.values</code>，或者用 <code>x.amax(dim, keepdim=True)</code>。</li>
+    <li>求和或求最大值时没写 <code>keepdim=True</code>，形状从 <code>(4, 8)</code> 变成 <code>(4,)</code>，与原张量相除时广播错位。</li>
+    <li>softmax 后再传给 <code>cross_entropy</code>，做了两次 softmax。</li>
+    <li>Huber 里用 Python 的 <code>if</code> 判断张量，多元素张量会报错。逐元素选择要用 <code>torch.where</code>。</li>
+    <li>Huber 的二次段忘了 1/2，或者线性段忘了减 \(\tfrac12\delta^2\)，两段在 δ 处接不上。</li>
+    <li>激活函数用 <code>math.tanh</code> 这类 Python 函数，张量无法传进去，也不会有梯度。用 <code>torch.tanh</code>。</li>
+  </ul>
+  <h3>要想清楚 / 面试常追问</h3>
+  <ol class="q">
+    <li>为什么分类的最后一层通常不加 ReLU？ReLU 会把负的 logit 截成 0，模型就没法让某个类的分数低于 0，softmax 能表达的分布受限。</li>
+    <li>softmax 减最大值会改变梯度吗？不会。减去的常数不改变输出，函数本身没变，导数也就不变；只是计算过程不溢出。</li>
+    <li>交叉熵的梯度为什么不会消失？对 logits 的梯度是 \(p - y\)。预测错得越离谱，正确类的 p 越小，梯度越接近 −1，不会因为饱和而变小。用 sigmoid 输出配 MSE 时就没有这个性质。</li>
+    <li>Huber 的 δ 怎么选？δ 是“多大的残差算离群”。残差小于 δ 时按平方惩罚，大于 δ 时按线性惩罚。它和目标值的尺度有关，目标放大 10 倍，δ 也应放大 10 倍。</li>
+    <li>MAE 也稳健，为什么还要 Huber？MAE 在 0 点不可导，梯度大小恒为 1，接近最优点时不会自动变小，容易来回跳；Huber 在小残差处是二次的，梯度随残差变小。</li>
+    <li>tanh 和 sigmoid 有什么关系？\(\tanh(x) = 2\sigma(2x) - 1\)，tanh 是放大、平移后的 sigmoid，所以输出以 0 为中心。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>HuberLoss(delta=1.0)</b>：继承 <code>nn.Module</code>，构造时接收关键字参数 <code>delta</code>（验收总是写成 <code>HuberLoss(delta=...)</code>），记得先调用 <code>super().__init__()</code>。<code>forward(pred, target)</code> 接收两个同形状的张量，返回逐元素 Huber 损失的<b>平均值</b>（标量）。验收会检查：δ 取 0.5、1、2 时，在 64 个随机数上与 <code>F.huber_loss</code> 的误差不超过 1e-5；δ = 1、残差 0.2 时损失是 \(0.5\times0.2^2 = 0.02\)；残差 5 时是 \(1\times(5 - 0.5) = 4.5\)；预测等于目标时损失为 0；对预测反向传播能得到非零梯度。逐元素分段用 <code>torch.abs</code> 和 <code>torch.where</code>，不要用 Python 的 <code>if</code>。</p>
+  <p><b>CustomActivationModel</b>：起始代码已经有一个 <code>nn.Linear(1, 1)</code>。按原题，<code>custom_activation(x)</code> 计算 \(\tanh(x) + x\)，没有可学习参数；<code>forward</code> 先过线性层，再把激活作用在线性层的输出上。输入 <code>(B, 1)</code>，输出 <code>(B, 1)</code>。验收会检查：输出形状正确且与批大小无关；每个参数都收到非零梯度；在 −3 到 3 的 50 个点上输出不是输入的仿射函数（相邻点斜率的标准差要大于 1e-6，激活写成恒等函数会失败）；用 Adam 在固定小批量上训练 40 步，MSE 损失下降。这个激活的导数是 \(2 - \tanh^2 x\)，处处在 (1, 2] 内，梯度不会为 0。若换成 ReLU 一类函数，只有一个线性层时，两个样本都落在负半轴就会没有梯度，梯度检查可能失败。</p>
+  <p><b>softmax(x, dim=-1)</b>：手写数值稳定的 softmax，返回与输入同形状的张量。按起始代码注释的三步做：沿 <code>dim</code> 减去最大值，取指数，再除以沿 <code>dim</code> 的和，最大值和求和都要 <code>keepdim=True</code>。不要直接调用 <code>torch.softmax</code>。验收会检查：形状 <code>(5,)</code>、<code>(4, 8)</code>、<code>(2, 3, 7)</code> 上与 <code>torch.softmax(x, dim=-1)</code> 的误差在 1e-6 内；<code>dim=0</code> 时沿列归一化；每行和为 1；输入 <code>[[1000, 1001, 1002], [-1000, -1001, -1002]]</code> 时没有 <code>nan</code> 和 <code>inf</code>，数值正确。</p>
   <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/loss.py" target="_blank" rel="noopener">PyTorch 源码：nn.HuberLoss / SmoothL1Loss</a> <span class="sub">（delta 的含义与两者的关系）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/activation.py" target="_blank" rel="noopener">PyTorch 源码：激活函数模块</a> <span class="sub">（ReLU、Tanh、Softmax 的定义）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1502.01852" target="_blank" rel="noopener">He 等，Delving Deep into Rectifiers</a> <span class="sub">（PReLU 与 ReLU 网络的初始化）</span></span></li><li><span class="pill">经典文献</span><span>Huber，Robust Estimation of a Location Parameter，Annals of Mathematical Statistics，1964 <span class="sub">（Huber 损失的原始出处）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b4_huber_loss.py
@@ -3188,9 +3548,131 @@ for e in range(N):
 <section id="b5" data-title="B.5 深层网络与初始化" hidden>
   <h2>B.5 深层全连接网络与参数初始化</h2>
   <p class="sub">层数变多后，信号和梯度为什么会消失或爆炸；Xavier 与 Kaiming 初始化从方差推出来。</p>
-  <p>（待写）</p>
+  <h3>为什么层数多了会出问题</h3>
+  <p>把一个深层网络想成一长串放大器。每一层把信号乘上一个系数再传下去。如果每层的系数是 0.5，信号过 10 层只剩千分之一；如果是 2，过 10 层就放大一千倍。反向传播时梯度也要穿过同样这串放大器，只是方向相反。所以层数一多，<b>每层的“放大倍数”必须很接近 1</b>，否则信号和梯度不是消失就是爆炸。</p>
+  <p>这个放大倍数在训练开始时由什么决定？主要由权重的初始尺度决定。这一课就从方差出发，算出让放大倍数等于 1 的初始化尺度，得到 Xavier（Glorot）和 Kaiming（He）两种初始化。</p>
+  <h3>全连接网络的结构</h3>
+  <p>一层全连接做的事是 \(\mathbf{y} = W\mathbf{x} + \mathbf{b}\)，再接一个非线性激活 \(\mathbf{x}' = f(\mathbf{y})\)。<code>nn.Linear(in_features, out_features)</code> 的权重形状是 <code>(out_features, in_features)</code>，前向算的是 <code>x @ W.T + b</code>。</p>
+  <p>激活函数必不可少。两层线性叠起来 \(W_2(W_1\mathbf{x}+\mathbf{b}_1)+\mathbf{b}_2 = (W_2W_1)\mathbf{x} + (W_2\mathbf{b}_1+\mathbf{b}_2)\)，还是一个线性映射，多少层都等于一层。</p>
+<pre><code>x            (N, 2)
+Linear(2, 64)  -&gt; (N, 64)
+ReLU           -&gt; (N, 64)
+Linear(64, 64) -&gt; (N, 64)
+ReLU           -&gt; (N, 64)
+Linear(64, 1)  -&gt; (N, 1)</code></pre>
+  <h3>一个数值例子：10 层 ReLU 网络</h3>
+  <p>取宽度 512、10 层的 ReLU 网络，输入每个分量方差为 1。下面会推出每层激活的二阶矩按 \(\tfrac12 n\operatorname{Var}(w)\) 倍变化（n 是输入维数）。代入三种权重尺度：</p>
+  <div class="scroll"><table>
+    <tr><th>权重分布</th><th>每层倍数 \(\tfrac12 n\operatorname{Var}(w)\)</th><th>10 层后的倍数</th></tr>
+    <tr><td>\(\mathcal{N}(0,\ 0.01^2)\)</td><td>\(\tfrac12\times512\times10^{-4}=0.0256\)</td><td>\(0.0256^{10}\approx 1.2\times10^{-16}\)</td></tr>
+    <tr><td>\(\operatorname{Var}(w)=1/n\)</td><td>0.5</td><td>\(0.5^{10}\approx 9.8\times10^{-4}\)</td></tr>
+    <tr><td>\(\operatorname{Var}(w)=2/n\)（Kaiming）</td><td>1</td><td>1</td></tr>
+  </table></div>
+  <p>用 PyTorch 实际跑一遍（1000 个随机输入），第一种的激活均方值在 \(10^{-17}\) 量级，第二种约为 \(5\times10^{-4}\)，第三种在 1 附近。第三种换几个随机种子会在 0.5 到 1.5 之间波动，因为宽度有限，每层的倍数只是期望上等于 1。量级和上表一致。</p>
+  <h3>推导：一层的方差怎么传</h3>
+  <p>看第 l 层的一个输出分量 \(y = \sum_{j=1}^{n} w_j x_j\)（偏置初始化为 0，先忽略）。做三个假设：权重 \(w_j\) 之间独立同分布、均值为 0；输入 \(x_j\) 之间独立同分布；权重与输入相互独立。</p>
+  <div class="eq">\[ \begin{aligned}
+  \operatorname{Var}(y) &amp;= \sum_{j=1}^{n} \operatorname{Var}(w_j x_j) = n\,\operatorname{Var}(w x) \\
+  &amp;= n\big(\mathbb{E}[w^2]\,\mathbb{E}[x^2] - (\mathbb{E}[w]\,\mathbb{E}[x])^2\big) \\
+  &amp;= n\,\operatorname{Var}(w)\,\mathbb{E}[x^2]
+  \end{aligned} \]</div>
+  <p class="eq-note">第一步用独立变量之和的方差等于方差之和；第二步用 w 与 x 独立，\(\mathbb{E}[w^2x^2]=\mathbb{E}[w^2]\mathbb{E}[x^2]\)；第三步代入 \(\mathbb{E}[w]=0\)，于是 \(\mathbb{E}[w^2]=\operatorname{Var}(w)\)。</p>
+  <p>如果输入 x 也是零均值，\(\mathbb{E}[x^2]=\operatorname{Var}(x)\)，就得到常见的形式：</p>
+  <div class="eq">\[ \operatorname{Var}(y) = n_{\text{in}}\,\operatorname{Var}(w)\,\operatorname{Var}(x) \]</div>
+  <p>要让方差逐层不变，就要 \(n_{\text{in}}\operatorname{Var}(w) = 1\)，即 \(\operatorname{Var}(w) = 1/n_{\text{in}}\)。tanh 在 0 附近近似恒等，零均值假设大致成立，这个结论适用。</p>
+  <h3>Xavier（Glorot）初始化</h3>
+  <p>反向传播时，梯度从输出端流回来，经过的是 \(W^\top\)，相加的项数是这一层的输出维数 \(n_{\text{out}}\)。同样的推导给出反向保持梯度方差的条件 \(n_{\text{out}}\operatorname{Var}(w)=1\)。两个条件在 \(n_{\text{in}}\ne n_{\text{out}}\) 时不能同时满足，Glorot 和 Bengio 取两者的折中：</p>
+  <div class="eq">\[ \operatorname{Var}(w) = \frac{2}{n_{\text{in}} + n_{\text{out}}} \]</div>
+  <p>PyTorch 的 <code>xavier_normal_</code> 用 \(\mathcal{N}(0, \text{std}^2)\)，\(\text{std} = \text{gain}\times\sqrt{2/(\text{fan\_in}+\text{fan\_out})}\)；<code>xavier_uniform_</code> 用 \(\mathcal{U}(-a, a)\)，\(a = \text{gain}\times\sqrt{6/(\text{fan\_in}+\text{fan\_out})}\)。均匀分布 \(\mathcal{U}(-a,a)\) 的方差是 \(a^2/3\)，所以两者方差相同。gain 默认是 1。</p>
+  <h3>ReLU 为什么多一个因子 2：Kaiming（He）初始化</h3>
+  <p>ReLU 的输出全是非负的，均值不为 0，上面“输入零均值”这一步不成立，要回到 \(\operatorname{Var}(y_l) = n_l\operatorname{Var}(w_l)\,\mathbb{E}[x_l^2]\)。He 等人的推导是这样的：</p>
+  <div class="eq">\[ \begin{aligned}
+  x_l &amp;= \max(0,\ y_{l-1}),\quad y_{l-1}\ \text{关于 0 对称} \\
+  \mathbb{E}[x_l^2] &amp;= \tfrac12\,\mathbb{E}[y_{l-1}^2] = \tfrac12\operatorname{Var}(y_{l-1}) \\
+  \operatorname{Var}(y_l) &amp;= \tfrac12\, n_l\,\operatorname{Var}(w_l)\,\operatorname{Var}(y_{l-1})
+  \end{aligned} \]</div>
+  <p class="eq-note">第一行：若上一层权重关于 0 对称分布且偏置为 0，则 \(y_{l-1}\) 零均值、关于 0 对称。第二行：ReLU 把负半边置 0，正半边原样保留；对称分布的两半对 \(\mathbb{E}[y^2]\) 各贡献一半。第三行代回 \(\operatorname{Var}(y_l)=n_l\operatorname{Var}(w_l)\mathbb{E}[x_l^2]\)。</p>
+  <p>验算第二行：对一百万个标准正态样本取 \(\max(0,y)^2\) 的平均，得到约 0.502，接近 \(\tfrac12\)。</p>
+  <p>要让每层的倍数 \(\tfrac12 n_l\operatorname{Var}(w_l)\) 等于 1，就得到 He 初始化：</p>
+  <div class="eq">\[ \operatorname{Var}(w_l) = \frac{2}{n_l},\qquad \text{std} = \sqrt{2/n_l} \]</div>
+  <p>论文里 \(n_l\) 是一个输出响应连接的输入个数（对卷积是 \(k^2c\)），偏置初始化为 0。论文也做了反向的推导，结论形式相同，只是 \(n\) 换成 \(k^2d\)（d 是这一层的输出通道数），并指出只用其中一个条件就够了：按反向条件初始化时，前向的总倍数是 \(c_2/d_L\)（第 2 层的输入通道数除以最后一层的输出通道数），在常见网络里不会指数级地变小，反过来也一样。</p>
+  <p>在 PyTorch 里，<code>kaiming_normal_</code> 的 \(\text{std} = \text{gain}/\sqrt{\text{fan\_mode}}\)，<code>kaiming_uniform_</code> 的边界是 \(\text{gain}\times\sqrt{3/\text{fan\_mode}}\)。默认 <code>mode="fan_in"</code>（保持前向方差），可选 <code>"fan_out"</code>（保持反向方差）。默认 <code>nonlinearity="leaky_relu"</code>、<code>a=0</code>，此时 \(\text{gain}=\sqrt{2/(1+0^2)}=\sqrt2\)，正好就是 ReLU 的 He 初始化。</p>
+  <h3>calculate_gain 的取值</h3>
+  <p><code>nn.init.calculate_gain(nonlinearity, param=None)</code> 返回推荐的 gain，用来乘在标准差上。以下取自本机 <code>torch/nn/init.py</code>：</p>
+  <div class="scroll"><table>
+    <tr><th>nonlinearity</th><th>gain</th></tr>
+    <tr><td><code>linear</code>、<code>conv1d/2d/3d</code>、<code>conv_transpose*</code>、<code>sigmoid</code></td><td>1</td></tr>
+    <tr><td><code>tanh</code></td><td>\(5/3\)</td></tr>
+    <tr><td><code>relu</code></td><td>\(\sqrt2\)</td></tr>
+    <tr><td><code>leaky_relu</code></td><td>\(\sqrt{2/(1+\text{negative\_slope}^2)}\)，不传 param 时 slope 取 0.01</td></tr>
+    <tr><td><code>selu</code></td><td>\(3/4\)</td></tr>
+  </table></div>
+  <p>注意 <code>calculate_gain("leaky_relu")</code> 单独调用时 slope 默认 0.01，而 <code>kaiming_normal_</code> 是把参数 <code>a</code>（默认 0）传进去的，所以后者的 gain 是 \(\sqrt2\)。</p>
+  <h3>fan_in 和 fan_out 怎么算</h3>
+  <p>PyTorch 按权重张量的形状计算：第 1 维是输入通道数，第 0 维是输出通道数，后面所有维相乘是“感受野大小”。</p>
+  <div class="eq">\[ \text{fan\_in} = \text{size}(1)\times\prod_{d\ge2}\text{size}(d),\qquad \text{fan\_out} = \text{size}(0)\times\prod_{d\ge2}\text{size}(d) \]</div>
+  <ul>
+    <li><code>nn.Linear(784, 256)</code>：权重 <code>(256, 784)</code>，fan_in = 784，fan_out = 256。He 的 std 为 \(\sqrt{2/784}\approx 0.0505\)；Xavier 的 std 为 \(\sqrt{2/1040}\approx 0.0439\)。</li>
+    <li><code>nn.Conv2d(3, 32, 3)</code>：权重 <code>(32, 3, 3, 3)</code>，fan_in = \(3\times9=27\)，fan_out = \(32\times9=288\)。He 的 std 为 \(\sqrt{2/27}\approx 0.272\)；Xavier 的 std 为 \(\sqrt{2/315}\approx 0.0797\)。</li>
+  </ul>
+  <p>源码里有一条提醒：这套算法默认权重按 <code>x @ w.T</code> 的方式使用（形状 <code>[fan_out, fan_in]</code>）。如果你自己写的层按 <code>x @ w</code> 使用、形状是 <code>[fan_in, fan_out]</code>，要传 <code>w.T</code> 进去，否则 fan_in 和 fan_out 会对调。</p>
+  <h3>nn.Linear 默认怎么初始化</h3>
+  <p>不调用任何 init 时，<code>nn.Linear</code> 和 <code>nn.Conv2d</code> 的 <code>reset_parameters</code> 都执行 <code>kaiming_uniform_(weight, a=math.sqrt(5))</code>。此时 \(\text{gain}=\sqrt{2/(1+5)}=\sqrt{1/3}\)，边界是 \(\sqrt{1/3}\times\sqrt{3/\text{fan\_in}} = 1/\sqrt{\text{fan\_in}}\)。也就是说：</p>
+  <div class="eq">\[ w \sim \mathcal{U}\Big(-\tfrac{1}{\sqrt{\text{fan\_in}}},\ \tfrac{1}{\sqrt{\text{fan\_in}}}\Big),\qquad \operatorname{Var}(w) = \frac{1}{3\,\text{fan\_in}} \]</div>
+  <p class="eq-note">其中偏置也从同一区间 \(\mathcal{U}(-1/\sqrt{\text{fan\_in}}, 1/\sqrt{\text{fan\_in}})\) 采样。源码注释也是这样说明的。</p>
+  <p>这个方差是 He 初始化 \(2/\text{fan\_in}\) 的六分之一。对 784 输入的层，边界是 \(1/28\approx0.0357\)。所以默认初始化不是 He 初始化；很深的纯 ReLU 网络如果不加归一化，显式调用 <code>kaiming_normal_</code> 更稳。</p>
+  <h3>为什么不能全部初始化为 0</h3>
+  <p>同一层的所有神经元如果初始权重完全相同，它们算出的输出相同，收到的梯度也相同，更新后仍然相同。这叫<b>对称性</b>：无论训练多久，这一层实际上只有一个神经元。随机初始化的作用就是打破对称。</p>
+  <p>全零更糟。以 <code>Linear → ReLU → Linear</code> 为例，全部参数为 0 时，隐藏层输出 \(\operatorname{ReLU}(0)=0\)。第二层权重的梯度是“上游梯度 × 隐藏输出”，等于 0；第一层权重的梯度要乘上第二层权重，也是 0。只有最后一层的偏置能动。实际跑 50 步 SGD，两层权重仍然全是 0，只有输出偏置变了。</p>
+  <p>换成全部初始化为同一个常数 0.5、激活用 tanh，训练 50 步后第一层权重的 4 行仍然完全一样（每行都是同一对数）。网络能学，但 4 个隐藏单元始终是一个的复制。</p>
+  <h3>BatchNorm 与 Dropout 在深层网络里的作用</h3>
+  <p>初始化只管训练开始那一刻。训练过程中每层输入的分布会随前面层的参数变化而变化，Ioffe 和 Szegedy 把这称为 internal covariate shift。BatchNorm 对一个小批量 \(\{x_1,\dots,x_m\}\) 的每个特征维度做：</p>
+  <div class="eq">\[ \begin{aligned}
+  \mu_B &amp;= \frac1m\sum_{i=1}^m x_i,\qquad \sigma_B^2 = \frac1m\sum_{i=1}^m (x_i-\mu_B)^2 \\
+  \hat x_i &amp;= \frac{x_i-\mu_B}{\sqrt{\sigma_B^2+\epsilon}},\qquad y_i = \gamma\hat x_i + \beta
+  \end{aligned} \]</div>
+  <p class="eq-note">其中 \(\epsilon\) 是防止除零的小常数，\(\gamma,\beta\) 是可学习参数，取 \(\gamma=\sqrt{\sigma^2+\epsilon}\)、\(\beta=\mu\) 时可以恢复原值，所以不损失表达能力。卷积层里每个通道共用一对 \(\gamma,\beta\)，统计量在批和空间位置上一起求。</p>
+  <ul>
+    <li>训练时用当前批的统计量；推理时用训练中累积的总体统计量。PyTorch 的 <code>nn.BatchNorm2d</code> 默认 <code>eps=1e-5</code>、<code>momentum=0.1</code>，γ 初始为 1、β 初始为 0，<code>model.eval()</code> 后改用滑动平均的统计量。</li>
+    <li>论文摘要说，BN 让训练可以用更大的学习率、对初始化不那么敏感，还有一定正则作用，有时可以不用 Dropout。</li>
+    <li>Dropout 在训练时以概率 p 把元素置 0，并把保留的元素乘以 \(1/(1-p)\)，使期望不变；推理时是恒等映射。<code>nn.Dropout</code> 默认 <code>p=0.5</code>。所以评估前一定要 <code>model.eval()</code>。</li>
+  </ul>
+  <h3>PyTorch 里怎么写</h3>
+  <p>给整个模型换初始化的惯用法是写一个“只处理某些层”的函数，交给 <code>model.apply</code>。<code>apply</code> 会递归访问每一个子模块（包括 ReLU、池化层和容器本身），所以函数里要先判断类型：</p>
+<pre><code>def init_fn(m):
+    if isinstance(m, (nn.Conv2d, nn.Linear)):
+        ...   # 对 m.weight、m.bias 调用 nn.init 里的函数
+model.apply(init_fn)</code></pre>
+  <p><code>nn.init</code> 里带下划线的函数（<code>zeros_</code>、<code>normal_</code>、<code>xavier_normal_</code>、<code>kaiming_normal_</code> 等）都是原地修改，并在 <code>no_grad</code> 下执行。<code>nn.init.normal_(w)</code> 默认 <code>mean=0, std=1</code>。</p>
+  <h3>常见错误</h3>
+  <ul>
+    <li>层与层之间忘了加激活函数，深层网络退化成一个线性模型。</li>
+    <li>初始化函数里不判断类型，对 ReLU 或 MaxPool 访问 <code>m.weight</code>，抛出 <code>AttributeError</code>。</li>
+    <li>只初始化了权重，没处理偏置；或者层建成 <code>bias=False</code> 后仍去访问 <code>m.bias</code>（此时它是 <code>None</code>）。</li>
+    <li>以为不写初始化就是 He 初始化。默认的是 \(\mathcal{U}(\pm1/\sqrt{\text{fan\_in}})\)，方差小六倍。</li>
+    <li>对 tanh 网络用 He 初始化，或对 ReLU 网络用 gain=1 的 Xavier。方差会逐层放大或减半。</li>
+    <li>自己写的权重按 <code>[fan_in, fan_out]</code> 存，直接交给 <code>kaiming_normal_</code>，fan 算反了。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么 He 初始化的方差是 Xavier（\(n_{\text{in}}=n_{\text{out}}\) 时）的两倍？ReLU 把一半的输入置零，使 \(\mathbb{E}[x^2]\) 只有前一层方差的一半。权重方差加倍正好补回这个 \(\tfrac12\)。</li>
+    <li>前向推导里哪个假设最容易被违反？“输入零均值”。ReLU 之后的激活全为非负，所以要用 \(\mathbb{E}[x^2]\) 代替 \(\operatorname{Var}(x)\)，这正是 He 论文与 Glorot 推导的区别。</li>
+    <li>卷积层的 fan_in 为什么要乘 \(k^2\)？一个输出像素是 \(C_{\text{in}}\times k\times k\) 个输入的加权和，项数就是这个数，方差推导里的 n 也就是它。</li>
+    <li>有了 BatchNorm 还需要关心初始化吗？BN 会把每层的输出重新标准化，大大降低了对初始化尺度的敏感性，但对称性问题仍在：全零或全相同的权重仍然学不出不同的特征。</li>
+    <li><code>mode="fan_out"</code> 什么时候用？想保持反向传播中梯度的方差时用。按 He 论文的分析，选定一个方向后，另一个方向的总倍数只是一个与首尾通道数之比有关的常数，不随层数指数变化；论文里两种都能让模型收敛。</li>
+    <li>偏置要不要随机初始化？通常置 0 就行（He 论文也是这样做的）。打破对称靠的是权重，偏置全相同不会让不同神经元保持一致，因为它们的权重已经不同。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>DNNModel</b>（B.5，仓库题 <code>custom-dnn</code>）：无参数构造 <code>DNNModel()</code>，输入 <code>(batch, 2)</code>，输出 <code>(batch, 1)</code>，做回归。至少一层隐藏层，层间接 ReLU。判题检查四件事：输出形状是 <code>(4, 1)</code>；batch 为 1、3、8 时形状都对；每个可训练参数都收到非零梯度（定义了却没在 <code>forward</code> 里用的层会被报出来）；在一个固定批次上用 Adam（lr = 1e-3）训练 40 步，MSE 要下降。注意起始代码里 <code>forward</code> 末尾是 <code>return x</code>，记得让 x 真正经过各层。</p>
+  <p><b>config_init(init_type)</b>（B.5i，仓库题 <code>cnn-param-init</code>）：返回一个<b>函数</b>，不是执行它。这个函数接收一个模块 m，交给 <code>model.apply</code> 使用。四个名字都要有：<code>"zeros"</code>、<code>"random"</code>、<code>"xavier"</code>、<code>"kaiming"</code>。判题把它用到一个含 <code>Conv2d(32, 32, 3)</code>、ReLU、MaxPool 和一个方阵 <code>Linear(512, 512)</code> 的小网络上，然后检查：</p>
+  <ul>
+    <li>每个名字都返回可调用对象；对整个模型 <code>apply</code> 后前向不报错、形状不变（所以要跳过 ReLU、池化和容器本身）。</li>
+    <li><code>zeros</code>：Conv2d 和 Linear 的权重<b>和偏置</b>全为 0。</li>
+    <li><code>random</code>：权重的标准差在 1 附近（0.75 到 1.35 之间），即标准正态。</li>
+    <li><code>xavier</code>：权重标准差约为 \(\sqrt{1/n}\)；<code>kaiming</code>：约为 \(\sqrt{2/n}\)。这里的层是“方的”，fan_in = fan_out = n（卷积 \(n=32\times9=288\)，全连接 \(n=512\)），所以正态和均匀版本的标准差相同，用哪个都行。只要在 0.75 到 1.3 倍的范围内。</li>
+    <li>四种策略得到的卷积权重标准差互不相同。</li>
+  </ul>
+  <p>容易踩的坑：Kaiming 的 gain 要是 \(\sqrt2\)。直接用 <code>kaiming_normal_</code> 的默认参数就是这个值；如果自己用 <code>calculate_gain("leaky_relu")</code> 算 gain，slope 会取 0.01，结果略小于 \(\sqrt2\)，仍在容差内，但不是题目要的。<code>random</code> 的标准差是 1，卷积输出会非常大，这是预期现象，正好说明为什么要按 fan 缩放。原 notebook 在模块顶层用 torchvision 下载 CIFAR-10，判题不需要它们。提交文件里只保留类与函数定义，<b>不要在模块顶层 import torchvision 或下载数据</b>；想自己训练对比，把这些代码放进 <code>if __name__ == "__main__":</code>。判题环境没有网络，顶层下载会直接失败。</p>
   <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/init.py" target="_blank" rel="noopener">PyTorch 源码：torch/nn/init.py</a> <span class="sub">（xavier_*、kaiming_*、calculate_gain、fan_in/fan_out 的计算）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1502.01852" target="_blank" rel="noopener">He 等，Delving Deep into Rectifiers</a> <span class="sub">（Kaiming 初始化的方差推导）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1502.03167" target="_blank" rel="noopener">Ioffe &amp; Szegedy，Batch Normalization</a> <span class="sub">（BatchNorm 的定义）</span></span></li><li><span class="pill">经典文献</span><span>Glorot &amp; Bengio，Understanding the difficulty of training deep feedforward neural networks，AISTATS 2010 <span class="sub">（Xavier 初始化）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b5_dnn.py
@@ -3205,9 +3687,103 @@ for e in range(N):
 <section id="b6" data-title="B.6 卷积神经网络" hidden>
   <h2>B.6 卷积神经网络：从零实现卷积与池化</h2>
   <p class="sub">卷积为什么适合图像；输出尺寸公式；用 unfold 把卷积变成矩阵乘法；搭一个小 CNN。</p>
-  <p>（待写）</p>
+  <h3>直觉：为什么图像要用卷积</h3>
+  <p>想认出一张照片里有没有猫眼睛，你不需要同时看整张图，只要盯住一小块区域；而且猫眼睛出现在左上角还是右下角，长相是一样的。卷积层把这两点写进了结构里：</p>
+  <ul>
+    <li><b>局部连接</b>：每个输出像素只看输入里一个 \(k\times k\) 的小窗口，而不是全部像素。</li>
+    <li><b>权重共享</b>：同一个卷积核在所有位置滑动使用。在一处学会识别某种边缘，所有位置都能识别。</li>
+  </ul>
+  <p>一个卷积核可以看成一个“模式探测器”：窗口里的内容越像这个核，输出越大。卷积层有多个核，每个核产生一张特征图（一个输出通道）。</p>
+  <h3>参数量对比</h3>
+  <p>输入是 \(3\times32\times32\) 的彩色图（3072 个数），输出想要 32 个通道、尺寸不变（\(32\times32\times32 = 32768\) 个数）。</p>
+  <div class="scroll"><table>
+    <tr><th>做法</th><th>参数个数</th></tr>
+    <tr><td>全连接：每个输出连所有输入</td><td>\(3072\times32768 = 100{,}663{,}296\) 个权重，另加 32768 个偏置</td></tr>
+    <tr><td><code>nn.Conv2d(3, 32, 3, padding=1)</code></td><td>\(32\times3\times3\times3 + 32 = 896\)</td></tr>
+  </table></div>
+  <p>差了十万倍以上。卷积的参数个数只取决于通道数和核大小，与图像尺寸无关。</p>
+  <h3>定义：PyTorch 的“卷积”其实是互相关</h3>
+  <p>按 <code>nn.Conv2d</code> 文档，第 j 个输出通道是：</p>
+  <div class="eq">\[ \text{out}(n, j) = \text{bias}(j) + \sum_{c=0}^{C_{\text{in}}-1} \text{weight}(j, c) \star \text{input}(n, c) \]</div>
+  <p class="eq-note">其中 \(\star\) 是二维互相关。展开到一个位置 \((h, w)\)（stride 为 s，已含 padding）：\(\text{out}(n,j,h,w) = b_j + \sum_{c}\sum_{u=0}^{k-1}\sum_{v=0}^{k-1} W_{j,c,u,v}\,X_{n,c,\,sh+u,\,sw+v}\)。</p>
+  <p>数学上的卷积要先把核上下、左右翻转再滑动。神经网络里核是学出来的，翻不翻转只是学到的参数排列不同，所以深度学习文献（包括 Dumoulin 与 Visin 的指南）都把互相关叫作卷积。但从零实现时要按互相关写，否则和 <code>nn.Conv2d</code> 对不上。</p>
+  <p><b>小例子</b>：输入 \(X=\begin{pmatrix}1&amp;2&amp;0\\0&amp;1&amp;3\\2&amp;1&amp;0\end{pmatrix}\)，核 \(K=\begin{pmatrix}1&amp;0\\0&amp;-1\end{pmatrix}\)，无填充，步长 1，输出 \(2\times2\)。</p>
+  <div class="eq">\[ \begin{aligned}
+  \text{out}_{0,0} &amp;= 1\cdot1 + 2\cdot0 + 0\cdot0 + 1\cdot(-1) = 0 \\
+  \text{out}_{0,1} &amp;= 2\cdot1 + 0\cdot0 + 1\cdot0 + 3\cdot(-1) = -1
+  \end{aligned} \]</div>
+  <p>全部算完，互相关的结果是 \(\begin{pmatrix}0&amp;-1\\-1&amp;1\end{pmatrix}\)；用翻转后的核做真正的卷积，结果是 \(\begin{pmatrix}0&amp;1\\1&amp;-1\end{pmatrix}\)。两者不同，<code>F.conv2d</code> 给出的是前者。</p>
+  <h3>输出尺寸公式</h3>
+  <p>先看最简单的情况：长度 i 的输入，大小 k 的核，步长 1，不填充。核的左端可以放在 0、1、…、\(i-k\)，共 \(i-k+1\) 个位置。再逐步加入其他参数：</p>
+  <div class="eq">\[ \begin{aligned}
+  o &amp;= i - k + 1 &amp;&amp; \text{无填充，步长 1} \\
+  o &amp;= (i + 2p) - k + 1 &amp;&amp; \text{两边各填 } p \text{ 个 0，输入变长 } 2p \\
+  o &amp;= \Big\lfloor \frac{i + 2p - k}{s} \Big\rfloor + 1 &amp;&amp; \text{每次跳 } s \text{ 格，数一共能放几次} \\
+  o &amp;= \Big\lfloor \frac{i + 2p - d(k-1) - 1}{s} \Big\rfloor + 1 &amp;&amp; \text{膨胀 } d \text{：核实际跨度 } d(k-1)+1
+  \end{aligned} \]</div>
+  <p class="eq-note">第三行：从位置 0 开始，每次右移 s，最后一个起点不能超过 \(i+2p-k\)，能放的个数是 \(\lfloor (i+2p-k)/s\rfloor + 1\)。第四行：膨胀把核的相邻元素隔开 \(d-1\) 格，等效核大小 \(k + (k-1)(d-1) = d(k-1)+1\)，代入第三行即得。这正是 <code>nn.Conv2d</code> 文档给出的公式，也是 Dumoulin 与 Visin 的 Relationship 6 和 15。</p>
+  <div class="scroll"><table>
+    <tr><th>i</th><th>k</th><th>p</th><th>s</th><th>d</th><th>o</th><th>说明</th></tr>
+    <tr><td>32</td><td>3</td><td>1</td><td>1</td><td>1</td><td>32</td><td>“same” 填充：k 为奇数时 \(p=\lfloor k/2\rfloor\) 保持尺寸</td></tr>
+    <tr><td>32</td><td>3</td><td>1</td><td>2</td><td>1</td><td>16</td><td>\(\lfloor 31/2\rfloor + 1 = 16\)</td></tr>
+    <tr><td>32</td><td>5</td><td>0</td><td>1</td><td>1</td><td>28</td><td>无填充每边少 2</td></tr>
+    <tr><td>7</td><td>3</td><td>0</td><td>1</td><td>2</td><td>3</td><td>等效核大小 5</td></tr>
+    <tr><td>5 或 6</td><td>3</td><td>1</td><td>2</td><td>1</td><td>3</td><td>向下取整使两种输入得到同样尺寸</td></tr>
+  </table></div>
+  <p>表中每一行都用 <code>nn.Conv2d</code> 实际跑过。最后一行是论文里的例子：s &gt; 1 时，多出来的一行或一列可能根本没被核覆盖。</p>
+  <h3>im2col：把卷积变成一次矩阵乘法</h3>
+  <p>四重循环（输出通道、输出位置、输入通道、核内位置）写起来直观，但在 Python 里很慢。im2col 的思路是：把每个窗口里的 \(C_{\text{in}}\times k\times k\) 个数拉成一列，所有窗口排成一个矩阵；卷积核也拉成行。这样每个“窗口与核的点积”就成了矩阵乘法里的一个元素。</p>
+  <p><code>F.unfold</code> 做的就是“把窗口拉成列”。它的输出形状是 \((N,\ C\cdot\prod k,\ L)\)，L 是窗口个数，等于各空间维输出尺寸的乘积（与上面的公式相同）。例如 <code>F.unfold(torch.randn(2, 3, 16, 16), kernel_size=3, padding=1, stride=2)</code> 的形状是 <code>(2, 27, 64)</code>：\(27=3\times3\times3\)，\(64 = 8\times8\)。</p>
+<pre><code>x        (N, C_in, H, W)
+unfold   (N, C_in*k*k, L)          L = H_out * W_out
+weight   (C_out, C_in, k, k)  -&gt; 拉平成 (C_out, C_in*k*k)
+相乘     (C_out, C_in*k*k) @ (N, C_in*k*k, L) -&gt; (N, C_out, L)   # 广播到每个样本
+加偏置   bias 形状 (C_out,)，要加到第 1 维上
+还原     (N, C_out, L) -&gt; (N, C_out, H_out, W_out)</code></pre>
+  <p>拉平权重时的元素顺序必须和 <code>unfold</code> 列内的顺序一致。<code>unfold</code> 列内的顺序是先通道、再核内的行、再列，和权重张量 <code>(C_in, k, k)</code> 直接 <code>reshape</code> 的顺序相同。代价是内存：每个输入像素会被复制到最多 \(k^2\) 个窗口里。</p>
+  <h3>最大池化</h3>
+  <p>最大池化在每个窗口里取最大值，没有参数，各通道独立处理。它把特征图缩小，同时对窗口内的小平移不敏感：最大值在窗口里挪动一格，输出不变。</p>
+  <p><b>小例子</b>：\(4\times4\) 输入，\(2\times2\) 窗口，步长 2：</p>
+  <div class="eq">\[ \begin{pmatrix}1&amp;3&amp;2&amp;0\\4&amp;2&amp;1&amp;5\\0&amp;1&amp;3&amp;2\\6&amp;0&amp;1&amp;1\end{pmatrix} \;\xrightarrow{\ \max\ }\; \begin{pmatrix}4&amp;5\\6&amp;3\end{pmatrix} \]</div>
+  <p>输出尺寸公式与卷积相同（<code>nn.MaxPool2d</code> 文档里是同一个式子）。PyTorch 中 <code>stride</code> 不传时默认等于 <code>kernel_size</code>，<code>padding</code> 填的是负无穷而不是 0。反向传播时，梯度只流回每个窗口里取到最大值的那个位置。</p>
+  <h3>感受野</h3>
+  <p>感受野是一个输出像素“能看到”的输入区域大小。堆叠两层 \(3\times3\)、步长 1 的卷积，第二层的一个像素看第一层的 \(3\times3\)，而这 9 个像素合起来覆盖输入的 \(5\times5\)；三层就是 \(7\times7\)。一般地，每加一层，感受野增加 \((k-1)\) 乘以前面所有层步长的乘积：</p>
+  <div class="eq">\[ r_l = r_{l-1} + (k_l - 1)\prod_{i=1}^{l-1} s_i,\qquad r_0 = 1 \]</div>
+  <p class="eq-note">其中 \(k_l, s_l\) 是第 l 层的核大小与步长。池化层也按这个式子算，池化与步长都会让后面每层的感受野增长得更快。</p>
+  <p>三层 \(3\times3\) 和一层 \(7\times7\) 的感受野相同。若输入、输出通道都是 C，前者的权重数是 \(3\times9C^2=27C^2\)，后者是 \(49C^2\)，而且前者中间还多了两次非线性。</p>
+  <h3>一个小 CNN 的形状流水</h3>
+  <p>CIFAR-10 的图像是 \(3\times32\times32\)，10 类。一种常见的写法（每次卷积用 same 填充保持尺寸，池化减半）：</p>
+<pre><code>输入                         (N, 3, 32, 32)
+Conv2d(3, 32, 3, padding=1)   (N, 32, 32, 32)    参数 896
+ReLU, MaxPool2d(2)            (N, 32, 16, 16)
+Conv2d(32, 64, 3, padding=1)  (N, 64, 16, 16)    参数 18,496
+ReLU, MaxPool2d(2)            (N, 64, 8, 8)
+flatten                       (N, 4096)          64*8*8 = 4096
+Linear(4096, 128), ReLU       (N, 128)           参数 524,416
+Linear(128, 10)               (N, 10)            参数 1,290</code></pre>
+  <p>总共 545,098 个参数，九成以上在第一个全连接层。最后输出的是 logits，不要接 softmax，<code>nn.CrossEntropyLoss</code> 内部会做 log-softmax。</p>
+  <p>展平用 <code>x.flatten(1)</code> 或 <code>x.view(x.size(0), -1)</code>，保留 batch 维。写成 <code>x.view(-1, 4096)</code> 在尺寸算错时会悄悄改变 batch 大小，而不是报错。</p>
+  <h3>常见错误</h3>
+  <ul>
+    <li>输出尺寸公式里忘了向下取整，或者把 padding 只加了一边（应该是 \(2p\)）。</li>
+    <li>实现成了真正的卷积（把核翻转），结果与 <code>nn.Conv2d</code> 不一致。</li>
+    <li>偏置加错维度：偏置每个输出通道一个，形状 <code>(C_out,)</code>，加到 <code>(N, C_out, H, W)</code> 上要先变成 <code>(1, C_out, 1, 1)</code>。</li>
+    <li>权重用普通张量而不是 <code>nn.Parameter</code>，<code>model.parameters()</code> 里看不到它，优化器不会更新，判题也会说没有梯度。</li>
+    <li>最大池化的 <code>stride=None</code> 没有换成 <code>kernel_size</code>，变成了步长 1 的重叠池化。</li>
+    <li>第一个全连接层的 <code>in_features</code> 按池化前的尺寸算。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>卷积层的输出尺寸为什么依赖输入尺寸，全连接层却不依赖？卷积的输出位置数由能放下多少个窗口决定；全连接的输出维数就是 <code>out_features</code>，与输入无关。</li>
+    <li>\(1\times1\) 卷积有什么用？它不看邻域，只在每个像素上对通道做线性组合，常用来改变通道数。</li>
+    <li>用 unfold 实现时，内存开销大约是多少？unfold 结果有 \(N\cdot C_{\text{in}}k^2\cdot L\) 个元素。步长 1、same 填充时 \(L=HW\)，约为输入的 \(k^2\) 倍。</li>
+    <li>卷积对平移是“等变”的，池化带来什么？输入平移，卷积输出跟着平移（忽略边界）；池化在窗口内取最大，让输出对小范围平移不变。</li>
+    <li>为什么 same 填充要求 k 为奇数？\(o = i + 2p - k + 1 = i\) 要求 \(2p = k-1\)，k 为偶数时 p 不是整数，两边只能不对称地填。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>Conv2dCustom(in_channels, out_channels, kernel_size, stride=1, padding=0)</b>（B.6，仓库题 <code>cnn-scratch</code>）：不能用 <code>nn.Conv2d</code>，要自己定义名为 <code>weight</code>（形状 <code>(out, in, k, k)</code>）和 <code>bias</code>（形状 <code>(out,)</code>）的 <code>nn.Parameter</code>。判题会把你的 <code>m.weight</code>、<code>m.bias</code> 复制进一个 <code>nn.Conv2d</code>，在同一输入上比较结果（误差 1e-5 以内），所以名字和形状都必须一致。会测 \((s, p)\) 为 \((1,0)\)、\((1,1)\)、\((2,1)\) 的输出形状，\((1,0)\)、\((2,1)\) 的数值，以及反向传播后 <code>weight.grad</code> 非零。实现方式不限：可以按上面的 unfold 形状流水做一次矩阵乘法，也可以对输出位置写循环（慢，但判题的输入很小）。动手前先用输出尺寸公式算一遍 \(16\times16\) 输入在这三组参数下的输出边长（应分别为 14、16、8）。</p>
+  <p><b>MaxPool2dCustom(kernel_size, stride=None)</b>：与 <code>F.max_pool2d(x, 2, stride=2)</code> 比较形状和数值。<code>stride</code> 为 <code>None</code> 时取 <code>kernel_size</code>。提示：unfold 之后形状是 <code>(N, C*k*k, L)</code>，通道和窗口内元素混在第 1 维，要先拆开才能只在窗口内取最大；或者用张量的 <code>unfold</code> 方法在 H、W 两维上分别取窗口。不能调用 <code>nn.MaxPool2d</code> 或 <code>F.max_pool2d</code>。</p>
+  <p><b>CNNModel</b>（B.6c，仓库题 <code>cnn</code>）：无参数构造，输入 <code>(batch, 3, 32, 32)</code>，输出 <code>(batch, 10)</code> 的 logits，结构自选，这里可以用 <code>nn.Conv2d</code>。判题检查：输出是二维且形状正确；batch 为 1、3、8 都可以；交叉熵反向后<b>每个</b>参数都有非零梯度（定义了却没用上的层会被列出）；在固定的 8 张随机图上用 Adam 训练 30 步，损失要下降。第一个 <code>Linear</code> 的输入维数照着上面的形状流水算。原 notebook 在模块顶层用 torchvision 下载 CIFAR-10，提交文件里不要这样做，训练代码放进 <code>if __name__ == "__main__":</code>。</p>
   <ul class="refs"><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1603.07285" target="_blank" rel="noopener">Dumoulin &amp; Visin，A guide to convolution arithmetic for deep learning</a> <span class="sub">（输出尺寸、padding、stride 的关系）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/conv.py" target="_blank" rel="noopener">PyTorch 源码：nn.Conv2d</a> <span class="sub">（输出尺寸公式与权重形状）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/pooling.py" target="_blank" rel="noopener">PyTorch 源码：nn.MaxPool2d</a> <span class="sub">（池化输出尺寸）</span></span></li><li><span class="pill">经典文献</span><span>LeCun 等，Gradient-Based Learning Applied to Document Recognition，Proceedings of the IEEE，1998 <span class="sub">（LeNet-5）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b6_cnn_scratch.py
@@ -3222,9 +3798,88 @@ for e in range(N):
 <section id="b7" data-title="B.7 循环神经网络" hidden>
   <h2>B.7 循环神经网络 RNN</h2>
   <p class="sub">用同一组权重一步步读序列；时间反向传播；梯度为什么会消失或爆炸。</p>
-  <p>（待写）</p>
+  <h3>直觉：边读边记笔记</h3>
+  <p>读一句话时，你是一个词一个词往下读的，脑子里一直带着“到目前为止讲了什么”的印象，每读一个新词就更新一下这个印象。循环神经网络（RNN）就是这样：它维护一个隐藏状态 \(\mathbf{h}_t\)，每一步把新输入 \(\mathbf{x}_t\) 和旧状态 \(\mathbf{h}_{t-1}\) 合起来，算出新状态。</p>
+  <p>关键是<b>每一步用的是同一组权重</b>。这和卷积在空间上共享权重是同一个想法，只是换成在时间上共享。所以 RNN 的参数个数与序列长度无关，同一个模型可以读长度 3 的序列，也可以读长度 300 的。</p>
+  <h3>公式</h3>
+  <p><code>nn.RNN</code>（默认 tanh）每一步计算：</p>
+  <div class="eq">\[ \mathbf{h}_t = \tanh\big(W_{ih}\,\mathbf{x}_t + \mathbf{b}_{ih} + W_{hh}\,\mathbf{h}_{t-1} + \mathbf{b}_{hh}\big) \]</div>
+  <p class="eq-note">其中 \(\mathbf{x}_t\in\mathbb{R}^{d}\) 是第 t 步输入，\(\mathbf{h}_t\in\mathbb{R}^{h}\) 是隐藏状态，\(W_{ih}\) 形状 \(h\times d\)，\(W_{hh}\) 形状 \(h\times h\)。\(\mathbf{h}_0\) 不传时默认全 0。PyTorch 有两个偏置，它们只是相加，数学上等价于一个。文档里写成行向量形式 \(x_t W_{ih}^\top + \dots\)，与此相同。</p>
+  <p>参数个数：\(hd + h^2 + 2h\)。<code>nn.RNN(1, 32)</code> 有 \(32 + 1024 + 64 = 1120\) 个参数，四个张量分别是 <code>weight_ih_l0 (32, 1)</code>、<code>weight_hh_l0 (32, 32)</code>、<code>bias_ih_l0 (32,)</code>、<code>bias_hh_l0 (32,)</code>。默认初始化都是 \(\mathcal{U}(-\sqrt{k}, \sqrt{k})\)，\(k = 1/h\)。</p>
+  <h3>小例子：一个标量 RNN 怎么“记住”过去</h3>
+  <p>取 \(d = h = 1\)，\(w_{ih}=1\)，\(w_{hh}=0.5\)，偏置为 0，\(h_0 = 0\)，输入序列 \(x = (1, 0, 0)\)：</p>
+  <div class="eq">\[ \begin{aligned}
+  h_1 &amp;= \tanh(1\cdot1 + 0.5\cdot0) = \tanh(1) \approx 0.762 \\
+  h_2 &amp;= \tanh(0 + 0.5\cdot0.762) = \tanh(0.381) \approx 0.363 \\
+  h_3 &amp;= \tanh(0 + 0.5\cdot0.363) = \tanh(0.182) \approx 0.180
+  \end{aligned} \]</div>
+  <p>第 2、3 步输入都是 0，隐藏状态却不为 0，它保存着第 1 步的信息，但每步大约衰减一半。如果第 1 步输入是 \(-1\)，三个状态都会变号。这就是 RNN 能区分“最后一步相同、历史不同”的两个序列的原因，也是本课判题的一项检查。</p>
+  <h3>PyTorch 里的形状</h3>
+<pre><code>rnn = nn.RNN(input_size=1, hidden_size=32, batch_first=True)
+x              (N, L, 1)            batch_first=True 时 batch 在前
+output, h_n = rnn(x)
+output         (N, L, 32)           每一步最后一层的 h_t
+h_n            (num_layers, N, 32)  每一层最后一步的 h_t；batch 不在前
+output[:, -1]  (N, 32)              单向时等于 h_n[-1]
+fc(...)        (N, 1)</code></pre>
+  <ul>
+    <li><code>batch_first</code> 默认是 <code>False</code>，此时输入应是 <code>(L, N, d)</code>。把 <code>(N, L, d)</code> 的数据直接喂进去不会报错，只会把 batch 当成时间。</li>
+    <li><code>batch_first</code> 只影响 <code>input</code> 和 <code>output</code>，不影响 <code>h_0</code> 和 <code>h_n</code>，它们始终是 <code>(D·num_layers, N, h)</code>。</li>
+    <li><code>output</code> 是“每个时间步”的结果，适合序列标注；<code>h_n</code> 是“每一层”的最终状态，适合把整个序列压成一个向量。多层时 <code>output</code> 只含最后一层，<code>h_n</code> 含所有层。</li>
+  </ul>
+  <h3>时间反向传播（BPTT）</h3>
+  <p>把 RNN 沿时间展开，它就是一个 T 层的深层网络，只是每层权重相同。对展开后的图做普通反向传播，就叫时间反向传播。设损失只依赖最后的 \(\mathbf{h}_T\)，由链式法则：</p>
+  <div class="eq">\[ \frac{\partial L}{\partial \mathbf{h}_k} = \frac{\partial L}{\partial \mathbf{h}_T}\prod_{t=k+1}^{T}\frac{\partial \mathbf{h}_t}{\partial \mathbf{h}_{t-1}},\qquad \frac{\partial \mathbf{h}_t}{\partial \mathbf{h}_{t-1}} = \operatorname{diag}\big(1-\mathbf{h}_t^{2}\big)\,W_{hh} \]</div>
+  <p class="eq-note">第二式：设 \(\mathbf{a}_t\) 为 tanh 里面的量，\(\partial\mathbf{h}_t/\partial\mathbf{a}_t = \operatorname{diag}(1-\mathbf{h}_t^2)\)（因为 \(\tanh'=1-\tanh^2\)），\(\partial\mathbf{a}_t/\partial\mathbf{h}_{t-1}=W_{hh}\)，两者相乘。</p>
+  <p>因为 \(W_{hh}\) 在每一步都出现，它的梯度是各步贡献之和：\(\partial L/\partial W_{hh} = \sum_t (\text{第 t 步的贡献})\)。第 k 步的贡献里带着上面那个从 k 到 T 的连乘。距离越远，连乘的项越多。</p>
+  <p>接着上面的小例子：\(\partial h_3/\partial h_1 = 0.5(1-h_2^2)\cdot0.5(1-h_3^2) \approx 0.434\times0.484 \approx 0.210\)。两步就只剩五分之一。</p>
+  <h3>梯度为什么会消失或爆炸</h3>
+  <p>先去掉 tanh，看最简单的线性标量 RNN \(h_t = w\,h_{t-1}\)，则 \(\partial h_T/\partial h_0 = w^T\)：</p>
+  <div class="scroll"><table>
+    <tr><th>T</th><th>\(0.5^T\)</th><th>\(1.5^T\)</th></tr>
+    <tr><td>10</td><td>\(9.8\times10^{-4}\)</td><td>57.7</td></tr>
+    <tr><td>20</td><td>\(9.5\times10^{-7}\)</td><td>3325</td></tr>
+    <tr><td>50</td><td>\(8.9\times10^{-16}\)</td><td>\(6.4\times10^{8}\)</td></tr>
+  </table></div>
+  <p>w 比 1 小一点，梯度指数级消失；比 1 大一点，指数级爆炸。只有 w 恰好在 1 附近才能传得远，这很难靠训练维持。</p>
+  <p>换成矩阵，起作用的是 \(W_{hh}\) 的特征值。Pascanu 等人的分析：对线性 RNN，\(W_{hh}\) 最大特征值的绝对值（谱半径）小于 1，是长期梯度分量消失的充分条件；大于 1 是梯度爆炸的必要条件。加入非线性后，若激活函数导数的绝对值不超过 \(\gamma\)，则条件变成与 \(1/\gamma\) 比较；tanh 的 \(\gamma = 1\)，sigmoid 的 \(\gamma = 1/4\)。</p>
+  <p>对 tanh 来说，\(|1-h_t^2|\le 1\)，每步雅可比的范数不超过 \(\lVert W_{hh}\rVert\)。所以 tanh 只会让梯度更小：状态一旦接近饱和（\(|h|\) 接近 1），这一步的因子就接近 0。</p>
+  <p class="note">严格地说，每步雅可比的大小由矩阵的范数（最大奇异值）控制。对称矩阵的最大奇异值就等于谱半径；一般矩阵的最大奇异值不小于谱半径。“谱半径小于 1 就消失”这一结论讲的是步数趋于无穷时的长期行为。</p>
+  <h3>梯度裁剪</h3>
+  <p>爆炸通常是偶发的：损失曲面上有“悬崖”，某一步梯度突然变得极大，一步就把参数推飞。Pascanu 等人提出的办法很简单：梯度的范数超过阈值时，按比例缩小到阈值，方向不变。</p>
+  <div class="eq">\[ \hat{\mathbf{g}} \leftarrow \frac{\text{threshold}}{\lVert\hat{\mathbf{g}}\rVert}\,\hat{\mathbf{g}}\qquad \text{若 } \lVert\hat{\mathbf{g}}\rVert \ge \text{threshold} \]</div>
+  <p class="eq-note">其中 \(\hat{\mathbf{g}}\) 是所有参数梯度拼成的向量。论文建议参考训练中梯度范数的平均水平来选阈值，并说明训练对这个阈值不太敏感。</p>
+  <p>PyTorch 里是 <code>torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)</code>，放在 <code>loss.backward()</code> 之后、<code>optimizer.step()</code> 之前。它把所有参数的梯度当作一个向量求总范数（默认 2-范数），乘以系数 \(\min\big(1,\ \text{max\_norm}/(\text{total}+10^{-6})\big)\)，原地修改，并返回裁剪<b>前</b>的总范数。例如梯度为 \((3, 4)\)、<code>max_norm=1</code>：总范数 5，裁剪后约为 \((0.6, 0.8)\)，返回 5。</p>
+  <p>裁剪只能治爆炸，治不了消失：梯度已经接近 0 时，放大它只会放大噪声。Pascanu 等人另提了一个正则项来缓解消失；实际中更常用的办法是换结构，也就是下一课的 LSTM。</p>
+  <h3>截断 BPTT</h3>
+  <p>序列很长时，把它切成若干段，每段做一次反向传播。段与段之间传递隐藏状态的数值，但用 <code>h = h.detach()</code> 切断计算图，梯度最多回传一段的长度。这样省内存，代价是梯度无法跨段传播，跨段的长期依赖更难学到。</p>
+  <h3>常见错误</h3>
+  <ul>
+    <li>忘了 <code>batch_first=True</code>，把 batch 当成了时间维。形状都对得上，所以不会报错。</li>
+    <li>以为 <code>h_n</code> 也是 batch 在前，写成 <code>h_n[:, -1]</code>，取到的是最后一个样本而不是最后一层。</li>
+    <li>把整个 <code>output</code> 展平后接全连接层：模型被绑死在一个固定的序列长度上。</li>
+    <li>每次前向用 <code>torch.randn</code> 初始化 \(\mathbf{h}_0\)：同一输入两次结果不同。应该用 0，或者干脆不传。</li>
+    <li>自己写循环时用 Python 列表收集 <code>h_t</code> 后忘了 <code>torch.stack</code>，或者在循环里用原地操作覆盖了需要求梯度的张量。</li>
+    <li>梯度裁剪放在 <code>optimizer.step()</code> 之后，等于没裁。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>RNN 的参数个数为什么与序列长度无关？每一步用同一组 \(W_{ih}, W_{hh}\) 和偏置，序列多长只决定循环几次。</li>
+    <li>RNN 能并行计算所有时间步吗？不能。\(\mathbf{h}_t\) 依赖 \(\mathbf{h}_{t-1}\)，必须一步步算。这是 Transformer 在训练速度上的优势所在（见 <a href="#attention" data-go="attention">注意力那一课</a>）。</li>
+    <li>为什么 tanh RNN 常用 tanh 而不是 ReLU？tanh 把状态限制在 \((-1, 1)\)，前向不会数值爆炸；ReLU 没有上界，\(W_{hh}\) 偏大时状态可能随时间指数增长。<code>nn.RNN</code> 也支持 <code>nonlinearity="relu"</code>。</li>
+    <li>梯度裁剪按总范数裁和按每个元素裁有什么区别？按总范数裁保持梯度方向不变；逐元素截断会改变方向。Pascanu 等人提到两者在实际中表现相近，他们选择前者是为了保证总是沿下降方向走。</li>
+    <li>梯度消失为什么让 RNN 学不到长期依赖？第 k 步对损失的贡献要乘上从 k 到 T 的连乘，距离远时这一项接近 0，参数更新几乎只由最近几步决定。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>RNNModel</b>（B.7，仓库题 <code>rnn</code>）：无参数构造 <code>RNNModel()</code>，输入 <code>(batch, seq_len, 1)</code>，输出 <code>(batch, 1)</code>，即每个序列预测一个“下一个值”。用 <code>nn.RNN</code> 或自己写 tanh 循环都可以，判题不和参考实现比数值。检查项：</p>
+  <ul>
+    <li>输出必须是二维 <code>(4, 1)</code>，不是每个时间步一个值；batch 为 1、3、8 都要对。</li>
+    <li>序列长度为 3、10、25 时输出都是 <code>(2, 1)</code>。所以全连接层只能接在“一个时间步”的隐藏状态上，不能接展平后的整个序列。</li>
+    <li>两条序列最后一步都是 0，前 9 步一条全是 1、一条全是 \(-1\)，两者预测必须不同。只看 <code>x[:, -1]</code> 的模型过不了。</li>
+    <li>eval 模式下同一输入两次前向结果相同：初始隐藏状态用 0，不要用随机数。</li>
+    <li>每个参数都有非零梯度；在固定批次上用 Adam（lr = 1e-2）训练 60 步，MSE 要下降。</li>
+  </ul>
+  <p>注意上面 <code>h_n</code> 的形状。另外，<code>create_in_out_sequences</code> 是起始代码给的辅助函数，可以保留；生成正弦数据和训练的代码放进 <code>if __name__ == "__main__":</code>。</p>
   <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/rnn.py" target="_blank" rel="noopener">PyTorch 源码：nn.RNN</a> <span class="sub">（h_t = tanh(W_ih x_t + b_ih + W_hh h_{t-1} + b_hh)，batch_first 的形状约定）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1211.5063" target="_blank" rel="noopener">Pascanu 等，On the difficulty of training Recurrent Neural Networks</a> <span class="sub">（梯度消失/爆炸分析与梯度裁剪）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b7_rnn.py
@@ -3235,9 +3890,92 @@ for e in range(N):
 <section id="b8" data-title="B.8 LSTM" hidden>
   <h2>B.8 LSTM：门控与细胞状态</h2>
   <p class="sub">用加法更新的细胞状态缓解梯度消失；四个门逐个讲清；从零实现并与 nn.LSTM 对照。</p>
-  <p>（待写）</p>
+  <h3>直觉：一条传送带加三道闸门</h3>
+  <p>上一课看到，普通 RNN 每一步都把整个状态乘上 \(W_{hh}\) 再过一次 tanh，信息和梯度每走一步都被“重新加工”一次，走远了就消失。LSTM 的想法是另开一条<b>传送带</b>，即细胞状态 \(\mathbf{c}_t\)。传送带上的内容默认原样往后送，每一步只做两件事：按比例擦掉一部分旧内容，再加上一点新内容。是“加”，不是“乘一个矩阵”。</p>
+  <p>擦多少、加多少、往外读多少，由三道闸门（门）控制。每道门是一个取值在 \((0,1)\) 之间的向量，由 sigmoid 算出，逐元素地乘在要控制的量上：接近 1 表示放行，接近 0 表示关闭。</p>
+  <h3>四个门的公式</h3>
+  <p>按 <code>nn.LSTM</code> 文档，每一步计算：</p>
+  <div class="eq">\[ \begin{aligned}
+  \mathbf{i}_t &amp;= \sigma(W_{ii}\mathbf{x}_t + \mathbf{b}_{ii} + W_{hi}\mathbf{h}_{t-1} + \mathbf{b}_{hi}) &amp;&amp; \text{输入门} \\
+  \mathbf{f}_t &amp;= \sigma(W_{if}\mathbf{x}_t + \mathbf{b}_{if} + W_{hf}\mathbf{h}_{t-1} + \mathbf{b}_{hf}) &amp;&amp; \text{遗忘门} \\
+  \mathbf{g}_t &amp;= \tanh(W_{ig}\mathbf{x}_t + \mathbf{b}_{ig} + W_{hg}\mathbf{h}_{t-1} + \mathbf{b}_{hg}) &amp;&amp; \text{候选内容} \\
+  \mathbf{o}_t &amp;= \sigma(W_{io}\mathbf{x}_t + \mathbf{b}_{io} + W_{ho}\mathbf{h}_{t-1} + \mathbf{b}_{ho}) &amp;&amp; \text{输出门}
+  \end{aligned} \]</div>
+  <div class="eq">\[ \mathbf{c}_t = \mathbf{f}_t \odot \mathbf{c}_{t-1} + \mathbf{i}_t \odot \mathbf{g}_t,\qquad \mathbf{h}_t = \mathbf{o}_t \odot \tanh(\mathbf{c}_t) \]</div>
+  <p class="eq-note">其中 \(\sigma\) 是 sigmoid，\(\odot\) 是逐元素乘。\(\mathbf{h}_0, \mathbf{c}_0\) 不传时默认全 0。PyTorch 文档把 \(\mathbf{g}_t\) 也叫作一个“门”（cell gate），但它用 tanh，取值在 \((-1,1)\)，作用是提供要写入的内容。</p>
+  <ul>
+    <li><b>遗忘门 f</b>：旧内容保留多少。f = 1 原样保留，f = 0 全部擦掉。</li>
+    <li><b>输入门 i</b> 与 <b>候选内容 g</b>：g 是“想写什么”，i 是“写进去多少”。</li>
+    <li><b>输出门 o</b>：细胞状态里有多少被读到 \(\mathbf{h}_t\)，也就是这一步对外的输出和下一步各门看到的状态。</li>
+  </ul>
+  <p>1997 年 Hochreiter 与 Schmidhuber 提出的原始 LSTM 没有遗忘门，细胞状态每步原样保留；遗忘门是 Gers 等人在 2000 年加入的，让网络能主动清空不再需要的记忆。</p>
+  <h3>小例子：走一步</h3>
+  <p>取标量（\(h=1\)），上一步 \(c_{t-1} = 2\)。假设这一步四个门在激活函数之前的值分别是：f 为 2，i 为 0，g 为 1，o 为 1。</p>
+  <div class="eq">\[ \begin{aligned}
+  f_t &amp;= \sigma(2) \approx 0.881,\quad i_t = \sigma(0) = 0.5,\quad g_t = \tanh(1) \approx 0.762,\quad o_t = \sigma(1) \approx 0.731 \\
+  c_t &amp;= 0.881\times 2 + 0.5\times 0.762 \approx 1.762 + 0.381 = 2.142 \\
+  h_t &amp;= 0.731\times\tanh(2.142) \approx 0.731\times 0.973 \approx 0.711
+  \end{aligned} \]</div>
+  <p>注意 \(c_t\) 可以大于 1，细胞状态本身没有上下界；但 \(h_t\) 一定在 \((-1, 1)\) 内，因为它是 \((0,1)\) 里的数乘以 \((-1,1)\) 里的数。</p>
+  <h3>为什么加法更新能缓解梯度消失</h3>
+  <p>对 \(\mathbf{c}_t = \mathbf{f}_t\odot\mathbf{c}_{t-1} + \mathbf{i}_t\odot\mathbf{g}_t\) 求 \(\mathbf{c}_{t-1}\) 的导数。门 \(\mathbf{f}_t, \mathbf{i}_t, \mathbf{g}_t\) 依赖 \(\mathbf{h}_{t-1} = \mathbf{o}_{t-1}\odot\tanh(\mathbf{c}_{t-1})\)，所以也间接依赖 \(\mathbf{c}_{t-1}\)。完整的雅可比分成两部分：</p>
+  <div class="eq">\[ \frac{\partial \mathbf{c}_t}{\partial \mathbf{c}_{t-1}} = \underbrace{\operatorname{diag}(\mathbf{f}_t)}_{\text{直接路径}} \;+\; \underbrace{\frac{\partial(\mathbf{f}_t\odot\mathbf{c}_{t-1} + \mathbf{i}_t\odot\mathbf{g}_t)}{\partial \mathbf{h}_{t-1}}\Big|_{\mathbf{c}_{t-1}\text{ 固定}}\cdot\frac{\partial \mathbf{h}_{t-1}}{\partial \mathbf{c}_{t-1}}}_{\text{经过 } \mathbf{h}_{t-1} \text{ 和各门的间接路径}} \]</div>
+  <p class="eq-note">第一项来自 \(\mathbf{f}_t\odot\mathbf{c}_{t-1}\) 中显式的 \(\mathbf{c}_{t-1}\)，把门当作常数求导；第二项是门对 \(\mathbf{c}_{t-1}\) 的依赖，要乘上 \(W_{h\cdot}\) 和 sigmoid、tanh 的导数，与普通 RNN 的雅可比类似。</p>
+  <p>关键在第一项。只沿直接路径从 \(\mathbf{c}_k\) 走到 \(\mathbf{c}_T\)，梯度乘的是 \(\prod_{t=k+1}^{T}\operatorname{diag}(\mathbf{f}_t)\)：没有权重矩阵，没有激活函数的导数，只有逐元素的遗忘门。遗忘门是网络自己学的、随输入变化的，当它学到接近 1 时，这条路径上的梯度就能传得很远。</p>
+  <div class="scroll"><table>
+    <tr><th>每步因子</th><th>50 步后</th></tr>
+    <tr><td>普通 RNN，约 0.5</td><td>\(0.5^{50}\approx 8.9\times10^{-16}\)</td></tr>
+    <tr><td>LSTM 直接路径，\(f = 0.95\)</td><td>\(0.95^{50}\approx 0.077\)</td></tr>
+  </table></div>
+  <p>要说得严谨：LSTM 没有“消除”梯度消失。总梯度是许多路径之和，直接路径只是其中一条；若遗忘门接近 0，这条路径同样会衰减。LSTM 做到的是提供了一条<b>可以由网络学着保持畅通</b>的路径，而普通 RNN 的每条路径都必须穿过 \(W_{hh}\) 和 tanh 的导数。梯度爆炸 LSTM 也不能完全避免，训练时仍常配合梯度裁剪（见 <a href="#b7" data-go="b7">B.7 课</a>）。</p>
+  <h3>PyTorch 里的形状与参数</h3>
+  <p>四个门的权重拼成一个大矩阵，按 <b>(i, f, g, o)</b> 的顺序排：<code>weight_ih_l0</code> 是 \((W_{ii}|W_{if}|W_{ig}|W_{io})\)，形状 <code>(4h, d)</code>；<code>weight_hh_l0</code> 形状 <code>(4h, h)</code>；两个偏置 <code>bias_ih_l0</code>、<code>bias_hh_l0</code> 各 <code>(4h,)</code>。这样一次矩阵乘法就能算出四个门的预激活，再沿最后一维切成四份。</p>
+<pre><code>lstm = nn.LSTM(input_size=1, hidden_size=50, batch_first=True)
+x                      (N, L, 1)
+output, (h_n, c_n) = lstm(x)
+output                 (N, L, 50)          每一步的 h_t
+h_n, c_n               (num_layers, N, 50) batch 不在前
+预激活 gates            (N, 4*50)           每一步一次
+gates.chunk(4, dim=-1) 4 个 (N, 50)，顺序 i, f, g, o</code></pre>
+  <p>参数个数。数学上每个门有一个 \(h\times d\) 输入权重、一个 \(h\times h\) 循环权重和一个偏置，共 \(4\big(h(d+h)+h\big)\)。PyTorch 每个门有<b>两个</b>偏置（ih 和 hh），所以是：</p>
+  <div class="eq">\[ 4h(d+h) + 8h \]</div>
+  <p class="eq-note">以 \(d=1, h=50\) 为例：\(4\times50\times51 + 400 = 10600\)，<code>nn.LSTM(1, 50)</code> 实测也是 10600；单偏置的写法是 10400。默认初始化与 nn.RNN 相同：所有权重和偏置从 \(\mathcal{U}(-\sqrt{k},\sqrt{k})\) 采样，\(k=1/h\)。</p>
+  <h3>GRU：两道门的简化版</h3>
+  <p>Cho 等人在 2014 年的论文里提出了一种受 LSTM 启发、但更简单的隐藏单元，后来通常叫作 GRU。它没有单独的细胞状态，只有重置门 r 和更新门 z。按论文的写法（省略偏置）：</p>
+  <div class="eq">\[ \begin{aligned}
+  \mathbf{r} &amp;= \sigma(W_r\mathbf{x} + U_r\mathbf{h}_{t-1}),\qquad \mathbf{z} = \sigma(W_z\mathbf{x} + U_z\mathbf{h}_{t-1}) \\
+  \tilde{\mathbf{h}} &amp;= \tanh\big(W\mathbf{x} + U(\mathbf{r}\odot\mathbf{h}_{t-1})\big) \\
+  \mathbf{h}_t &amp;= \mathbf{z}\odot\mathbf{h}_{t-1} + (1-\mathbf{z})\odot\tilde{\mathbf{h}}
+  \end{aligned} \]</div>
+  <p class="eq-note">论文的解释：r 接近 0 时，候选状态忽略旧状态，只看当前输入；z 控制旧状态保留多少，作用类似 LSTM 的细胞状态，帮助记住长期信息。</p>
+  <p>最后一行也是加法更新：沿 \(\mathbf{h}_{t-1}\to\mathbf{h}_t\) 的直接路径，因子是 \(\mathbf{z}\)，与 LSTM 的 \(\mathbf{f}\) 同理。PyTorch 的 <code>nn.GRU</code> 有一处有意的不同：它把 r 乘在 \((W_{hn}\mathbf{h}_{t-1} + \mathbf{b}_{hn})\) 上，而不是先乘 \(\mathbf{h}_{t-1}\)，文档说这是为了效率。GRU 只有 3 组权重，<code>nn.GRU(1, 50)</code> 有 \(3\times50\times51 + 6\times50 = 7950\) 个参数。</p>
+  <h3>常见错误</h3>
+  <ul>
+    <li>四个门的激活函数用错：g 应该用 tanh，i、f、o 用 sigmoid。把 g 也写成 sigmoid，写入的内容只能是正数，网络无法往细胞状态里写负值。</li>
+    <li>\(\mathbf{h}_t\) 写成 \(\mathbf{o}_t\odot\mathbf{c}_t\)，漏了 tanh，隐藏状态不再有界。</li>
+    <li>切分四个门时顺序和自己定义的不一致。自己实现时顺序随意，但要前后一致；想和 <code>nn.LSTM</code> 对照权重，就必须按 i, f, g, o。</li>
+    <li>传入了 <code>H_C</code> 却仍从全 0 开始，或者返回的是初始状态而不是最后一步的状态。</li>
+    <li>门的权重存成普通张量，没有注册为 <code>nn.Parameter</code>（或没用 <code>nn.Linear</code>），优化器看不到。</li>
+    <li>以为 <code>c_n</code> 和 <code>h_n</code> 都在 \((-1,1)\) 内。只有 h 有界，c 没有。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么门用 sigmoid？它的输出在 \((0,1)\)，正好表示“通过的比例”；逐元素相乘时，每个维度可以独立决定开或关。</li>
+    <li>LSTM 比同样隐藏维度的 RNN 多多少参数？四倍左右。每个门都有自己的一套 \(W_{i\cdot}, W_{h\cdot}\) 和偏置，RNN 只有一套。</li>
+    <li>\(|\mathbf{h}_t| &lt; 1\) 为什么总成立？\(\mathbf{o}_t\in(0,1)\)，\(\tanh(\mathbf{c}_t)\in(-1,1)\)，乘积的绝对值小于 1。浮点数里 sigmoid 和 tanh 会饱和成恰好 1.0，所以数值上是 \(\le 1\)。</li>
+    <li>GRU 和 LSTM 选哪个？GRU 参数更少、计算更快；LSTM 多一个细胞状态和输出门。没有一个在所有任务上都更好，通常两个都试。</li>
+    <li>“一次跑完整个序列”和“分两段跑并把 (H, C) 接起来”为什么必须一致？见下面练习说明。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>CustomLSTMModel(input_dim, hidden_units)</b>（B.8，仓库题 <code>lstm</code>）：不能用 <code>nn.LSTM</code> 或 <code>nn.LSTMCell</code>，要自己写门。<code>forward(inputs, H_C=None)</code> 接收 <code>(batch, seq_len, input_dim)</code>，返回 <code>(predictions, (H, C))</code>：predictions 形状 <code>(batch, seq_len, 1)</code>，即每一步的 \(\mathbf{h}_t\) 都经过一个输出维为 1 的线性层；H、C 都是 <code>(batch, hidden_units)</code>，是最后一步的状态。<code>H_C</code> 为 <code>None</code> 时用全 0 初始化，给出时从它开始。判题检查：</p>
+  <ul>
+    <li>形状如上；<code>hidden_units</code> 取 4 和 16 时 H 的形状跟着变，所以不能把隐藏维写死。</li>
+    <li><b>可续跑</b>：对同一个 6 步序列，一次跑完，和“先跑前 3 步，拿返回的 (H, C) 接着跑后 3 步”，两种方式的每步预测和最终 (H, C) 必须一致（误差 1e-5）。</li>
+    <li>输入放大 50 倍后，\(|H|\) 仍不超过 1（容差 1e-4）。</li>
+    <li>每个参数都有非零梯度；在固定批次上用 Adam（lr = 1e-2）训练 60 步，用最后一步预测算的 MSE 要下降。</li>
+  </ul>
+  <p><b>为什么“可续跑”能检查实现</b>：一个真正的循环是一个状态转移函数 \((\mathbf{h}_t, \mathbf{c}_t) = F(\mathbf{x}_t, \mathbf{h}_{t-1}, \mathbf{c}_{t-1})\)。6 步的结果就是把 F 连续作用 6 次；先作用 3 次得到状态，再从这个状态作用 3 次，按定义是同一个结果。哪里不对它就会暴露：忽略传入的 <code>H_C</code>、每次随机初始化状态、返回的不是最后一步的状态、H 和 C 弄反、或者某一步用到了后面时间步的信息（比如在整个序列上做归一化），都会让两种跑法不一致。它不关心门的顺序和初始化，所以单独再用 \(|H|&lt;1\) 这个界检查门的代数：漏掉输出门的 sigmoid 或 \(\tanh(\mathbf{c}_t)\) 的 tanh，大输入下 \(|H|\) 通常会超过 1。</p>
+  <p><b>LSTMModel</b>：无参数构造，用 <code>nn.LSTM</code>，输入 <code>(batch, seq_len, 1)</code>，输出 <code>(batch, 1)</code>（每个序列一个预测）。判题检查 batch 为 5 时的形状、序列长度 3、10、25 都可以、所有参数都有梯度、60 步训练损失下降。注意 <code>batch_first</code>，以及 <code>h_n</code> 的 batch 不在第 0 维。训练和画图的代码放进 <code>if __name__ == "__main__":</code>（原 notebook 里用到了未导入的 <code>plt</code>）。</p>
   <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/rnn.py" target="_blank" rel="noopener">PyTorch 源码：nn.LSTM</a> <span class="sub">（门的公式、权重按 (i, f, g, o) 排布）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1406.1078" target="_blank" rel="noopener">Cho 等，Learning Phrase Representations using RNN Encoder-Decoder</a> <span class="sub">（GRU 的提出）</span></span></li><li><span class="pill">经典文献</span><span>Hochreiter &amp; Schmidhuber，Long Short-Term Memory，Neural Computation，1997 <span class="sub">（LSTM 原始论文）</span></span></li><li><span class="pill">经典文献</span><span>Gers、Schmidhuber &amp; Cummins，Learning to Forget: Continual Prediction with LSTM，Neural Computation，2000 <span class="sub">（遗忘门）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b8_lstm.py
@@ -3248,9 +3986,138 @@ for e in range(N):
 <section id="b9" data-title="B.9 自编码器" hidden>
   <h2>B.9 自编码器</h2>
   <p class="sub">把输入压到一个小的瓶颈再还原；它学到了什么，和 PCA 的关系，与 VAE 的区别。</p>
-  <p>（待写）</p>
+  <h3>直觉</h3>
+  <p>想象你要用电报把一张 28×28 的手写数字发给朋友，但每张图只能发 32 个数。你得先想好一套“压缩办法”（编码器），朋友手里有一套对应的“还原办法”（解码器）。两套办法一起练，目标只有一个：朋友还原出来的图和原图尽量一样。</p>
+  <p>自编码器就是把这两套办法都做成神经网络，一起训练。中间那 32 个数叫<b>瓶颈</b>（latent code，记作 \(\mathbf{z}\)）。因为瓶颈比输入小，网络不能原样照抄，只能保留“最能帮助还原”的信息。训练不需要标签，输入本身就是目标，所以它属于无监督（也常叫自监督）学习。</p>
+  <p>学到之后有三类用途：</p>
+  <ul>
+    <li><b>降维与特征</b>：把编码器的输出 \(\mathbf{z}\) 拿去做可视化、聚类或下游任务的特征。</li>
+    <li><b>去噪</b>：喂带噪声的输入，要求还原干净的输出。</li>
+    <li><b>异常检测</b>（本课练习的背景）：只用“正常”数据训练。遇到没见过的样子时，网络还原不好，重构误差偏大，据此报警。</li>
+  </ul>
+
+  <h3>结构：编码器、瓶颈、解码器</h3>
+  <div class="eq">\[ \mathbf{z} = f_\phi(\mathbf{x}), \qquad \hat{\mathbf{x}} = g_\theta(\mathbf{z}), \qquad \min_{\phi,\theta}\ \frac{1}{n}\sum_{i=1}^{n} \ell\big(\mathbf{x}_i,\ g_\theta(f_\phi(\mathbf{x}_i))\big) \]</div>
+  <p class="eq-note">其中 \(f_\phi\) 是编码器，\(g_\theta\) 是解码器，\(\ell\) 是重构损失。损失里只有 \(\mathbf{x}\)，没有标签。</p>
+  <p><b>重构损失怎么选。</b>最常见的是均方误差，也就是 <code>nn.MSELoss()</code>：</p>
+  <div class="eq">\[ \ell_{\text{MSE}}(\mathbf{x}, \hat{\mathbf{x}}) = \frac{1}{d}\sum_{j=1}^{d}\big(x_j - \hat x_j\big)^2 \]</div>
+  <p class="eq-note">其中 \(d\) 是每个样本的元素个数。<code>nn.MSELoss</code> 默认 <code>reduction="mean"</code>，对批次和所有像素一起取平均。</p>
+  <p>如果像素在 \([0, 1]\) 里、可以理解成“这个像素亮的概率”，也可以用逐像素的二元交叉熵 <code>F.binary_cross_entropy</code>。两种都常见，这道题的 notebook 用的是 MSE。</p>
+  <p><b>为什么非要有瓶颈。</b>如果中间层和输入一样大，网络可以学成恒等映射 \(g(f(\mathbf{x})) = \mathbf{x}\)，重构误差为 0，却什么规律都没学到。瓶颈强迫它取舍：只能把数据里最主要的变化方向留下来。下一节会看到，线性的情况下，“最主要的方向”恰好就是 PCA 的主成分。</p>
+
+  <h3>一个带数字的例子：线性自编码器等于找主成分</h3>
+  <p>取 4 个二维点（已经中心化，均值为 0）：\((2, 0)\)、\((-2, 0)\)、\((0, 1)\)、\((0, -1)\)。瓶颈只有 1 维，编码器和解码器都是不带偏置的线性层：</p>
+  <div class="eq">\[ z = \mathbf{w}_e^\top \mathbf{x}, \qquad \hat{\mathbf{x}} = \mathbf{w}_d\, z = \mathbf{w}_d \mathbf{w}_e^\top \mathbf{x} \]</div>
+  <p class="eq-note">其中 \(\mathbf{w}_e, \mathbf{w}_d \in \mathbb{R}^2\)。损失取每个点的平方误差 \(\lVert \mathbf{x} - \hat{\mathbf{x}}\rVert^2\) 再对 4 个点平均。</p>
+  <p>先算协方差（按 \(1/n\)）：\(x\) 方向的方差是 \((4 + 4 + 0 + 0)/4 = 2\)，\(y\) 方向是 \((0 + 0 + 1 + 1)/4 = 0.5\)，协方差为 0。所以第一主成分是 \(x\) 轴，\(\lambda_1 = 2\)，\(\lambda_2 = 0.5\)。</p>
+  <ul>
+    <li><b>只保留 \(x\) 方向</b>（例如 \(\mathbf{w}_e = \mathbf{w}_d = (1, 0)\)）：\((\pm 2, 0)\) 完美还原；\((0, \pm 1)\) 被还原成 \((0, 0)\)，各错 1。平均误差 \((0 + 0 + 1 + 1)/4 = 0.5 = \lambda_2\)。</li>
+    <li><b>只保留 \(y\) 方向</b>：\((\pm 2, 0)\) 各错 4，平均误差 \((4 + 4)/4 = 2 = \lambda_1\)。更差。</li>
+  </ul>
+  <p>我用 Adam 在这 4 个点上训练了上面的线性自编码器（3 个随机种子），损失都收敛到 0.5，\(\mathbf{w}_e\) 和 \(\mathbf{w}_d\) 的 \(y\) 分量都趋于 0。但有一次得到的是 \(\mathbf{w}_e \approx (-0.69, 0)\)、\(\mathbf{w}_d \approx (-1.45, 0)\)：两者乘积约为 1，重构完全一样，单独看却都不是单位向量。这说明自编码器找到的是<b>主成分张成的子空间</b>，不一定是主成分本身。</p>
+
+  <h3>推导：为什么线性自编码器落在主成分子空间</h3>
+  <p>设数据矩阵 \(X \in \mathbb{R}^{n\times d}\) 已中心化，协方差 \(C = \frac{1}{n}X^\top X\) 的特征值 \(\lambda_1 \ge \cdots \ge \lambda_d\)。编码器 \(W_e \in \mathbb{R}^{k\times d}\)，解码器 \(W_d \in \mathbb{R}^{d\times k}\)，\(k \lt d\)。</p>
+  <p><b>第一步，重构是一个秩不超过 \(k\) 的线性映射。</b>\(\hat{\mathbf{x}} = W_d W_e \mathbf{x}\)，记 \(M = W_d W_e\)。所有 \(\hat{\mathbf{x}}\) 都落在 \(W_d\) 的列空间里，这个子空间最多 \(k\) 维。</p>
+  <p><b>第二步，固定子空间，最好的重构是正交投影。</b>设这个子空间的一组标准正交基组成 \(U \in \mathbb{R}^{d\times k}\)（\(U^\top U = I\)）。子空间里离 \(\mathbf{x}\) 最近的点是投影 \(UU^\top\mathbf{x}\)，而选 \(W_d = U\)、\(W_e = U^\top\) 就能取到它。于是问题变成选子空间：</p>
+  <div class="eq">\[ \begin{aligned} \frac{1}{n}\sum_i \lVert \mathbf{x}_i - UU^\top\mathbf{x}_i\rVert^2 &amp;= \frac{1}{n}\sum_i \Big(\lVert\mathbf{x}_i\rVert^2 - \lVert U^\top\mathbf{x}_i\rVert^2\Big) &amp;&amp; \text{勾股定理，投影与残差正交} \\ &amp;= \operatorname{tr}(C) - \operatorname{tr}\big(U^\top C\, U\big) &amp;&amp; \tfrac{1}{n}\textstyle\sum_i \lVert U^\top\mathbf{x}_i\rVert^2 = \operatorname{tr}(U^\top C U) \end{aligned} \]</div>
+  <p><b>第三步，最大化 \(\operatorname{tr}(U^\top C U)\)。</b>这是“投影后的总方差”。对标准正交的 \(U\)，它的最大值是 \(\lambda_1 + \cdots + \lambda_k\)，在 \(U\) 取前 \(k\) 个特征向量时达到（这就是 <a href="#a8" data-go="a8">A.8 课</a> 里 PCA 的推导）。所以最小重构误差是</p>
+  <div class="eq">\[ \min \ \frac{1}{n}\sum_i \lVert \mathbf{x}_i - \hat{\mathbf{x}}_i\rVert^2 = \lambda_{k+1} + \cdots + \lambda_d \]</div>
+  <p class="eq-note">其中当 \(\lambda_k \gt \lambda_{k+1}\) 时，最优的 \(M\) 唯一，等于投影到前 \(k\) 个主成分的矩阵 \(V_k V_k^\top\)。上面的例子里 \(k = 1\)，最小误差 \(\lambda_2 = 0.5\)，对得上。</p>
+  <p><b>第四步，参数不唯一。</b>对任意可逆的 \(k\times k\) 矩阵 \(A\)，把 \(W_e\) 换成 \(AW_e\)、\(W_d\) 换成 \(W_d A^{-1}\)，乘积 \(M\) 不变，损失也不变。所以梯度下降停在哪一组参数取决于初始化，\(W_d\) 的列一般不正交、长度也不是 1，只有它们张成的子空间是确定的。想拿到真正的主成分，就直接做 PCA。</p>
+  <p class="note"><b>结论的适用范围：</b>上面是“线性编码器 + 线性解码器 + 平方误差 + 已中心化数据”的结论。如果层带偏置，偏置会负责处理均值，结论不变。一旦加入非线性激活，网络可以学到弯曲的低维结构，就不再等价于 PCA。</p>
+
+  <h3>非线性、过完备与去噪</h3>
+  <p><b>非线性自编码器。</b>编码器和解码器换成多层网络（MLP 或卷积）后，瓶颈可以描述弯曲的“流形”。资料列表里 Hinton 与 Salakhutdinov 2006 年的工作就是用深层自编码器做非线性降维的经典例子。</p>
+  <p><b>过完备（overcomplete）。</b>瓶颈比输入还大时，恒等映射又成了一个零误差解。要学到有用的表示，必须另加限制，常见做法有：</p>
+  <ul>
+    <li><b>稀疏</b>：在损失里加 \(\lambda\lVert\mathbf{z}\rVert_1\)，要求大部分编码接近 0。</li>
+    <li><b>去噪</b>：输入加噪声，目标仍是干净的原图。</li>
+  </ul>
+  <p><b>去噪自编码器。</b>训练时把 \(\mathbf{x}\) 弄脏成 \(\tilde{\mathbf{x}}\)（加高斯噪声，或随机把一部分像素置 0），损失比较的是 \(g(f(\tilde{\mathbf{x}}))\) 和<b>干净的</b> \(\mathbf{x}\)：</p>
+  <div class="eq">\[ \tilde{\mathbf{x}} = \mathbf{x} + \sigma\boldsymbol{\epsilon},\ \ \boldsymbol{\epsilon}\sim\mathcal{N}(\mathbf{0}, I), \qquad \ell = \big\lVert\, \mathbf{x} - g_\theta\big(f_\phi(\tilde{\mathbf{x}})\big) \big\rVert^2 \]</div>
+  <p class="eq-note">其中恒等映射会把噪声原样输出，损失不为 0，所以网络被迫学会“什么样子才像真实数据”。</p>
+<pre><code>x_noisy = x + 0.3 * torch.randn_like(x)      # 只弄脏输入
+loss = criterion(model(x_noisy), x)          # 目标是干净的 x</code></pre>
+
+  <h3>与 VAE 的区别</h3>
+  <p>普通自编码器的瓶颈是一个确定的点，瓶颈空间里哪里有数据、哪里是空白，没有任何约束。随便在里面取一个 \(\mathbf{z}\) 交给解码器，往往得到一团乱码，所以它不适合直接拿来“生成”新样本。</p>
+  <p>变分自编码器（VAE，Kingma 与 Welling，资料列表第一项）把它改成了概率模型：</p>
+  <ul>
+    <li>先验 \(p(\mathbf{z}) = \mathcal{N}(\mathbf{0}, I)\)；解码器给出 \(p_\theta(\mathbf{x}\mid\mathbf{z})\)，论文里按数据类型取伯努利或高斯分布。</li>
+    <li>编码器输出一个分布 \(q_\phi(\mathbf{z}\mid\mathbf{x}) = \mathcal{N}\big(\boldsymbol{\mu}, \operatorname{diag}(\boldsymbol{\sigma}^2)\big)\)，\(\boldsymbol{\mu}\) 和 \(\boldsymbol{\sigma}\) 都是网络的输出（论文附录 C 的高斯 MLP 直接输出 \(\log\boldsymbol{\sigma}^2\)）。</li>
+  </ul>
+  <p><b>ELBO（证据下界）。</b>论文的出发点是下面这个恒等式（原文式 (1)）：</p>
+  <div class="eq">\[ \begin{aligned} \log p_\theta(\mathbf{x}) &amp;= D_{\mathrm{KL}}\big(q_\phi(\mathbf{z}\mid\mathbf{x})\,\Vert\, p_\theta(\mathbf{z}\mid\mathbf{x})\big) + \mathcal{L}(\theta,\phi;\mathbf{x}) \\ \mathcal{L}(\theta,\phi;\mathbf{x}) &amp;= -D_{\mathrm{KL}}\big(q_\phi(\mathbf{z}\mid\mathbf{x})\,\Vert\, p_\theta(\mathbf{z})\big) + \mathbb{E}_{q_\phi(\mathbf{z}\mid\mathbf{x})}\big[\log p_\theta(\mathbf{x}\mid\mathbf{z})\big] \end{aligned} \]</div>
+  <p class="eq-note">其中第一行右边的 KL 非负，所以 \(\mathcal{L} \le \log p_\theta(\mathbf{x})\)，叫变分下界。第二行是原文式 (3)。训练是最大化 \(\mathcal{L}\)，也就是最小化 \(-\mathcal{L}\)。</p>
+  <p>第二行的两项正好对应自编码器的两部分。原文说，第二项“在自编码器的说法里”是负的重构误差；第一项像一个正则项，把每个样本的 \(q_\phi(\mathbf{z}\mid\mathbf{x})\) 往先验 \(\mathcal{N}(\mathbf{0}, I)\) 拉，直觉上，这让各个样本的编码区域彼此衔接、贴近先验，从先验采样的 \(\mathbf{z}\) 也能解码出像样的结果。关于 KL 散度本身，见 <a href="#kl" data-go="kl">KL 散度一课</a>。</p>
+  <p><b>KL 项有闭式解。</b>先验和后验近似都是对角高斯时，原文附录 B 给出：</p>
+  <div class="eq">\[ -D_{\mathrm{KL}}\big(q_\phi(\mathbf{z}\mid\mathbf{x})\,\Vert\,p(\mathbf{z})\big) = \frac{1}{2}\sum_{j=1}^{J}\Big(1 + \log\sigma_j^2 - \mu_j^2 - \sigma_j^2\Big) \]</div>
+  <p class="eq-note">其中 \(J\) 是 \(\mathbf{z}\) 的维数。验算：\(\mu = 0,\ \sigma = 1\) 时括号为 \(1 + 0 - 0 - 1 = 0\)，KL 为 0，因为 q 就等于先验。\(\mu = 0.5,\ \sigma = 1\) 时为 \(\frac12(1 - 0.25 - 1) = -0.125\)，KL = 0.125。\(\mu = 0,\ \sigma = 0.5\) 时为 \(\frac12(1 + \ln 0.25 - 0.25) \approx \frac12(1 - 1.386 - 0.25) \approx -0.318\)，KL ≈ 0.318。均值偏离 0 或方差偏离 1 都会被罚。</p>
+  <p><b>重参数化技巧。</b>重构项要对 \(\mathbf{z}\sim q_\phi\) 求期望，直接“采样”这一步没法对 \(\phi\) 求导。论文的做法是把随机性挪到一个与参数无关的噪声里：</p>
+  <div class="eq">\[ \mathbf{z} = \boldsymbol{\mu} + \boldsymbol{\sigma}\odot\boldsymbol{\epsilon}, \qquad \boldsymbol{\epsilon}\sim\mathcal{N}(\mathbf{0}, I) \]</div>
+  <p class="eq-note">其中 \(\boldsymbol{\mu}, \boldsymbol{\sigma}\) 是编码器的输出，\(\boldsymbol{\epsilon}\) 是外部噪声。这样 \(\mathbf{z}\) 是 \(\boldsymbol{\mu}, \boldsymbol{\sigma}\) 的可导函数，梯度能顺着它传回编码器。原文实验里每个数据点只采 \(L = 1\) 个 \(\boldsymbol{\epsilon}\)，小批量大小 \(M = 100\)。</p>
+<pre><code>mu, logvar = enc(x)                         # 都是 (B, J)
+std = torch.exp(0.5 * logvar)               # sigma = exp(log(sigma^2) / 2)
+z = mu + std * torch.randn_like(std)        # 重参数化
+kl = -0.5 * (1 + logvar - mu**2 - logvar.exp()).sum(dim=1)   # (B,)</code></pre>
+  <div class="scroll"><table>
+    <tr><th></th><th>普通自编码器</th><th>VAE</th></tr>
+    <tr><td>编码器输出</td><td>一个点 \(\mathbf{z}\)</td><td>一个分布的参数 \(\boldsymbol{\mu}, \log\boldsymbol{\sigma}^2\)</td></tr>
+    <tr><td>损失</td><td>重构误差</td><td>\(-\mathcal{L}\)：重构项 + KL 项</td></tr>
+    <tr><td>训练时的瓶颈</td><td>确定的</td><td>每次前向都重新采样</td></tr>
+    <tr><td>能否从先验采样生成</td><td>效果没有保证</td><td>可以：\(\mathbf{z}\sim\mathcal{N}(\mathbf{0}, I)\) 交给解码器</td></tr>
+  </table></div>
+
+  <h3>PyTorch 里怎么写（卷积自编码器）</h3>
+  <p>图片任务一般用卷积。编码器用卷积加池化（或步长为 2 的卷积）把空间尺寸缩小，同时增加通道；解码器用转置卷积 <code>nn.ConvTranspose2d</code> 把尺寸放大回来。一种常见的形状流水（通道数只是示意）：</p>
+<pre><code>输入            (B, 1, 28, 28)
+Conv(3, pad=1)  (B, 16, 28, 28)   尺寸不变
+MaxPool(2)      (B, 16, 14, 14)   减半
+Conv(3, pad=1)  (B, 8, 14, 14)
+MaxPool(2)      (B, 8, 7, 7)      瓶颈：8*7*7 = 392 个数
+ConvT(...)      (B, ?, 14, 14)    放大一倍
+ConvT(...)      (B, 1, 28, 28)    回到输入形状
+Sigmoid         值域 (0, 1)</code></pre>
+  <p>转置卷积的输出尺寸（取自 <code>nn.ConvTranspose2d</code> 的文档字符串，dilation 取默认值 1）：</p>
+  <div class="eq">\[ H_{\text{out}} = (H_{\text{in}} - 1)\cdot\text{stride} - 2\cdot\text{padding} + (\text{kernel} - 1) + \text{output\_padding} + 1 \]</div>
+  <p class="eq-note">其中把 7 放大到 14 有不止一种参数：kernel = 2、stride = 2 时 \(6\cdot 2 + 1 + 1 = 14\)；kernel = 3、stride = 2、padding = 1 时得 13，要再加 <code>output_padding=1</code> 才是 14。我在本机逐一跑过这几种组合。</p>
+  <p>普通卷积和池化的尺寸是向下取整：\(H_{\text{out}} = \lfloor (H_{\text{in}} + 2p - k)/s \rfloor + 1\)。所以 28 → 14 → 7 之后如果再池化一次，得到 \(\lfloor 7/2 \rfloor = 3\)，而 3 再放大三次是 24，回不到 28。设计时把每一层的尺寸写出来对一遍。</p>
+
+  <h3>常见错误</h3>
+  <ul>
+    <li><b>输出形状和输入差一两个像素。</b>多半是奇数尺寸被池化向下取整了，或者转置卷积少了 <code>output_padding</code>。</li>
+    <li><b>值域对不上。</b>题目要求最后一层用 Sigmoid，输出在 \((0, 1)\)。但 notebook 的数据变换里有 <code>Normalize((0.5,), (0.5,))</code>，会把像素变到 \([-1, 1]\)，负的部分 Sigmoid 永远够不到。要么去掉这个 Normalize（<code>ToTensor()</code> 本身就给出 \([0, 1]\)），要么最后一层改用 Tanh。</li>
+    <li><b>忘了调用 <code>super().__init__()</code>。</b>起始代码的 <code>__init__</code> 里只写了 <code>...</code>，没有这一行，给 <code>self.encoder</code> 赋值时就会报错。</li>
+    <li><b>瓶颈太大。</b>判题只要求空间尺寸变小，通道可以变多，但如果瓶颈的总数比输入还多，网络就可能接近照抄，异常检测会失灵。</li>
+    <li><b>去噪时目标也用了带噪声的输入。</b>那样学到的只是恒等映射。</li>
+    <li><b>VAE 里把 \(\boldsymbol{\sigma}\) 直接当网络输出。</b>\(\boldsymbol{\sigma}\) 必须为正，输出 \(\log\boldsymbol{\sigma}^2\) 再取指数更稳。</li>
+  </ul>
+
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么线性自编码器的权重和 PCA 主成分对不上，误差却一样？因为可逆矩阵 \(A\) 可以在编码器和解码器之间“转移”，只有子空间是确定的，见推导第四步。</li>
+    <li>线性自编码器加上 ReLU 还是 PCA 吗？不是。非线性让它能表示弯曲的结构，上面的推导不再适用。</li>
+    <li>用重构误差做异常检测，阈值怎么定？在只含正常数据的验证集上看误差分布，例如取某个高分位数。notebook 里写死的 0.1 只是演示。</li>
+    <li>瓶颈大小怎么选？太小还原不好，太大容易照抄。看验证集上的重构误差，以及下游任务的效果。</li>
+  </ol>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>自编码器和 PCA 的关系？线性编码器、线性解码器、平方误差时，最优解张成的子空间就是前 \(k\) 个主成分的子空间，最小误差等于被丢掉的特征值之和。</li>
+    <li>VAE 和普通自编码器的本质区别？VAE 的编码器输出分布，损失里多了把后验拉向先验的 KL 项，所以瓶颈空间是连续、可采样的，能当生成模型用。</li>
+    <li>重参数化技巧解决什么问题？让采样这一步可导，把随机性放到与参数无关的 \(\boldsymbol{\epsilon}\) 里，梯度就能传回 \(\boldsymbol{\mu}\) 和 \(\boldsymbol{\sigma}\)。</li>
+    <li>过完备自编码器怎么避免学成恒等映射？加稀疏惩罚、输入加噪声（去噪自编码器）等。</li>
+    <li>转置卷积和“先上采样再卷积”有什么区别？两者都能放大尺寸。转置卷积的参数可学；先用 <code>nn.Upsample</code> 插值再接普通卷积是另一种常见做法。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>Autoencoder</b>：一个卷积自编码器，构造时<b>不带参数</b>（判题直接调用 <code>Autoencoder()</code>）。输入 \((B, 1, 28, 28)\)，输出必须是完全相同的形状。判题检查四件事：</p>
+  <ul>
+    <li>输入 \((4, 1, 28, 28)\) 时输出也是 \((4, 1, 28, 28)\)。</li>
+    <li>模型要有 <code>.encoder</code> 属性，并且 <code>encoder</code> 的输出在高和宽两个维度上都小于 28。只看空间尺寸，通道变多是允许的。</li>
+    <li>对输出求和再反传，<b>每一个</b>可训练参数都要拿到非零梯度。定义了却没用上的层会被报出来。</li>
+    <li>用 Adam（学习率 \(10^{-3}\)）在一个固定的小批量上训练 30 步，MSE 损失必须下降。这里的目标是随机数，所以它只检查“能训练”，不检查重构质量。</li>
+  </ul>
+  <p>按 notebook 的要求，编码器用卷积加最大池化，解码器用转置卷积，最后一层接 Sigmoid。照上面的形状流水逐层核对尺寸，再写 <code>forward</code>：先过 <code>self.encoder</code>，再过 <code>self.decoder</code>。MNIST 训练和按重构误差找异常的代码不计分，放进 <code>if __name__ == "__main__":</code>，并注意上面提到的 Normalize 与 Sigmoid 值域不匹配的问题。</p>
   <ul class="refs"><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1312.6114" target="_blank" rel="noopener">Kingma &amp; Welling，Auto-Encoding Variational Bayes</a> <span class="sub">（VAE）</span></span></li><li><span class="pill">经典文献</span><span>Hinton &amp; Salakhutdinov，Reducing the Dimensionality of Data with Neural Networks，Science，2006 <span class="sub">（深层自编码器降维）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b9_autoencoder.py
@@ -3261,9 +4128,176 @@ for e in range(N):
 <section id="b10" data-title="B.10 训练工程" hidden>
   <h2>B.10 训练工程：计时、量化、日志、保存与混合精度</h2>
   <p class="sub">模型写对之后的工程问题：怎样正确计时，动态量化做了什么，怎样记录和保存，AMP 怎么用。</p>
-  <p>（待写）</p>
+  <h3>直觉</h3>
+  <p>前面几课关心的是“算得对不对”。这一课关心的是“算得快不快、省不省、能不能复现”。五个话题看起来零散，其实都绕着同一件事：数字在机器里是怎么表示、怎么流动的。</p>
+  <ul>
+    <li><b>计时</b>：GPU 和 CPU 是异步配合的，掐表的位置不对，量到的就不是你以为的东西。</li>
+    <li><b>量化</b>与<b>混合精度</b>：用更少的位数存数，换来更小的模型和更快的计算，代价是精度和表示范围。</li>
+    <li><b>日志</b>与<b>保存</b>：把训练过程和结果可靠地记下来。</li>
+  </ul>
+
+  <h3>一、正确计时</h3>
+  <p><b>GPU 是异步执行的。</b>在 GPU 上调用 <code>y = model(x)</code> 时，Python 只是把一串计算任务（kernel）排进队列就立即返回，GPU 在后台慢慢算。如果这时就停表，量到的主要是“排队”的时间。所以在 GPU 上计时，开始和结束前都要调用 <code>torch.cuda.synchronize()</code>，等队列里的活全部干完：</p>
+<pre><code>torch.cuda.synchronize()
+t0 = time.perf_counter()
+y = model(x)
+torch.cuda.synchronize()          # 等 GPU 真正算完
+elapsed = time.perf_counter() - t0</code></pre>
+  <p>本机安装的 <code>torch.utils.benchmark</code> 里，默认计时函数就是这么做的：有加速器时先 <code>torch.accelerator.synchronize()</code>，再读 <code>timeit.default_timer()</code>。在 CPU 上没有这个问题，但用 <code>time.perf_counter()</code> 比 <code>time.time()</code> 更合适，前者是 Python 为测量短时间间隔提供的高分辨率时钟。</p>
+  <p><b>要预热。</b>第一次调用往往特别慢：要分配显存、选择算法、做各种懒初始化。<code>Timer</code> 的文档字符串说它会先预热，因为“PyTorch 的某些部分是懒初始化的”。自己计时时，先空跑几次再开始量。</p>
+  <p><b>要多次测量，看中位数。</b>同一段代码每次运行时间都会抖动，偶尔还会被系统里别的进程打断。<code>Timer</code> 的文档字符串明确说，测量应包含多次重复以量化噪声，并且中位数比均值更稳健。看一个例子，5 次测量（毫秒）：</p>
+  <div class="eq">\[ \{10.2,\ 10.1,\ 10.3,\ 25.0,\ 10.2\} \quad\Rightarrow\quad \text{均值} = \frac{65.8}{5} = 13.16, \qquad \text{中位数} = 10.2 \]</div>
+  <p class="eq-note">其中 25.0 是一次被打断的异常值。它把均值拉高了近 30%，中位数几乎不受影响。</p>
+  <p><b>用现成的工具。</b><code>torch.utils.benchmark.Timer</code> 把上面三件事都做了：</p>
+<pre><code>import torch.utils.benchmark as benchmark
+t = benchmark.Timer(stmt="model(x)", globals={"model": model, "x": x})
+m = t.blocked_autorange(min_run_time=0.2)    # 返回 Measurement
+print(m.median, m.iqr)                        # 单位是秒</code></pre>
+  <p>几个从源码核对过的细节：</p>
+  <ul>
+    <li><code>blocked_autorange</code> 默认 <code>min_run_time=0.2</code> 秒。它先在预热阶段逐步加大“块大小”，直到计时器本身的开销低于总计算时间的 0.1%，然后成块地重复测量。</li>
+    <li><code>num_threads</code> 默认是 <b>1</b>，而 PyTorch 平时会用多个线程。所以 <code>Timer</code> 量到的时间可能比你在训练脚本里看到的慢，比较时要统一线程数。</li>
+    <li>返回的 <code>Measurement</code> 有 <code>median</code>、<code>mean</code>、<code>iqr</code>（四分位距）等属性。</li>
+  </ul>
+
+  <h3>二、动态量化</h3>
+  <p><b>直觉。</b>一个 float32 权重占 4 字节。如果只用 256 个“刻度”去近似它，1 个字节就够了，模型大约缩小到四分之一，而且整数乘加在 CPU 上更快。问题是：刻度怎么定。</p>
+  <p><b>仿射量化。</b>Jacob 等人（资料列表最后一项）的量化方案是一个整数 \(q\) 到实数 \(r\) 的仿射映射（原文式 (1)）：</p>
+  <div class="eq">\[ r = S\,(q - Z) \]</div>
+  <p class="eq-note">其中 \(S\)（scale）是正实数，表示一个刻度代表多大的实数；\(Z\)（zero-point）与 \(q\) 同类型，是实数 0 对应的整数。原文强调要让实数 0 能被精确表示，因为神经网络里大量用到补零。同一个权重数组或激活数组共用一组 \(S, Z\)。</p>
+  <p>把实数区间 \([a, b]\) 映到整数区间 \([q_{\min}, q_{\max}]\)，参数和量化、反量化公式是：</p>
+  <div class="eq">\[ \begin{aligned} S &amp;= \frac{b - a}{q_{\max} - q_{\min}}, \qquad Z = \operatorname{round}\!\Big(q_{\min} - \frac{a}{S}\Big) &amp;&amp; \text{让 } a \mapsto q_{\min},\ 0 \mapsto Z \\ q &amp;= \operatorname{clamp}\!\Big(\operatorname{round}\big(r/S\big) + Z,\ q_{\min},\ q_{\max}\Big) &amp;&amp; \text{由 } r = S(q - Z) \text{ 反解，再取整、截断} \\ \hat r &amp;= S\,(q - Z) &amp;&amp; \text{反量化} \end{aligned} \]</div>
+  <p class="eq-note">其中区间内的值取整误差最多半个刻度，即 \(\lvert r - \hat r\rvert \le S/2\)；区间外的值会被截断，误差可以很大。</p>
+  <p><b>数值例子。</b>把 \(r = (-1.0,\ -0.2,\ 0,\ 0.35,\ 2.0)\) 量化成无符号 8 位整数，\([q_{\min}, q_{\max}] = [0, 255]\)，取 \(a = -1\)，\(b = 2\)：</p>
+  <div class="eq">\[ S = \frac{2 - (-1)}{255} = \frac{3}{255} \approx 0.011765, \qquad Z = \operatorname{round}\!\Big(0 + \frac{1}{0.011765}\Big) = 85 \]</div>
+  <div class="scroll"><table>
+    <tr><th>\(r\)</th><th>\(r/S\)</th><th>\(q = \operatorname{round}(r/S) + Z\)</th><th>\(\hat r = S(q - Z)\)</th><th>误差</th></tr>
+    <tr><td>−1.0</td><td>−85</td><td>0</td><td>−1.0</td><td>0</td></tr>
+    <tr><td>−0.2</td><td>−17</td><td>68</td><td>−0.2</td><td>0</td></tr>
+    <tr><td>0</td><td>0</td><td>85</td><td>0</td><td>0</td></tr>
+    <tr><td>0.35</td><td>29.75</td><td>115</td><td>\(30 \times 0.011765 \approx 0.3529\)</td><td>0.0029</td></tr>
+    <tr><td>2.0</td><td>170</td><td>255</td><td>2.0</td><td>0</td></tr>
+  </table></div>
+  <p>这张表我用 <code>torch.quantize_per_tensor(r, 3/255, 85, torch.quint8)</code> 核对过，<code>int_repr()</code> 正是 0、68、85、115、255。0.35 不在刻度上，误差 0.0029，小于半个刻度 \(S/2 \approx 0.0059\)。</p>
+  <p><b>PyTorch 的动态量化做了什么。</b>以下来自本机 torch 源码中 <code>torch.ao.quantization.quantize_dynamic</code> 及其默认配置：</p>
+  <ul>
+    <li>文档字符串第一句：把浮点模型转换成“动态（即只量化权重）”的量化模型，替换指定的子模块。</li>
+    <li><code>dtype=torch.qint8</code> 且不给 <code>qconfig_spec</code> 时，默认替换 <code>nn.Linear</code>、<code>nn.LSTM</code>、<code>nn.GRU</code>、<code>nn.LSTMCell</code>、<code>nn.RNNCell</code>、<code>nn.GRUCell</code>。也可以像题目那样传一个集合 <code>{nn.Linear, nn.LSTM}</code>。<code>nn.Embedding</code> 不在 qint8 的默认列表里，不会被改动。</li>
+    <li><b>权重</b>：默认用 <code>MinMaxObserver</code>，<code>dtype=torch.qint8</code>，<code>qscheme=torch.per_tensor_symmetric</code>。对称意味着 \(Z = 0\)，\(S\) 由 \(\max\lvert w\rvert\) 决定。我在本机检查过转换后 <code>Linear</code> 权重的 <code>q_zero_point()</code>，确实是 0。</li>
+    <li><b>激活</b>：默认配置的激活观察器是 <code>PlaceholderObserver</code>，<code>dtype=torch.quint8</code>，范围 [0, 255]，<code>is_dynamic=True</code>。也就是事先不统计激活范围，推理时根据每次实际输入临时确定量化参数。这就是“动态”二字的含义。</li>
+    <li>转换后的 <code>DynamicQuantizedLinear</code> 输入、输出仍是浮点张量，接口与 <code>nn.Linear</code> 相同，所以模型其余部分不用改。</li>
+  </ul>
+<pre><code>q_model = quantize_dynamic(model, {nn.Linear, nn.LSTM}, dtype=torch.qint8)
+print(q_model)   # 会看到 DynamicQuantizedLSTM、DynamicQuantizedLinear</code></pre>
+  <p>用判题的尺寸（词表 50、嵌入 32、隐藏 48、2 层 LSTM）建一个模型，我在本机量到 <code>state_dict</code> 序列化后从 158210 字节降到 51004 字节，约为原来的三分之一。没有到四分之一，因为嵌入层和偏置仍是浮点。</p>
+  <p class="note"><b>弃用提示（本机 torch 2.15.0 的实际情况）：</b>调用 <code>quantize_dynamic</code> 会触发 <code>DeprecationWarning</code>，原文是“torch.ao.quantization is deprecated and will be removed in 2.10”，并建议 eager 模式量化迁移到 torchao 的 <code>quantize_</code> API。提示里写的移除版本早于本机安装的版本，但本机上它仍能正常工作，判题也用它。另外 <code>torch.quantize_per_tensor</code> 等创建量化张量的函数也会给出“已弃用”的 <code>UserWarning</code>。这些警告不影响结果，但新项目应关注 torchao。</p>
+
+  <h3>三、用 TensorBoard 记录训练</h3>
+  <p>训练时只盯着终端打印的损失，很难看出趋势，也不方便比较几次实验。TensorBoard 把记录写进事件文件，再用网页画曲线。</p>
+<pre><code>from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter("runs/exp1")              # 不传则为 runs/日期_时间_主机名
+writer.add_scalar("Loss/train", loss.item(), epoch)
+writer.close()                                    # 结束时刷新并关闭</code></pre>
+  <ul>
+    <li><b>签名</b>：<code>add_scalar(tag, scalar_value, global_step=None, walltime=None, ...)</code>。tag 里用斜杠分组，例如 <code>Loss/train</code> 和 <code>Loss/val</code> 会放在同一组下。第三个参数是横轴的步数，不传的话曲线没有正确的横坐标。</li>
+    <li><b>写盘是异步的</b>：构造参数 <code>max_queue=10</code>、<code>flush_secs=120</code>，即攒够 10 条或每 2 分钟刷新一次。程序结束前调用 <code>close()</code>（或 <code>flush()</code>），否则最后一段记录可能还没写进文件。</li>
+    <li><b>传 Python 数</b>：用 <code>loss.item()</code>，不要把带计算图的张量存起来。</li>
+    <li><b>查看</b>：在终端运行 <code>tensorboard --logdir=runs</code>，按提示打开网页。</li>
+  </ul>
+  <p class="note"><b>需要单独安装：</b><code>torch.utils.tensorboard</code> 在导入时会先 <code>import tensorboard</code>，并要求版本不低于 1.15。本机没有安装 tensorboard 包，导入会报 <code>ModuleNotFoundError: No module named 'tensorboard'</code>。要做记录练习，先运行 <code>pip install tensorboard</code>。</p>
+
+  <h3>四、保存与加载</h3>
+  <p>两种保存方式：</p>
+  <div class="scroll"><table>
+    <tr><th></th><th>只存参数：<code>torch.save(model.state_dict(), p)</code></th><th>存整个模型：<code>torch.save(model, p)</code></th></tr>
+    <tr><td>文件里是什么</td><td>一个字典：参数名 → 张量</td><td>用 pickle 序列化的整个对象，包含对类定义的引用</td></tr>
+    <tr><td>加载时需要</td><td>先自己构造同结构的模型，再 <code>load_state_dict</code></td><td>原来的类必须能在同样的模块路径下导入</td></tr>
+    <tr><td>改了代码之后</td><td>只要参数名和形状对得上就能加载</td><td>类被改名、移动后容易加载失败</td></tr>
+  </table></div>
+<pre><code>torch.save(model.state_dict(), "model.pt")
+model = SimpleNN()
+model.load_state_dict(torch.load("model.pt", map_location="cpu"))
+model.eval()                  # 推理前切到 eval，Dropout/BatchNorm 行为才对</code></pre>
+  <p><b><code>weights_only</code>。</b>本机 torch 源码里 <code>torch.load</code> 的文档签名是 <code>weights_only=True</code>。它限制反序列化只能还原张量、基本类型、字典，以及用 <code>torch.serialization.add_safe_globals</code> 登记过的类型。原因是 pickle 能在加载时执行任意代码，加载不可信的文件很危险。报错信息里说明，这个默认值是 PyTorch 2.6 从 False 改为 True 的。我在本机做了两个实验：</p>
+  <ul>
+    <li><code>torch.save(model, ...)</code> 存整个模型，再用默认参数 <code>torch.load</code>，报 <code>UnpicklingError: Weights only load failed</code>。只有在信任文件来源时才应改用 <code>weights_only=False</code>。</li>
+    <li>动态量化后，<code>DynamicQuantizedLinear</code> 的 state_dict 可以正常加载，<code>DynamicQuantizedLSTM</code> 的 state_dict 却同样加载失败。所以 quantize-lm 的 notebook 选择保存浮点权重，加载后再量化一次。</li>
+  </ul>
+  <p>断点续训时，除了模型参数，还要保存 <code>optimizer.state_dict()</code>（例如 Adam 的一阶、二阶矩）和当前的 epoch，否则恢复后优化器从零开始。</p>
+
+  <h3>五、混合精度训练（AMP）</h3>
+  <p><b>为什么要它。</b>float16 每个数只占 2 字节，显存和带宽减半，支持的 GPU 上矩阵乘法也更快。但它的表示范围窄得多：</p>
+  <div class="scroll"><table>
+    <tr><th>float16 的性质</th><th>数值</th><th>后果</th></tr>
+    <tr><td>最大值</td><td>65504</td><td>更大的数变成 inf（上溢）</td></tr>
+    <tr><td>最小正数（非规格化）</td><td>\(2^{-24} \approx 5.96\times 10^{-8}\)</td><td>更小的数变成 0（下溢）</td></tr>
+    <tr><td>1 附近的间隔 eps</td><td>\(2^{-10} \approx 0.000977\)</td><td><code>1 + 1e-4</code> 在 float16 里还是 1</td></tr>
+  </table></div>
+  <p>Micikevicius 等人的论文（资料列表第四项）针对这些问题提出了三件事：保留一份 FP32 的“主权重”用于更新；损失缩放；FP16 的点积累加到 FP32。表里第三行说明了主权重的必要：权重是 1、更新量是 \(10^{-4}\) 时，在 float16 里相加等于没加。论文的说法是，权重比更新量大 2048 倍以上时，更新就可能在加法对齐时变成 0。</p>
+  <p><b>损失缩放的原理（逐步推导）。</b></p>
+  <div class="eq">\[ \begin{aligned} \frac{\partial (s\,L)}{\partial \theta} &amp;= s\,\frac{\partial L}{\partial \theta} &amp;&amp; \text{链式法则：常数因子一路乘到每个梯度上} \\ \theta &amp;\leftarrow \theta - \eta\cdot\frac{1}{s}\,\frac{\partial (sL)}{\partial\theta} = \theta - \eta\,\frac{\partial L}{\partial\theta} &amp;&amp; \text{更新前除回 } s\text{，步长不变} \end{aligned} \]</div>
+  <p class="eq-note">其中 \(s\) 是缩放因子。反传时所有中间梯度都被放大 \(s\) 倍，原本会下溢成 0 的小梯度被抬进 float16 能表示的范围；更新前在 FP32 里除回去。</p>
+  <p><b>数值例子</b>（本机用 torch 验证）：梯度 \(10^{-8}\) 转成 float16 直接变成 0。乘以 \(s = 1024\) 后是 \(1.024\times 10^{-5}\)，float16 存成约 \(1.0252\times 10^{-5}\)；转回 float32 再除以 1024，得到约 \(1.0012\times 10^{-8}\)，误差约 0.1%。反过来，\(s\) 太大会让大梯度超过 65504 变成 inf。论文指出，只要不上溢，缩放因子取大一点没有坏处；检测到上溢时可以跳过这一步更新。</p>
+  <p><b><code>GradScaler</code> 怎么自动选 \(s\)</b>（本机 <code>torch/amp/grad_scaler.py</code>）：</p>
+  <ul>
+    <li>默认 <code>init_scale=2**16</code>、<code>growth_factor=2.0</code>、<code>backoff_factor=0.5</code>、<code>growth_interval=2000</code>。</li>
+    <li><code>scaler.step(optimizer)</code> 先把梯度除回 \(s\)，如果其中有 inf 或 NaN，就<b>跳过</b>这次 <code>optimizer.step()</code>，参数不会被污染；随后 <code>update()</code> 把 \(s\) 乘以 0.5。</li>
+    <li>连续 2000 步都没有 inf/NaN，就把 \(s\) 乘以 2。文档字符串说，最初几步常常因为 \(s\) 还在校准而被跳过，之后跳步应该很少见。</li>
+    <li>要做梯度裁剪，先调用 <code>scaler.unscale_(optimizer)</code> 再裁剪，这样阈值作用在真实梯度上。论文也建议在反传之后、梯度裁剪之前就除回缩放因子。</li>
+  </ul>
+<pre><code>scaler = torch.amp.GradScaler("cuda")
+with torch.autocast(device_type="cuda", dtype=torch.float16):
+    loss = criterion(model(x), y)       # 前向在 autocast 里
+scaler.scale(loss).backward()           # 反传在 autocast 外
+scaler.step(optimizer)
+scaler.update()</code></pre>
+  <ul>
+    <li><b>autocast 不改参数的类型。</b>我在 CPU 上用 <code>torch.autocast("cpu", dtype=torch.bfloat16)</code> 试过，<code>nn.Linear</code> 的输出是 bfloat16，权重仍是 float32。autocast 只是在合适的算子上临时转换输入。</li>
+    <li><b>旧写法已弃用。</b>本机源码里 <code>torch.cuda.amp.GradScaler(...)</code> 与 <code>torch.cuda.amp.autocast(...)</code> 都标了弃用，提示改用 <code>torch.amp.GradScaler("cuda", ...)</code> 和 <code>torch.amp.autocast("cuda", ...)</code>。</li>
+    <li><b>没有 GPU 时。</b><code>torch.amp.GradScaler("cuda")</code> 会警告 CUDA 不可用并自动禁用自己，此时 <code>scale</code> 等方法什么也不做。</li>
+    <li><b>bfloat16。</b>它的指数位和 float32 一样多（8 位），表示范围与 float32 相当，下溢问题小得多，代价是尾数位更少、精度更低。</li>
+  </ul>
+
+  <h3>常见错误</h3>
+  <ul>
+    <li>在 GPU 上计时不调用 <code>torch.cuda.synchronize()</code>，量到的是排队时间。</li>
+    <li>只量一次，还把第一次（含初始化）算进去。</li>
+    <li><code>Timer</code> 默认单线程，拿它的结果和多线程的训练日志直接比较。</li>
+    <li>量化时模型里用的是手写的 <code>x @ W</code>，<code>quantize_dynamic</code> 只认识 <code>nn.Linear</code>、<code>nn.LSTM</code> 这些模块，结果什么都没换。</li>
+    <li>量化前忘了 <code>model.eval()</code>。动态量化面向推理。</li>
+    <li>保存时存了整个模型，换个目录或改了类名就加载不了。</li>
+    <li><code>add_scalar</code> 没传 <code>global_step</code>，或者程序结束前没 <code>close()</code>。</li>
+    <li>AMP 里把 <code>backward()</code> 也放进 autocast，或直接对没缩放的 loss 调 <code>backward()</code>。</li>
+    <li>先裁剪梯度、再 <code>unscale_</code>，裁剪阈值作用在被放大的梯度上。</li>
+  </ul>
+
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么同步在“开始计时之前”也要做一次？之前排进队列、还没算完的任务会算进你的计时区间里。</li>
+    <li>动态量化和“静态量化”的区别？动态量化只预先量化权重，激活的量化参数在推理时按输入临时算，不需要校准数据。静态量化要先用一些样本统计激活范围。</li>
+    <li>为什么权重用对称量化（\(Z = 0\)）？权重大致以 0 为中心，对称后整数乘法里不需要处理零点项，计算更简单。</li>
+    <li>量化后模型为什么没有正好缩小到四分之一？没被量化的层（嵌入、偏置）仍是浮点，序列化格式也有额外开销。</li>
+    <li>GradScaler 跳过了某一步更新，会不会有问题？偶尔跳过一步影响很小，文档字符串也说这在开始阶段是正常的。如果频繁跳步，要检查是否有真正的数值问题。</li>
+  </ol>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>CUDA 计时还能怎么做？用 CUDA 事件：<code>torch.cuda.Event(enable_timing=True)</code> 的 <code>record()</code> 与 <code>elapsed_time()</code>，读结果前同样要同步。</li>
+    <li>量化误差有多大？区间内最多半个刻度 \(S/2\)。离群值会把区间撑大、让 \(S\) 变大，所有其他值的误差都跟着变大。</li>
+    <li>FP16 和 BF16 怎么选？BF16 范围大、精度低，通常不需要损失缩放；FP16 精度高一些但范围窄，需要损失缩放。</li>
+    <li>为什么 <code>torch.load</code> 默认 <code>weights_only=True</code>？pickle 加载可以执行任意代码，限制只还原张量等安全类型能防止恶意的模型文件。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>SimpleNN</b>（B.10）：一个全连接分类网络，构造时不带参数。输入 \((B, 1, 28, 28)\) 的图片，输出 \((B, 10)\)。判题检查输出形状、对输出求和反传后每个参数都有非零梯度，以及在固定小批量上用 <code>nn.CrossEntropyLoss</code> 和 Adam 训练 40 步后损失下降。因为 <code>CrossEntropyLoss</code> 自带 log-softmax，<code>forward</code> 应返回未归一化的 logits。第一层 <code>nn.Linear</code> 之前要先把图片展平成 \((B, 784)\)，<code>nn.Flatten()</code> 或 <code>x.view(x.size(0), -1)</code> 都行。notebook 要求至少两个带 ReLU 的隐藏层。计时部分不计分：在 <code>if __name__ == "__main__":</code> 里用 <code>time.perf_counter()</code> 分别量每个 epoch 的训练和测试时间。</p>
+  <p><b>LanguageModel</b>（B.10q）：构造签名 <code>LanguageModel(vocab_size, embed_size, hidden_size, num_layers)</code>，结构是 Embedding → LSTM → Linear → Softmax。输入是形状 \((B, T)\) 的 token id，输出是下一个 token 在词表上的概率，形状 \((B, \text{vocab\_size})\)。判题检查：</p>
+  <ul>
+    <li>输出是二维的 \((B, V)\)，并且 \((1, 3)\)、\((3, 8)\)、\((7, 20)\) 这些不同的批次和长度都能处理。</li>
+    <li>每个元素非负、每行和为 1（容差 \(10^{-4}\)），也就是最后对词表维做了 softmax。</li>
+    <li>梯度能到达每个参数。判题用随机投影代替求和，因为 softmax 每行之和恒为 1，直接求和的梯度恒为 0。</li>
+    <li>用 <code>quantize_dynamic(m, {nn.Linear, nn.LSTM, nn.GRU, nn.RNN}, dtype=torch.qint8)</code> 量化后，<code>state_dict</code> 序列化的字节数必须变小，量化后的模型仍输出 \((2, V)\) 且没有 NaN。</li>
+  </ul>
+  <p>容易踩的坑：<code>nn.LSTM</code> 默认输入是 \((T, B, E)\)，题目的数据是 \((B, T)\)，要设 <code>batch_first=True</code>。我试过漏掉它，判题依然全部通过，因为输出形状碰巧对得上，但模型实际上把批次维当成了时间维，结果没有意义。取“最后一个时间步”的输出再接 Linear。权重必须放在 <code>nn.Linear</code> / <code>nn.LSTM</code> 模块里，量化才有东西可换。notebook 里训练用的是 <code>NLLLoss</code> 加对概率取 log，因为模型已经输出概率，再用 <code>CrossEntropyLoss</code> 就相当于做了两次 softmax。</p>
+  <p><b>LinearRegressionModel</b>（B.10t）：模型已经写好，就是 <code>nn.Linear(1, 1)</code>。判题只看模型：\((B, 1)\) 映到 \((B, 1)\)、梯度能到达参数、在固定批次上用 MSE 训练损失能下降，不检查你是否调用了 <code>SummaryWriter</code>。记录部分需要你自己 <code>pip install tensorboard</code>，然后在 <code>if __name__ == "__main__":</code> 里写训练循环：每个 epoch 用 <code>add_scalar("Loss/train", loss.item(), epoch)</code> 记录，日志目录放在 <code>runs</code> 下，最后 <code>close()</code>，再用 <code>tensorboard --logdir=runs</code> 查看曲线。不安装 tensorboard 也不影响计分，前提是导入语句只写在 <code>__main__</code> 块里。</p>
+  <p><b>混合精度（选做，不计分）</b>：仓库里有一道 <code>cuda-amp</code> 题，用 <code>python study/board.py tl init cuda-amp</code> 生成桩文件。它需要 CUDA GPU，本站环境没有 GPU，这道题也没有自动判题。起始代码用的是已弃用的 <code>torch.cuda.amp.autocast()</code>，可以顺手改成上面的 <code>torch.amp</code> 写法。</p>
   <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/benchmark/utils/timer.py" target="_blank" rel="noopener">PyTorch 源码：torch.utils.benchmark.Timer</a> <span class="sub">（预热、同步与多次测量）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/amp/grad_scaler.py" target="_blank" rel="noopener">PyTorch 源码：GradScaler</a> <span class="sub">（损失缩放与跳过含 inf 的步）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/tensorboard/writer.py" target="_blank" rel="noopener">PyTorch 源码：SummaryWriter</a> <span class="sub">（add_scalar 等接口）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1710.03740" target="_blank" rel="noopener">Micikevicius 等，Mixed Precision Training</a> <span class="sub">（FP32 主权重、损失缩放）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1712.05877" target="_blank" rel="noopener">Jacob 等，Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference</a> <span class="sub">（仿射量化 r = S(q − Z)）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b10_benchmark.py
@@ -3282,9 +4316,135 @@ for e in range(N):
 <section id="b11" data-title="B.11 经典 ML 的 PyTorch 写法" hidden>
   <h2>B.11 经典 ML 的 PyTorch 写法：逻辑回归、K-Means、KNN</h2>
   <p class="sub">把应用 ML 一节里的 numpy 算法改写成张量运算，重点是广播与向量化。</p>
-  <p>（待写）</p>
+  <h3>直觉</h3>
+  <p>这三个算法在应用 ML 一节都用 numpy 写过：逻辑回归见 <a href="#a5" data-go="a5">A.5 课</a>，KNN 见 <a href="#a6" data-go="a6">A.6 课</a>。数学一点没变，这一课练的是“翻译”：把 Python 循环换成整块的张量运算。面试里常出这类题，考的就是你能不能一眼写出每一步的张量形状。</p>
+  <p>一个好用的习惯：<b>先写形状，再写代码</b>。三道题的核心都是同一个对象，一个 \((n, k)\) 的“点到点”距离矩阵或打分矩阵。它算出来了，剩下的只是沿某个维度取最小、取平均或投票。</p>
+
+  <h3>从 numpy 到 torch：要注意的差异</h3>
+  <div class="scroll"><table>
+    <tr><th>事项</th><th>numpy</th><th>torch</th></tr>
+    <tr><td>沿哪个维度归约</td><td><code>axis=1</code>、<code>keepdims=True</code></td><td><code>dim=1</code>、<code>keepdim=True</code>（torch 大多也接受 <code>axis</code> 作别名，但习惯写 <code>dim</code>）</td></tr>
+    <tr><td>浮点默认类型</td><td><code>np.array([1.0])</code> 是 float64</td><td><code>torch.tensor([1.0])</code> 是 float32；<code>torch.from_numpy</code> 保留 float64</td></tr>
+    <tr><td>带维度的 max/min</td><td><code>X.max(axis=1)</code> 只返回值</td><td><code>X.max(dim=1)</code> 返回 <code>(values, indices)</code> 两个张量</td></tr>
+    <tr><td>取最小的 k 个</td><td><code>np.argsort(D, axis=1)[:, :k]</code></td><td><code>torch.topk(D, k, dim=1, largest=False)</code></td></tr>
+    <tr><td>内存共享</td><td colspan="2"><code>torch.from_numpy(a)</code> 与 <code>a</code> 共享内存，改一个另一个也变；<code>torch.tensor(a)</code> 会复制</td></tr>
+    <tr><td>广播规则</td><td colspan="2">相同：从最后一维开始对齐，长度为 1 的维可以扩展</td></tr>
+  </table></div>
+  <p>float32 与 float64 的差别在这一课里很要紧：下面会看到，float32 里 \(1 - 10^{-8}\) 就等于 1，数值稳定性的处理要按 float32 的精度来定。另外，用作下标或传给 <code>F.one_hot</code> 的标签应是整数类型（<code>torch.long</code>）。</p>
+
+  <h3>一、逻辑回归</h3>
+  <p>模型、损失和梯度在 <a href="#a5" data-go="a5">A.5 课</a>里已经逐步推导过，这里只列结论：</p>
+  <div class="eq">\[ \mathbf{p} = \sigma(X\mathbf{w} + b), \qquad L = -\frac{1}{n}\sum_{i=1}^{n}\Big[y_i\log p_i + (1-y_i)\log(1-p_i)\Big] \]</div>
+  <div class="eq">\[ \nabla_{\mathbf{w}}L = \frac{1}{n}X^\top(\mathbf{p} - \mathbf{y}), \qquad \frac{\partial L}{\partial b} = \frac{1}{n}\sum_{i=1}^{n}(p_i - y_i) \]</div>
+  <p class="eq-note">其中 \(X\) 是 \((n, d)\)，\(\mathbf{w}\) 是 \((d,)\)，\(\mathbf{p}, \mathbf{y}\) 是 \((n,)\)。关键的一步是 \(\partial\ell/\partial z = p - y\)：sigmoid 的导数 \(p(1-p)\) 正好约掉交叉熵求导产生的分母。</p>
+<pre><code>X        (n, d)
+w        (d,)
+z = X @ w + b     (n,)        矩阵乘向量，b 广播
+p = sigmoid(z)    (n,)
+X.T @ (p - y)     (d,)        与 w 同形状
+(p - y).mean()    ()          标量，与 b 同形状</code></pre>
+  <p><b>手算一步梯度下降。</b>3 个样本，\(X = \begin{pmatrix}1 &amp; 2\\ 2 &amp; 0\\ 0 &amp; 1\end{pmatrix}\)，\(\mathbf{y} = (1, 0, 1)\)，初始 \(\mathbf{w} = \mathbf{0}\)，\(b = 0\)，学习率 0.1。</p>
+  <div class="eq">\[ \begin{aligned} \mathbf{z} &amp;= \mathbf{0} \;\Rightarrow\; \mathbf{p} = (0.5,\ 0.5,\ 0.5), \quad L = -\log 0.5 \approx 0.6931 &amp;&amp; \text{初始时每个样本都猜 0.5} \\ \mathbf{p} - \mathbf{y} &amp;= (-0.5,\ 0.5,\ -0.5) &amp;&amp; \text{残差} \\ \nabla_{\mathbf{w}}L &amp;= \tfrac{1}{3}\big(1(-0.5) + 2(0.5) + 0,\ \ 2(-0.5) + 0 + 1(-0.5)\big) = (0.1667,\ -0.5) &amp;&amp; X^\top(\mathbf{p}-\mathbf{y})/n \\ \partial L/\partial b &amp;= \tfrac{1}{3}(-0.5) \approx -0.1667 &amp;&amp; \text{残差的平均} \end{aligned} \]</div>
+  <p class="eq-note">其中更新后 \(\mathbf{w} = (-0.0167,\ 0.05)\)，\(b = 0.0167\)，新的 \(\mathbf{p} \approx (0.525,\ 0.496,\ 0.517)\)，损失降到约 0.6632。我用 <code>F.binary_cross_entropy</code> 加 autograd 算了同一组梯度，结果一致。</p>
+  <p>这个例子也是调试手写梯度的标准办法：把参数设成 <code>requires_grad=True</code>，用 autograd 算一遍梯度，和手写公式逐项比较。</p>
+
+  <h3>数值稳定：clamp 与带 logits 的版本</h3>
+  <p><b>问题在哪。</b>float32 里 <code>torch.sigmoid(torch.tensor(17.))</code> 已经正好是 1.0。如果这时标签是 0，就要算 \(\log(1 - 1) = \log 0 = -\infty\)，损失变成 inf，梯度随之出错。</p>
+  <p><b>办法一：把概率夹到 \([\varepsilon, 1 - \varepsilon]\)。</b>例如 <code>p.clamp(eps, 1 - eps)</code>，起始代码里 \(\varepsilon = 10^{-7}\)。在 float32 里 \(1 - 10^{-7}\) 存成约 0.99999988，\(-\log(1 - 0.99999988) \approx 15.94\)，有限。注意 \(\varepsilon\) 不能太小：float32 里 \(1 - 10^{-8}\) 会直接舍入成 1.0，等于没夹。</p>
+  <p>PyTorch 自己的 <code>nn.BCELoss</code> 用了另一种保护。它的文档字符串说，它把 log 的输出夹到不小于 −100，这样损失总是有限的。代价是错得再离谱，单个样本的损失也不超过 100。</p>
+  <p><b>办法二：直接从 logit \(z\) 算损失。</b><code>nn.BCEWithLogitsLoss</code> 的文档字符串说，它把 Sigmoid 和 BCELoss 合成一层，利用 log-sum-exp 技巧，比“先 Sigmoid 再 BCELoss”数值更稳定。推导见 <a href="#a5" data-go="a5">A.5 课</a>，结果是：</p>
+  <div class="eq">\[ \ell(z, y) = \log\big(1 + e^{z}\big) - yz = \max(z, 0) - yz + \log\big(1 + e^{-\lvert z\rvert}\big) \]</div>
+  <p class="eq-note">其中第二种写法里指数总是非正数，不会溢出，\(\log(1 + \cdot)\) 的参数在 \((1, 2]\) 之间，也不会出现 \(\log 0\)。</p>
+  <p>对比一下 \(z = -800,\ y = 1\)（模型非常自信地判错了）。我在本机算出：<code>F.binary_cross_entropy_with_logits</code> 给出 800，这是正确的值；<code>F.binary_cross_entropy(torch.sigmoid(z), y)</code> 给出 100，因为 sigmoid 已经下溢成 0，log 被夹在了 −100。训练真实模型时，推荐让模型输出 logits，损失用 <code>BCEWithLogitsLoss</code>；本课练习要求你自己写概率版的 <code>bce_loss</code>，用办法一即可。</p>
+
+  <h3>二、K-Means</h3>
+  <p><b>直觉。</b>要在城里开 k 家店，让每个居民到最近那家店的距离（的平方）之和最小。Lloyd 算法是轮流做两件事：每个居民去最近的店（分配）；每家店搬到自己顾客的中心（更新）。</p>
+  <p><b>目标函数。</b>记第 \(i\) 个点所属的簇为 \(c_i\)，簇中心为 \(\boldsymbol{\mu}_j\)：</p>
+  <div class="eq">\[ J(c, \boldsymbol{\mu}) = \sum_{i=1}^{n}\big\lVert \mathbf{x}_i - \boldsymbol{\mu}_{c_i}\big\rVert^2 \]</div>
+  <p><b>为什么两步都不会让 \(J\) 变大。</b></p>
+  <ul>
+    <li><b>分配步</b>：固定中心，每个点改去最近的中心，它自己那一项只会变小或不变。</li>
+    <li><b>更新步</b>：固定分配，对簇 \(j\) 的那部分求导并令其为 0：</li>
+  </ul>
+  <div class="eq">\[ \frac{\partial}{\partial \boldsymbol{\mu}_j}\sum_{i:\,c_i = j}\lVert \mathbf{x}_i - \boldsymbol{\mu}_j\rVert^2 = -2\sum_{i:\,c_i = j}(\mathbf{x}_i - \boldsymbol{\mu}_j) = \mathbf{0} \;\Rightarrow\; \boldsymbol{\mu}_j = \frac{1}{n_j}\sum_{i:\,c_i = j}\mathbf{x}_i \]</div>
+  <p class="eq-note">其中 \(n_j\) 是簇 \(j\) 的点数。这是一个凸二次函数，驻点就是最小值，所以“取均值”是固定分配下的最优中心。</p>
+  <p>\(J\) 每轮不增，而把 n 个点分成 k 组的方式只有有限多种，所以算法一定会在有限步内停下。但停下的地方只是<b>局部最优</b>，和初始化有关。</p>
+  <p><b>数值例子：初始化决定结果。</b>一维的 5 个点 \(\{0, 1, 4, 5, 11\}\)，\(k = 2\)。</p>
+  <ul>
+    <li><b>初始中心取前两个点 0 和 1。</b>第 1 轮：0 归簇 1，其余的 1、4、5、11 都离 1 更近，中心变成 \(0\) 和 \((1 + 4 + 5 + 11)/4 = 5.25\)。第 2 轮：1 离 0 更近（1 对 4.25），4 离 5.25 更近（4 对 1.25），中心变成 \(0.5\) 和 \(20/3 \approx 6.667\)。第 3 轮分配不变，停止。\(J = 0.25 + 0.25 + 2.667^2 + 1.667^2 + 4.333^2 \approx 29.17\)。</li>
+    <li><b>初始中心取 0 和 11。</b>0、1、4、5 归第一簇（5 到 0 是 5，到 11 是 6），中心变成 2.5 和 11，下一轮不变。\(J = 6.25 + 2.25 + 2.25 + 6.25 + 0 = 17\)。我枚举了所有分法，17 就是全局最优。</li>
+  </ul>
+  <p><b>k-means++ 初始化</b>（资料列表中 Arthur 与 Vassilvitskii 的方法）：第一个中心随机选一个数据点；之后每次按“到已选中心的最近距离的平方” \(D(\mathbf{x})^2\) 成比例的概率抽下一个中心。远处的点更容易被选中，几个中心不容易挤在同一个簇里。在上面的例子里，若第一个中心是 0，其余点的 \(D^2\) 为 1、16、25、121，选中 11 的概率是 \(121/163 \approx 0.74\)。我还做了一个实验：判题用的那种 3 个分得很开的团，换 300 个随机种子，“随机取 k 个点”的初始化有约 35% 的种子没能找回 3 个团，k-means++ 只有 1 个种子失败。</p>
+  <p><b>张量写法。</b>距离矩阵是 \((n, k)\)，三种算法都可以：</p>
+<pre><code>data           (N, D)
+centroids      (K, D)
+data[:, None, :] - centroids[None, :, :]    (N, K, D)   广播
+    .pow(2).sum(-1)                         (N, K)      平方距离
+torch.cdist(data, centroids)                (N, K)      欧氏距离（开过方）
+dist.argmin(dim=1)                          (N,)        每个点的簇号</code></pre>
+  <p>广播写法要建一个 \((N, K, D)\) 的中间张量，\(N\) 和 \(D\) 大时费内存；展开成 \(\lVert a\rVert^2 + \lVert b\rVert^2 - 2a^\top b\) 的矩阵乘法写法见 <a href="#a6" data-go="a6">A.6 课</a>。<code>torch.cdist</code> 的文档字符串说，默认模式在任一组点数超过 25 时就改用这种矩阵乘法，所以结果和逐项相减可能有极小的浮点差异。比较远近时开不开方都行，平方根是单调的。</p>
+  <p><b>更新步怎么向量化。</b>起始代码的提示是对 k 个簇循环、用布尔掩码取均值，k 通常很小，这样写完全可以。想去掉循环，可以用独热矩阵：\(A \in \{0, 1\}^{N\times K}\)，\(A_{ij} = 1\) 表示点 \(i\) 在簇 \(j\)。那么 \(A^\top X\) 是 \((K, D)\) 的各簇坐标和，\(A\) 按列求和是 \((K,)\) 的各簇点数，相除就是均值。</p>
+  <p><b>空簇。</b>如果某个中心一个点都没分到，<code>data[mask].mean(dim=0)</code> 对空张量取均值，得到的是 NaN，之后所有距离都会被污染。常见处理：保留这个簇原来的中心；或者把它重新放到当前离自己中心最远的那个点上。</p>
+  <p><b>收敛判据。</b>中心的移动量小于 <code>tol</code> 就停，例如 <code>torch.allclose(old, new, atol=tol)</code>，或者看最大移动距离；同时设 <code>max_iters</code> 上限。另一种等价的判据是“分配不再变化”。</p>
+
+  <h3>三、KNN（PyTorch 版）</h3>
+  <p>算法本身见 <a href="#a6" data-go="a6">A.6 课</a>。张量流水：</p>
+<pre><code>X_test, X_train         (Nte, D), (Ntr, D)
+D = torch.cdist(X_test, X_train)            (Nte, Ntr)
+vals, idx = D.topk(k, dim=1, largest=False) (Nte, k), (Nte, k)
+nbr = y_train[idx]                          (Nte, k)   用整数下标张量取标签
+投票                                        (Nte,)</code></pre>
+  <p><code>topk</code> 只找最小的 k 个，不用把整行排序。注意 <code>largest=False</code>，默认的 <code>largest=True</code> 会找最远的 k 个。</p>
+  <p><b>数值例子。</b>训练点 \((0,0), (1,0), (0,1)\) 标签为 0，\((4,4), (5,4)\) 标签为 1，测试点 \((3, 3)\)。欧氏距离依次是 \(\sqrt{18} \approx 4.243\)、\(\sqrt{13} \approx 3.606\)、\(\sqrt{13} \approx 3.606\)、\(\sqrt{2} \approx 1.414\)、\(\sqrt{5} \approx 2.236\)。</p>
+  <ul>
+    <li>\(k = 3\)：最近的是 \((4,4)\)、\((5,4)\)，第三名在 \((1,0)\) 和 \((0,1)\) 之间并列。两者标签都是 0，选谁都一样，投票 1、1、0，预测为 1。我在本机运行时 <code>topk</code> 返回的是下标 2 而不是 1。它的文档字符串写明，并列元素的下标不保证稳定。</li>
+    <li>\(k = 4\)：标签是 1、1、0、0，<b>平票</b>，这时结果完全取决于平票规则。</li>
+  </ul>
+  <p><b>投票与平票。</b>起始代码提示用 <code>torch.mode(nbr, dim=1).values</code>。它的文档字符串只说返回“出现最多的一个值”，没有说明平票时返回哪个。想要确定的规则，可以把标签转成独热再按行求和，得到每类的票数，再取 <code>argmax</code>。<code>torch.argmax</code> 的文档写明，有多个最大值时返回第一个的下标，也就是平票时取最小的标签，和 A.6 课的约定一致。本题判题没有专门构造平票数据，两种写法都能通过。二分类时取奇数 k 可以避免平票。</p>
+
+  <h3>常见错误</h3>
+  <ul>
+    <li><b>形状没对齐就相减。</b><code>data - centroids</code> 在 \((N, D)\) 与 \((K, D)\) 之间一般不能广播；碰巧 \(N = K\) 时不报错，算出来却是逐行相减的错误结果。要先插入新维度。</li>
+    <li><b>归约维度写错。</b>距离矩阵是 \((N, K)\)，每个点找最近的中心是 <code>argmin(dim=1)</code>，写成 <code>dim=0</code> 得到的是每个中心最近的点。</li>
+    <li><b>逻辑回归的 w 写成 \((d, 1)\)。</b>这样 <code>X @ w</code> 是 \((n, 1)\)，与 \((n,)\) 的 y 相减会广播成 \((n, n)\)，损失和梯度都错，却不报错。</li>
+    <li><b>bce_loss 的参数顺序。</b>本题是 <code>bce_loss(y_true, y_pred)</code>，标签在前；而 <code>F.binary_cross_entropy(input, target)</code> 是预测在前。</li>
+    <li><b>clamp 的 eps 太小。</b>float32 下 \(10^{-8}\) 起不到作用。</li>
+    <li><b>K-Means 返回的中心和分配不配套。</b>例如返回了更新后的中心，却配着更新前的分配。</li>
+    <li><b>没有处理空簇</b>，中心变成 NaN。</li>
+    <li><b>KNN 用了 <code>topk</code> 默认的 <code>largest=True</code>。</b></li>
+  </ul>
+
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>K-Means 为什么一定收敛？两步都不增大 \(J\)，而可能的分配方式有限，不会无限地严格下降。但只保证局部最优。</li>
+    <li>K-Means 的结果和特征缩放有关吗？有关。它用欧氏距离，量级大的特征主导距离，和 KNN 一样要先标准化（A.2）。</li>
+    <li>k 怎么选？常见做法是画 \(J\) 随 k 变化的曲线找“拐点”，或看轮廓系数。\(J\) 总会随 k 增大而下降，不能直接取最小。</li>
+    <li>为什么逻辑回归的梯度要除以 n？损失是平均值。除以 n 后学习率的合适取值不随样本数变化。</li>
+    <li>KNN 和 K-Means 有什么关系？名字像，任务不同。KNN 是有监督分类，没有训练；K-Means 是无监督聚类，要迭代。共同点是都靠距离矩阵。</li>
+  </ol>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>不用循环怎么算两组点的距离？广播成 \((N, K, D)\) 再求和，或者用 \(\lVert a\rVert^2 + \lVert b\rVert^2 - 2a^\top b\) 的矩阵乘法，或者 <code>torch.cdist</code>。</li>
+    <li>为什么推荐 <code>BCEWithLogitsLoss</code>？它在 logit 上用 log-sum-exp 写法，极端 logit 下也不溢出，并且不像 <code>BCELoss</code> 那样把损失截在 100。</li>
+    <li>k-means++ 的思路？按到已有中心距离的平方成比例地抽下一个中心，让初始中心散开。</li>
+    <li>数据太大放不进一个距离矩阵怎么办？按批处理测试点（KNN）或数据点（K-Means 分配步）；K-Means 还可以用小批量版本。</li>
+    <li>放到 GPU 上要改什么？把数据和中心都 <code>.to(device)</code>，上面的张量写法一行不用改，这正是向量化的好处。</li>
+  </ol>
   <h3>本课练习</h3>
-  <p>（待写）</p>
+  <p><b>sigmoid(z) · bce_loss(y_true, y_pred, eps=1e-7) · train_logistic_regression(X, y, lr=0.1, n_epochs=1000)</b>（B.11）：</p>
+  <ul>
+    <li><code>sigmoid</code> 逐元素计算，在 \([-8, 8]\) 上要与 <code>torch.sigmoid</code> 相差不超过 \(10^{-6}\)；在 \([-50, 50]\) 上输出要留在 \([0, 1]\) 内，且 <code>sigmoid(0) = 0.5</code>。</li>
+    <li><code>bce_loss</code> 返回标量平均损失，在 \(p \in [0.02, 0.98]\) 的随机数据上要与 <code>F.binary_cross_entropy</code> 相差不超过 \(10^{-4}\)；另外“自信且正确”的预测损失必须低于“自信但错误”的。用 eps 保护 log。</li>
+    <li><code>train_logistic_regression</code> 接收 \((N, D)\) 的 X 和 \((N,)\) 的 0/1 标签，把 w（形状 \((D,)\)）和 b 初始化为 0，按上面的公式<b>手写梯度</b>做梯度下降，返回 <code>(w, b, losses)</code>，losses 是每个 epoch 的损失列表（存 <code>loss.item()</code> 即可）。判题在两团分开的高斯数据（均值约为 ±2.5）上训练，用 \(X\mathbf{w} + b\) 的 sigmoid 是否大于 0.5 来预测，准确率必须超过 90%。b 要能被 <code>float()</code> 转成一个数，所以用标量。</li>
+  </ul>
+  <p><b>kmeans(data, k, max_iters=100, tol=1e-4)</b>（B.11k）：返回 <code>(centroids, assignments)</code>，形状分别是 \((k, D)\) 和 \((N,)\)，簇号在 \([0, k)\) 内。判题不和任何“标准答案”比较，只检查收敛后必然成立的性质：</p>
+  <ul>
+    <li>用你返回的中心重新算一遍 <code>cdist(...).argmin(dim=1)</code>，必须和你返回的 assignments 完全一致。</li>
+    <li>每个非空簇的中心必须等于其成员的均值（容差 \(10^{-3}\)）。</li>
+    <li>在中心为 \((0,0)\)、\((10,0)\)、\((0,10)\) 的 3 个团（每团 20 个点）上，3 个簇都不能为空，并且每个真实中心 1.0 以内都要有一个你的中心。</li>
+  </ul>
+  <p>前两条要求返回的中心和分配互相配套，想清楚循环在哪一步退出，以及退出时手里的分配对应的是哪一组中心。第三条对初始化敏感：上面的实验里随机初始化在约三分之一的种子上会失败，判题的随机状态是固定的，但最好别靠运气，可以考虑 k-means++ 式的初始化。别忘了处理空簇。</p>
+  <p><b>knn_predict(X_train, y_train, X_test, k=5)</b>（B.11n）：返回 \((N_{\text{test}},)\) 的预测标签，取值必须来自 y_train。判题检查形状；k = 1 且测试点几乎和训练点重合时，必须原样返回那些训练点的标签；在两团分开的数据上 k = 5 时准确率超过 90%。按上面的张量流水写：<code>cdist</code>、<code>topk(largest=False)</code>、用下标取邻居标签、按行投票。</p>
   <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/modules/loss.py" target="_blank" rel="noopener">PyTorch 源码：nn.BCELoss / BCEWithLogitsLoss</a> <span class="sub">（为什么推荐带 logits 的版本）</span></span></li><li><span class="pill">经典文献</span><span>Lloyd，Least Squares Quantization in PCM，IEEE Transactions on Information Theory，1982 <span class="sub">（K-Means 的 Lloyd 算法）</span></span></li><li><span class="pill">经典文献</span><span>Arthur &amp; Vassilvitskii，k-means++: The Advantages of Careful Seeding，SODA 2007 <span class="sub">（k-means++ 初始化）</span></span></li><li><span class="pill">经典文献</span><span>Cover &amp; Hart，Nearest Neighbor Pattern Classification，IEEE Transactions on Information Theory，1967 <span class="sub">（最近邻分类）</span></span></li></ul>
   <h3>提交</h3>
   <pre><code>文件  study/submissions/b11_logistic.py
