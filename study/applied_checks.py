@@ -581,3 +581,157 @@ def check_add_integers(ns):
 @add
 def check_add_floats(ns):
     assert abs(ns.add(0.5, 0.25) - 0.75) < 1e-12, "浮点加法不对"
+
+
+# ============================================================ 4.1 KL 散度（PyTorch）
+add = reg("s4-kl", ["kl_divergence", "kl_estimators"], [
+    "精确 KL：先对两组 logits 做 log_softmax，再算 Σ p·(log p − log q)，沿最后一维求和。",
+    "不要先 softmax 再取 log：logits 很大时会得到 log(0) = −inf。log_softmax 是稳定的。",
+    "k1 = log π(x) − log π_ref(x)；k3 = r − log r − 1，其中 r = π_ref(x)/π(x) = exp(log π_ref − log π)。",
+    "k3 ≥ 0 来自 x − 1 − log x ≥ 0；它和 k1 的期望（x 从 π 采样）都等于 KL(π‖π_ref)。",
+])
+
+
+@add
+def check_kl_matches_definition(ns):
+    import torch
+    p = torch.tensor([[2.0, 0.0, -1.0]])
+    q = torch.tensor([[0.0, 1.0, 0.0]])
+    P, Q = p.softmax(-1), q.softmax(-1)
+    exp = (P * (P.log() - Q.log())).sum(-1)
+    got = ns.kl_divergence(p, q)
+    assert tuple(got.shape) == (1,), f"(1,3) 的输入应输出形状 (1,)，得到 {tuple(got.shape)}"
+    assert torch.allclose(got, exp, atol=1e-6), f"KL(P‖Q) 应为 {float(exp):.6f}，得到 {float(got):.6f}"
+
+
+@add
+def check_kl_properties(ns):
+    import torch
+    torch.manual_seed(0)
+    p, q = torch.randn(4, 7, 11), torch.randn(4, 7, 11)
+    kpq, kqp = ns.kl_divergence(p, q), ns.kl_divergence(q, p)
+    assert tuple(kpq.shape) == (4, 7), f"(4,7,11) 应沿最后一维求和得到 (4,7)，得到 {tuple(kpq.shape)}"
+    assert bool((kpq >= -1e-6).all()), "KL 不可能为负"
+    assert torch.allclose(ns.kl_divergence(p, p), torch.zeros(4, 7), atol=1e-6), "两分布相同时 KL 应为 0"
+    assert not torch.allclose(kpq, kqp, atol=1e-4), "KL 不对称：KL(P‖Q) 一般不等于 KL(Q‖P)，检查参数顺序"
+    assert torch.allclose(ns.kl_divergence(p + 5.0, q - 3.0), kpq, atol=1e-5), "logits 整体加常数不改变分布，KL 也不应变"
+
+
+@add
+def check_kl_numerically_stable(ns):
+    import torch
+    p = torch.tensor([[1000.0, 0.0, -1000.0]])
+    q = torch.tensor([[0.0, 1000.0, 0.0]])
+    got = ns.kl_divergence(p, q)
+    assert torch.isfinite(got).all(), "logits 很大时出现了 inf/nan：用 log_softmax，不要 softmax 后再 log"
+    assert abs(float(got) - 1000.0) < 1e-2, f"这个例子的 KL 约为 1000，得到 {float(got):.3f}"
+
+
+@add
+def check_estimators_basic(ns):
+    import torch
+    torch.manual_seed(1)
+    lp, lr = torch.randn(50) - 2.0, torch.randn(50) - 2.0
+    k1, k3 = ns.kl_estimators(lp, lr)
+    assert torch.allclose(k1, lp - lr, atol=1e-6), "k1 应为 log π − log π_ref（逐样本）"
+    r = torch.exp(lr - lp)
+    assert torch.allclose(k3, r - torch.log(r) - 1, atol=1e-5), "k3 应为 r − log r − 1，r = π_ref/π"
+    assert bool((k3 >= -1e-7).all()), "k3 逐样本都不应为负"
+    z1, z3 = ns.kl_estimators(lp, lp)
+    assert torch.allclose(z1, torch.zeros(50)) and torch.allclose(z3, torch.zeros(50), atol=1e-7), "两者相同时估计值应为 0"
+
+
+@add
+def check_estimators_are_unbiased(ns):
+    import torch
+    g = torch.Generator().manual_seed(2)
+    p_logits, q_logits = torch.tensor([1.0, 0.5, 0.0, -0.5]), torch.tensor([0.8, 0.6, 0.1, -0.4])
+    lp_all, lq_all = p_logits.log_softmax(-1), q_logits.log_softmax(-1)
+    exact = float((lp_all.exp() * (lp_all - lq_all)).sum())
+    x = torch.multinomial(lp_all.exp(), 200000, replacement=True, generator=g)
+    k1, k3 = ns.kl_estimators(lp_all[x], lq_all[x])
+    for name, k in (("k1", k1), ("k3", k3)):
+        assert abs(float(k.mean()) - exact) < 2e-3, f"{name} 的样本均值 {float(k.mean()):.5f} 应接近精确 KL {exact:.5f}（样本应来自 π）"
+    assert float(k3.var()) < float(k1.var()), "两个分布接近时，k3 的方差应小于 k1"
+
+
+# ============================================================ 4.3 SFT 数据与损失（PyTorch）
+add = reg("s4-sft", ["build_sft_example", "collate", "sft_loss"], [
+    "build_sft_example：input = prompt + response + [eos]；labels 与 input 等长，提示部分换成 ignore_index。",
+    "collate：右侧补齐。input 用 pad_id，labels 用 ignore_index，attention_mask 真实 token 为 1、补齐处为 0。",
+    "sft_loss：错开一位：logits[:, :-1] 对 labels[:, 1:]；用 F.cross_entropy(..., ignore_index=...) 对所有有效 token 求平均。",
+    "没有任何有效 token 时返回 0（用 logits.sum() * 0 这类写法保持可反向传播）。",
+])
+
+
+@add
+def check_build_example(ns):
+    import torch
+    inp, lab = ns.build_sft_example([5, 6, 7], [8, 9], eos_id=2, ignore_index=-100)
+    inp, lab = torch.as_tensor(inp).tolist(), torch.as_tensor(lab).tolist()
+    assert inp == [5, 6, 7, 8, 9, 2], f"input 应为 提示+回答+eos = [5,6,7,8,9,2]，得到 {inp}"
+    assert lab == [-100, -100, -100, 8, 9, 2], f"labels 应把提示部分换成 -100、回答和 eos 保留，得到 {lab}"
+
+
+@add
+def check_collate(ns):
+    import torch
+    ex = [ns.build_sft_example([1, 2], [3], eos_id=0), ns.build_sft_example([4], [5, 6, 7], eos_id=0)]
+    out = ns.collate(ex, pad_id=99, ignore_index=-100)
+    assert isinstance(out, dict) and {"input_ids", "labels", "attention_mask"} <= set(out), "collate 应返回含 input_ids、labels、attention_mask 的 dict"
+    ids, lab, am = (torch.as_tensor(out[k]) for k in ("input_ids", "labels", "attention_mask"))
+    assert tuple(ids.shape) == (2, 5), f"按最长的 5 补齐，应为 (2,5)，得到 {tuple(ids.shape)}"
+    assert ids[0].tolist() == [1, 2, 3, 0, 99] and lab[0].tolist() == [-100, -100, 3, 0, -100], f"第一条补齐不对：{ids[0].tolist()} / {lab[0].tolist()}"
+    assert am.tolist() == [[1, 1, 1, 1, 0], [1, 1, 1, 1, 1]], f"attention_mask 不对：{am.tolist()}"
+
+
+@add
+def check_loss_only_on_response(ns):
+    import torch
+    import torch.nn.functional as F
+    torch.manual_seed(3)
+    labels = torch.tensor([[-100, -100, 7, 8, 1], [-100, 4, 5, -100, -100]])
+    logits = torch.randn(2, 5, 10)
+    got = ns.sft_loss(logits, labels, ignore_index=-100)
+    lg, lb = logits[:, :-1].reshape(-1, 10), labels[:, 1:].reshape(-1)
+    keep = lb != -100
+    exp = F.cross_entropy(lg[keep], lb[keep])
+    assert torch.allclose(torch.as_tensor(got), exp, atol=1e-5), f"应为所有有效 token 的平均交叉熵（错开一位），{float(exp):.5f} vs {float(got):.5f}"
+    logits2 = logits.clone()
+    logits2[0, 0] += 5.0          # 位置 0 预测位置 1 的提示 token：不应计入
+    logits2[1, 3:] += 5.0         # 预测补齐/被忽略位置
+    assert torch.allclose(torch.as_tensor(ns.sft_loss(logits2, labels, ignore_index=-100)), exp, atol=1e-5), "改动“预测提示/补齐 token”的 logits 改变了 loss：这些位置应被忽略"
+
+
+@add
+def check_token_level_average(ns):
+    import torch
+    import torch.nn.functional as F
+    torch.manual_seed(4)
+    labels = torch.tensor([[-100, 1, 2, 3, 4, 5, 6], [-100, 7, -100, -100, -100, -100, -100]])
+    logits = torch.randn(2, 7, 10)
+    lg, lb = logits[:, :-1].reshape(-1, 10), labels[:, 1:].reshape(-1)
+    tok = F.cross_entropy(lg, lb, ignore_index=-100)
+    got = torch.as_tensor(ns.sft_loss(logits, labels, ignore_index=-100))
+    assert torch.allclose(got, tok, atol=1e-5), "应按 token 平均（所有有效 token 等权），而不是先按序列平均再平均"
+
+
+@add
+def check_no_valid_tokens(ns):
+    import torch
+    logits = torch.randn(1, 4, 6, requires_grad=True)
+    loss = torch.as_tensor(ns.sft_loss(logits, torch.full((1, 4), -100), ignore_index=-100))
+    assert torch.isfinite(loss) and float(loss) == 0.0, f"没有有效 token 时应返回 0，得到 {float(loss)}"
+    loss.backward()
+
+
+@add
+def check_gradients_masked(ns):
+    import torch
+    torch.manual_seed(5)
+    labels = torch.tensor([[-100, -100, 3, 4]])
+    logits = torch.randn(1, 4, 6, requires_grad=True)
+    torch.as_tensor(ns.sft_loss(logits, labels, ignore_index=-100)).backward()
+    g = logits.grad[0].abs().sum(-1)
+    assert float(g[0]) == 0.0 and float(g[3]) == 0.0, f"预测提示 token 的位置 0 和最后一个位置不应有梯度，得到 {g.tolist()}"
+    assert float(g[1]) > 0 and float(g[2]) > 0, "预测回答 token 的位置应有梯度"

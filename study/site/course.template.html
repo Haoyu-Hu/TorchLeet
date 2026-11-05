@@ -149,12 +149,23 @@ a:hover{text-decoration-thickness:2px}
     <tr><td>1 Foundations</td><td>BPE · Sinusoidal · RoPE · RMSNorm · Attention</td><td><span class="pill">已开讲</span></td></tr>
     <tr><td>2 Core Transformer</td><td>Multi-Head · GQA · KV Cache · Sliding Window</td><td><span class="pill">已开讲</span></td></tr>
     <tr><td>3 Full Model</td><td>架构总览 · RoPE+GQA 注意力块 · 组装 SmolLM 并生成</td><td><span class="pill">已开讲</span></td></tr>
-    <tr><td>4 Alignment</td><td>KL · LoRA · SFT · DPO · PPO · GRPO</td><td class="soon">待开讲</td></tr>
+    <tr><td>4 Alignment</td><td>KL · LoRA · SFT · DPO · PPO-RLHF · GRPO</td><td><span class="pill">已开讲</span></td></tr>
     <tr><td>5 Decoding &amp; Inference</td><td>Temperature / Top-k / Top-p · 投机解码 · 连续批处理 · 推理引擎</td><td class="soon">待开讲</td></tr>
     <tr><td>6 Systems</td><td>Mixture of Experts</td><td class="soon">待开讲</td></tr>
     <tr><td>应用 ML</td><td>指标 · 预处理 · 交叉验证 · 回归 · KNN · 决策树 · PCA · pandas（numpy / pandas 笔试向）</td><td><span class="pill">已开讲</span></td></tr>
     <tr><td>TorchLeet 题库</td><td>全部 68 题：题面、起始代码、判题项、分级提示，可搜索（LLM 路径 / Basics / Advanced）</td><td><span class="pill">已嵌入</span></td></tr>
     <tr><td>Basics</td><td>线性回归 → CNN/RNN/LSTM → K-Means / KNN / 逻辑回归</td><td class="soon">待开讲</td></tr>
+  </table></div>
+  <h3>符号约定</h3>
+  <div class="scroll"><table>
+    <tr><th>符号</th><th>含义</th></tr>
+    <tr><td>B、T（或 S）</td><td>批大小、序列长度</td></tr>
+    <tr><td>d / d_model</td><td>模型宽度（隐状态维度）</td></tr>
+    <tr><td>h、g、d_head</td><td>Q 头数、K/V 头数（GQA 的组数）、每个头的维度；h·d_head = d_model</td></tr>
+    <tr><td>L</td><td>层数</td></tr>
+    <tr><td>V</td><td>词表大小（讲注意力时，大写 V 指 value 矩阵，会单独说明）</td></tr>
+    <tr><td>base</td><td>正弦/旋转位置编码的底数，默认 10000；θ_i 指第 i 对维度的角频率</td></tr>
+    <tr><td>KB / MB / GB</td><td>本教程的显存估算里按 1024 进位（即 KiB、MiB、GiB）</td></tr>
   </table></div>
   <h3>资料来源与核对方式</h3>
   <p>每节的“深入一层”是在题目之外补充的内容，“资料与核对”列出出处，分三种：</p>
@@ -206,7 +217,7 @@ a:hover{text-decoration-thickness:2px}
   <h3>深入一层</h3>
   <p><b>0. 论文原文怎么说。</b>Sennrich 等人写道：BPE（Gage, 1994）原本是一种简单的数据压缩技术，反复把序列中最频繁的字节对替换成一个没用过的新字节；他们把它改造成词的切分算法，合并的对象是字符或字符序列。做法是：用字符表初始化符号表，把每个词表示成字符序列，<b>外加一个特殊的词尾符号</b>（作者说这能让翻译之后还原原来的分词），然后反复统计所有符号对，把出现次数最多的那一对替换成一个新符号。</p>
   <p><b>1. 词尾符与字节级。</b>经典做法（Sennrich 等人）从字符出发，并在每个词最后一个符号后接 <code>&lt;/w&gt;</code>。参考实现 subword-nmt 里确实是这样处理的。现代大模型多用<b>字节级 BPE</b>：起点是 256 个字节值，因此任何文本都能编码，不再需要 <code>&lt;unk&gt;</code>。</p>
-  <p><b>2. 词表大小 = 基础词表 + 合并次数。</b>例如 tiktoken 里 <code>gpt2</code> 编码的词表大小是 50257。Llama 2 的论文写明：分词器沿用 Llama 1，用 SentencePiece 实现的 BPE，词表 32k，<b>所有数字都被拆成单个数字</b>，遇到未知的 UTF-8 字符就用字节来分解。Llama 3 的论文写明：词表扩大到 128K，由 tiktoken 的 100K 个 token 加上 28K 个选定的非英语语言 token 组成。</p>
+  <p><b>2. 词表大小 = 基础词表 + 合并次数。</b>例如 tiktoken 里 <code>gpt2</code> 编码的词表大小是 50257：普通 token 的编号是 0–50255，共 50256 个，即 256 个字节 + 50000 次合并；再加 1 个特殊 token <code>&lt;|endoftext|&gt;</code>（编号 50256）。Llama 2 的论文写明：分词器沿用 Llama 1，用 SentencePiece 实现的 BPE，词表 32k，<b>所有数字都被拆成单个数字</b>，遇到未知的 UTF-8 字符就用字节来分解。Llama 3 的论文写明：词表扩大到 128K，由 tiktoken 的 100K 个 token 加上 28K 个选定的非英语语言 token 组成。</p>
   <p><b>3. 先预分词，再做 BPE。</b>实际的分词器会先用一个正则把文本切成“词块”，BPE 只在词块内部合并，避免合并跨越单词和标点。Llama 3 的分词器基于 tiktoken，它的正则里有 <code>\p{N}{1,3}</code>，意思是数字最多每 3 位一组切开。</p>
   <p><b>4. 训练产出的是一张有序的合并表。</b>编码新词时，从字符（或字节）出发，每次应用“排名最靠前（最早学到）”的可合并对，直到没有可合并的为止。</p>
   <p><b>5. 复杂度。</b>像本题这样每轮重扫整个词表，总代价约是“合并次数 × 语料规模”。工业实现会维护相邻对的计数索引，只增量更新被合并影响到的那几个词。</p>
@@ -214,7 +225,7 @@ a:hover{text-decoration-thickness:2px}
   <div class="scroll"><table>
     <tr><th>算法</th><th>怎么选下一步</th></tr>
     <tr><td>BPE</td><td>总是合并出现次数最多的相邻对，结果是确定的</td></tr>
-    <tr><td>WordPiece</td><td>合并“信息量”最大的对：合并后的词频相对于各自词频的比例</td></tr>
+    <tr><td>WordPiece</td><td>合并得分最高的对：<code>score(a, b) = freq(ab) / (freq(a)·freq(b))</code>，偏好“一起出现的次数远超偶然”的组合</td></tr>
     <tr><td>Unigram</td><td>从大词表出发逐步删减；同一个词可有多种切分，取概率最高的</td></tr>
     <tr><td>SentencePiece</td><td>不是新算法，而是直接在原始文本上跑 BPE 或 Unigram，不假设空格分词（适合中日文）</td></tr>
   </table></div>
@@ -239,10 +250,11 @@ a:hover{text-decoration-thickness:2px}
   <h2>1.2 Sinusoidal 位置编码</h2>
   <p class="sub">让 Attention 知道“我是第几个”。</p>
   <h3>为什么</h3>
-  <p>Attention 对输入是<b>置换不变</b>的：打乱 token 顺序，输出只是跟着打乱。要让模型感知顺序，就得把位置信息显式注入。</p>
+  <p>不加位置信息时，Attention 对输入是<b>置换等变</b>的：把 token 顺序打乱，输出只是跟着同样打乱，模型分不出先后。要让模型感知顺序，就得把位置信息显式注入。</p>
   <h3>公式</h3>
-<pre><code>PE[pos, 2i]   = sin( pos / 10000^(2i/d) )
-PE[pos, 2i+1] = cos( pos / 10000^(2i/d) )</code></pre>
+<pre><code>ω_i = 1 / 10000^(2i / d_model)          i = 0, 1, …, d_model/2 − 1
+PE[pos, 2i]   = sin( pos · ω_i )
+PE[pos, 2i+1] = cos( pos · ω_i )         同一对维度共用同一个 ω_i</code></pre>
   <h3>直觉</h3>
   <p>每一对维度 (2i, 2i+1) 是一根以角频率 ω<sub>i</sub> 转动的指针。i 小频率高，像秒针；i 大频率低，像时针。多根指针组合起来，每个位置就有唯一的“读数”。而且 <code>PE[pos+k]</code> 是 <code>PE[pos]</code> 的线性变换（一个旋转），所以相对位移容易学。</p>
   <h3>热力图：行是位置，列是维度</h3>
@@ -256,7 +268,7 @@ PE[pos, 2i+1] = cos( pos / 10000^(2i/d) )</code></pre>
   <ol class="q">
     <li>频率下标 i 取 0 … d/2−1，<b>不是</b>原始维度下标；sin 和 cos 共用同一个 ω。</li>
     <li>为什么用 <code>register_buffer</code> 而不是 <code>nn.Parameter</code>？（固定函数、不训练，但要随 <code>.to(device)</code> 移动并存入 state_dict。）</li>
-    <li>数值上 <code>10000^(-2i/d)</code> 常写成 <code>exp(-2i/d · ln 10000)</code>，更稳。</li>
+    <li>实现里常把 <code>10000^(−2i/d_model)</code> 写成 <code>exp(−(2i/d_model)·ln 10000)</code>，一次对整个向量算完，和参考实现一致。</li>
     <li><code>forward</code> 只看 <code>x.shape[1]</code>，返回前 seq_len 行，形状 <code>(1, seq_len, d)</code>，加法由调用方完成。</li>
   </ol>
   <h3>深入一层</h3>
@@ -268,7 +280,6 @@ PE[pos, 2i+1] = cos( pos / 10000^(2i/d) )</code></pre>
   <p>所以 <code>PE(p+k)</code> 是 <code>PE(p)</code> 按位移 k 做一次与 p 无关的线性变换，模型有机会学到“往后 k 个位置”的操作。</p>
   <p><b>3. 两种常见的排布。</b>论文公式是 (2i, 2i+1) 交错排列，Annotated Transformer 的实现就是 <code>pe[:, 0::2]=sin</code>、<code>pe[:, 1::2]=cos</code>。而 Tensor2Tensor 的实现把所有 sin 放前半、所有 cos 放后半（它的文档写的是“concatenated in the channels dimension”）。两者只差维度的排列，但<b>要对齐已有权重时必须用同一种</b>。本题的判题按交错排列检查。</p>
   <p><b>4. 怎么用。</b>Annotated Transformer 里，词嵌入先乘 <code>sqrt(d_model)</code>，再与位置编码相加，然后做 dropout。位置编码的取值在 [−1, 1]，乘上 <code>sqrt(d_model)</code> 能让词嵌入的量级不被它淹没。</p>
-  <p><b>5. 数值写法。</b>实现里常用 <code>exp(−(2i/d)·ln 10000)</code> 来算频率，而不是直接算 10000 的幂。</p>
   <h3>局限与替代</h3>
   <ul>
     <li><b>学习式位置嵌入</b>：每个位置一个可训练向量，最大长度固定，不能直接外推。</li>
@@ -296,7 +307,7 @@ PE[pos, 2i+1] = cos( pos / 10000^(2i/d) )</code></pre>
   <h2>1.3 RoPE 旋转位置编码</h2>
   <p class="sub">LLaMA、Mistral、Qwen 都在用。</p>
   <h3>为什么</h3>
-  <p>绝对位置编码是“加”在输入上的，注意力分数里相对距离不明显，长度外推也差。RoPE 改为<b>旋转 q 和 k</b>，使 <code>q<sub>m</sub>·k<sub>n</sub></code> 只依赖相对距离 <code>m−n</code>。</p>
+  <p>绝对位置编码是“加”在输入上的，相对距离只能靠模型间接学到。RoPE 改为<b>旋转 q 和 k</b>，让位置只以 <code>m−n</code> 的形式进入注意力分数 <code>q<sub>m</sub>·k<sub>n</sub></code>。（它并不自动解决长度外推，见下文“长度外推”。）</p>
   <h3>数学</h3>
   <p>把向量两两配对看作二维平面上的点，位置 m 处整体转 mθ 角：</p>
 <pre><code>[x1']   [cos mθ  −sin mθ] [x1]
@@ -305,9 +316,13 @@ PE[pos, 2i+1] = cos( pos / 10000^(2i/d) )</code></pre>
 (R_m q) · (R_n k) = q · R_{n−m} k      ← 只剩相对位移</code></pre>
   <h3>实现的关键恒等式（half 配对）</h3>
 <pre><code>q' = q * cos + rotate_half(q) * sin
-rotate_half([x1, x2]) = [−x2, x1]     # 最后一维切成两半</code></pre>
+rotate_half([x1, x2]) = [−x2, x1]     # 最后一维切成两半，x1、x2 各 d_head/2 维
+
+逐元素展开：前半 = x1·cos − x2·sin，后半 = x2·cos + x1·sin
+            ↑ 正是上面的二维旋转：第 i 维与第 i + d_head/2 维组成一对</code></pre>
+  <p>所以 cos、sin 的最后一维必须是 <code>cat([angle, angle], −1)</code>（长度 d_head，不是 d_head/2），让第 i 维和第 i+d_head/2 维用同一个角度。3.2 会再用到这一点。</p>
   <ul>
-    <li><code>θ<sub>i</sub> = 10000^(−2i/d)</code>，和 sinusoidal 同一套频率；cos/sin 表按位置预先算好并缓存。</li>
+    <li><code>θ<sub>i</sub> = base^(−2i/d_head)</code>，i = 0…d_head/2−1，base 默认 10000，形式和 sinusoidal 相同。注意这里的维度是<b>每个头的</b> d_head，不是 d_model。cos/sin 表按位置预先算好并缓存。</li>
     <li>只作用在 <b>q 和 k</b>，不作用在 v。</li>
     <li>cos/sin 形状要能广播到 <code>(batch, heads, seq, head_dim)</code>。</li>
   </ul>
@@ -317,7 +332,7 @@ rotate_half([x1, x2]) = [−x2, x1]     # 最后一维切成两半</code></pre>
       <input type="range" id="rope-pos" min="0" max="12" value="3" style="flex:1;min-width:120px;accent-color:var(--accent)">
       <span id="rope-lab" class="pill"></span></div>
     <canvas id="rope-canvas" width="640" height="260" aria-label="二维旋转示意"></canvas>
-    <p class="sub" style="margin:8px 0 0">三根向量长度相同；高频维度转得快，低频维度转得慢。长度不变，只有方向变。</p>
+    <p class="sub" style="margin:8px 0 0">三根向量长度相同；高频维度转得快，低频维度转得慢。长度不变，只有方向变。（三个频率只是示意，不是按 base^(−2i/d_head) 算出来的。）</p>
   </div>
   <h3>要想清楚</h3>
   <ol class="q">
@@ -327,10 +342,11 @@ rotate_half([x1, x2]) = [−x2, x1]     # 最后一维切成两半</code></pre>
   </ol>
   <h3>深入一层</h3>
   <p><b>0. 论文原文怎么说。</b>RoFormer 的摘要列出 RoPE 的几个性质：序列长度可灵活变化；token 之间的依赖随相对距离增大而衰减；能给线性自注意力配上相对位置编码。</p>
-  <p><b>1. 频率。</b>第 i 对用 <code>θ_i = base^(−2i/d)</code>，位置 m 处转 <code>m·θ_i</code>。Llama 3 的论文把 RoPE 的基频设为 θ = 500,000，并说明这样能更好地支持更长的上下文（它引用的先前工作表明该值对 32,768 以内的上下文有效）。Llama 3 官方仓库里 <code>precompute_freqs_cis</code> 的写法是 <code>1 / (theta ** (arange(0, dim, 2)[:dim//2] / dim))</code>，函数默认 theta 是 10000，而 <code>ModelArgs.rope_theta</code> 设为 <b>500000</b>。最长波长约为 <code>2π·base</code>，所以 base 越大，低频那几对转得越慢。</p>
-  <p><b>2. 为什么只依赖相对距离。</b>把每一对看作复数，旋转就是乘 <code>e^{imθ}</code>：</p>
-<pre><code>(q·e^{imθ}) · conj(k·e^{inθ})  →  Re( q·conj(k)·e^{i(m−n)θ} )</code></pre>
-  <p>结果里只剩 <code>m−n</code>。</p>
+  <p><b>1. 频率。</b>第 i 对用 <code>θ_i = base^(−2i/d_head)</code>，位置 m 处转 <code>m·θ_i</code>。Llama 3 的论文把 RoPE 的 <b>base</b>（论文称 base frequency，代码里叫 <code>rope_theta</code>，和逐对的角频率 θ_i 不是一回事）设为 500,000，并说明这样能更好地支持更长的上下文（它引用的先前工作表明该值对 32,768 以内的上下文有效）。Llama 3 官方仓库里 <code>precompute_freqs_cis</code> 的写法是 <code>1 / (theta ** (arange(0, dim, 2)[:dim//2] / dim))</code>，函数默认 theta 是 10000，而 <code>ModelArgs.rope_theta</code> 设为 <b>500000</b>。最长波长约为 <code>2π·base</code>，所以 base 越大，低频那几对转得越慢。</p>
+  <p><b>2. 为什么只依赖相对距离（完整推导）。</b>把每一对二维分量看作一个复数，旋转 mθ 就是乘 <code>e^{imθ}</code>。对两个二维向量 a、b，实数点积可以写成 <code>⟨a, b⟩ = Re(a · conj(b))</code>，所以</p>
+<pre><code>⟨R_m q, R_n k⟩ = Re[ (q·e^{imθ}) · conj(k·e^{inθ}) ]
+              = Re[ q · conj(k) · e^{i(m−n)θ} ]</code></pre>
+  <p>对全部 d_head/2 对求和就是 <code>q_mᵀ k_n</code>，位置只以 <code>m−n</code> 的形式出现。（把 conj 放在 q 一侧会得到 <code>e^{i(n−m)θ}</code>，取实部后相同，对应上面矩阵式里的 R_{n−m}。）</p>
   <p><b>3. 两种配对方式，不能混用。</b>Meta 的原始实现把相邻两维 (x₀,x₁)、(x₂,x₃)… 当成复数（<code>view_as_complex(x.reshape(…, −1, 2))</code>）。Hugging Face 的实现用 <code>rotate_half</code>，把前半和后半配对。两者只差维度排列，但 q/k 的权重必须与所用配对方式一致，不能直接互换。本题用的是 <code>rotate_half</code> 这一种。</p>
   <p><b>4. 只作用在 q 和 k。</b>位置信息要进入的是注意力分数 <code>q·k</code>，v 只负责被加权求和，不需要旋转。</p>
   <p><b>5. 精度。</b>Llama 3 仓库在旋转前先把 q、k 转成 float32，算完再转回原精度。</p>
@@ -371,13 +387,13 @@ rotate_half([x1, x2]) = [−x2, x1]     # 最后一维切成两半</code></pre>
     <tr><td>减均值</td><td>是</td><td>否</td></tr>
     <tr><td>分母</td><td>标准差</td><td>均方根</td></tr>
     <tr><td>可学习参数</td><td>γ 和 β</td><td>只有 γ</td></tr>
-    <tr><td>输出均值</td><td>≈ β</td><td>不为 0</td></tr>
+    <tr><td>输出沿特征维的均值（γ=1、β=0 时）</td><td>0</td><td>一般不为 0</td></tr>
   </table></div>
   <h3>要想清楚</h3>
   <ol class="q">
     <li><code>keepdim=True</code> 为什么必要？（让 <code>(…,1)</code> 能广播回 <code>(…,dim)</code>。）</li>
     <li>输出的均方根大约是多少？（γ=1 时约为 1。）</li>
-    <li>fp16/bf16 下通常先转 float32 算 RMS 再转回，为什么？（平方后容易溢出或丢精度。）</li>
+    <li>fp16/bf16 下通常先转 float32 算 RMS 再转回，为什么？fp16 最大约 65504，|x| &gt; 256 时 x² 就溢出；bf16 不易溢出，但尾数只有 8 位，求均值时累加精度差。</li>
   </ol>
   <h3>深入一层</h3>
   <p><b>0. 论文原文怎么说。</b>作者假设：LayerNorm 的成功主要靠“重新缩放不变性”，而不是“重新居中不变性”。于是提出 RMSNorm，只按均方根（RMS）归一化，让模型具有重新缩放不变性。摘要写明它的效果与 LayerNorm 相当，但<b>运行时间减少 7%～64%</b>（不同模型上的幅度不同）。</p>
@@ -386,12 +402,15 @@ RMSNorm(x)   =  x / sqrt(mean(x²) + eps) · γ              参数 d 个</code>
   <p><b>1. 工业实现长什么样。</b>Hugging Face 的 <code>LlamaRMSNorm</code>：先把输入转成 float32，算 <code>x²</code> 的均值，乘 <code>rsqrt(var + eps)</code>，<b>再转回输入精度</b>，最后乘 <code>weight</code>。它的 eps 默认是 <b>1e-6</b>（本题 notebook 默认 1e-8）。</p>
   <p><b>2. 放在哪。</b>Llama 的每个解码层里有两个 RMSNorm：<code>input_layernorm</code> 在注意力<b>之前</b>，<code>post_attention_layernorm</code> 在 MLP <b>之前</b>，整个模型最后还有一个。这种“先归一化、再进子层”的写法叫 Pre-Norm。</p>
   <p><b>3. 为什么更快。</b>少一次沿特征维的均值计算，也没有 β 偏置。RMSNorm 作者的仓库说明里提到：LayerNorm 会在每个运行步骤上带来额外的计算开销，抵消了一部分它带来的训练稳定性收益。</p>
-  <p><b>4. 直觉。</b>它只“重新缩放”，不“重新居中”：保持向量方向不变，把均方根固定到 1（γ=1 时）。</p>
-  <p><b>5. 数值。</b>平方运算在 fp16/bf16 下容易溢出或丢精度，所以先转 float32。</p>
+  <p><b>4. 直觉。</b>它只“重新缩放”，不“重新居中”。γ=1 时，它只改变向量长度、不改变方向，输出的 RMS 约为 1；γ 各维不相等时会按维度重新加权。</p>
+  <p><b>5. 两者的关系与不变性。</b></p>
+<pre><code>RMS(x)² = Var(x) + mean(x)²       → mean(x) = 0 时，RMSNorm 与（无 β 的）LayerNorm 相同
+LN(α·x + c·1) = LN(x)             （α &gt; 0，忽略 eps）  平移不变 + 缩放不变
+RMSNorm(α·x)  = RMSNorm(x)        （α &gt; 0，忽略 eps）  只有缩放不变</code></pre>
   <h3>面试常追问</h3>
   <ol class="q">
     <li>对输入整体加一个常数，输出变吗？LayerNorm 不变（它先减均值），RMSNorm 会变。</li>
-    <li>对输入整体乘一个常数呢？两者在忽略 eps 时都基本不变。</li>
+    <li>对输入整体乘一个<b>正</b>常数 α 呢？忽略 eps 时两者输出都不变。α &lt; 0 时，归一化部分会变号。</li>
     <li>为什么一个模型里要放那么多归一化？稳定每一层的激活量级，让深层网络可训练。</li>
     <li>RMSNorm 输出的均值是 0 吗？不是，它没有居中。</li>
   </ol>
@@ -421,7 +440,7 @@ Q:(…,Tq,d)  K:(…,Tk,d)  V:(…,Tk,dv)
       <input type="range" id="att-d" min="1" max="512" value="64" style="flex:1;min-width:120px;accent-color:var(--accent)">
       <span id="att-lab" class="pill"></span></div>
     <canvas id="att-canvas" width="640" height="220" aria-label="softmax 权重对比"></canvas>
-    <p class="sub" style="margin:8px 0 0">随机 q、k 的点积方差等于 d_k。不缩放（上）softmax 随 d_k 增大趋于 one-hot，梯度消失；缩放后（下）保持平滑。</p>
+    <p class="sub" style="margin:8px 0 0">每根柱子是一对随机 q、k 的点积（为了演示，每个 key 都配了一个独立的随机 q），方差等于 d_k。不缩放（上）softmax 随 d_k 增大趋于 one-hot，梯度消失；缩放后（下）保持平滑。</p>
   </div>
   <h3>要想清楚</h3>
   <ol class="q">
@@ -433,12 +452,16 @@ Q:(…,Tq,d)  K:(…,Tk,d)  V:(…,Tk,dv)
   <p class="note"><b>约定：</b>判题器的 mask 是布尔型，True 表示保留、False 表示屏蔽。返回值是 <code>(output, attention_weights)</code>。禁止调用 <code>F.scaled_dot_product_attention</code>。</p>
   <h3>深入一层</h3>
   <p><b>1. 为什么除以 sqrt(d_k)。</b>论文原文就是这样解释的：点积变大会把 softmax 推到梯度极小的区域，所以要把点积除以 √d_k；脚注里给出推导：假设 q、k 的分量是均值 0、方差 1 的独立随机变量，那么 q·k 的均值为 0、方差为 d_k。Annotated Transformer 里逐字复述了论文的解释：对于较大的 d_k，点积的量级会变大，把 softmax 推到梯度极小的区域；要看出点积为什么变大，假设 q 和 k 的各分量是独立随机变量、均值 0、方差 1，那么 q·k 的方差是 d_k。它还提到，不缩放的点积注意力在 d_k 较大时不如加性注意力。</p>
+  <p><b>1′. “梯度消失”从哪来。</b>softmax 的雅可比矩阵是</p>
+<pre><code>∂p_i/∂z_j = p_i (δ_ij − p_j)        即 J = diag(p) − p pᵀ</code></pre>
+  <p>当 p 接近 one-hot（某个 p_i≈1、其余≈0）时，J 的每一项都接近 0，梯度几乎传不回去。缩放让 z 的方差回到 1，p 就不会过早变成 one-hot。</p>
   <p><b>2. 代价。</b>分数矩阵是 <code>T×T</code>（每个头一份），时间 O(T²·d)，显存 O(T²)。序列越长，这块越先成为瓶颈。</p>
   <p><b>3. 精度。</b>Hugging Face 的 Llama 实现里，softmax 用 float32 算，再转回 q 的精度。</p>
-  <p><b>4. FlashAttention。</b>它不把 <code>QKᵀ</code> 整个算出来，而是分块计算，同时维护 softmax 的归一化统计量。输出与标准注意力<b>数值上一致</b>，显存随序列长度线性增长。它的 FLOPs 反而更多，但因为大幅减少了对慢速显存（HBM）的读写，实际更快。FlashAttention 论文的摘要把它称为“IO 感知的精确注意力算法”：用分块（tiling）减少 GPU 高带宽显存与片上 SRAM 之间的读写次数，并分析了它的 IO 复杂度，证明访问 HBM 的次数比标准注意力更少。摘要报告：相对 MLPerf 1.1 的训练速度记录，BERT-large（序列长度 512）端到端提速 15%；GPT-2（序列长度 1K）快 3 倍。</p>
+  <p><b>4. FlashAttention。</b>它不把 <code>QKᵀ</code> 整个算出来，而是分块计算，同时维护 softmax 的归一化统计量。它是<b>精确</b>算法而不是近似，与标准注意力只差浮点舍入误差；显存随序列长度线性增长。反向传播时要重算注意力块，所以总 FLOPs 略多，但因为大幅减少了对慢速显存（HBM）的读写，实际更快。FlashAttention 论文的摘要把它称为“IO 感知的精确注意力算法”：用分块（tiling）减少 GPU 高带宽显存与片上 SRAM 之间的读写次数，并分析了它的 IO 复杂度，证明访问 HBM 的次数比标准注意力更少。摘要报告：相对 MLPerf 1.1 的训练速度记录，BERT-large（序列长度 512）端到端提速 15%；GPT-2（序列长度 1K）快 3 倍。</p>
   <h3>mask 的几个坑</h3>
   <ul>
-    <li>屏蔽要在 softmax <b>之前</b>设为 <code>−inf</code>。</li>
+    <li>屏蔽要在 softmax <b>之前</b>设为 <code>−inf</code>：<code>scores.masked_fill(~mask, float("-inf"))</code>（mask 为 True 表示保留）。</li>
+    <li>为什么不用一个“很大的负数”？fp16 下 −1e9 会溢出成 −inf，−1e4 又可能不够小。很多实现用 <code>torch.finfo(dtype).min</code>。</li>
     <li>如果某一整行都被屏蔽，softmax 的输入全是 −inf，结果是 NaN。做 padding mask 时要留意。</li>
     <li>padding mask 和因果 mask 要做“并”（任何一个屏蔽就屏蔽）。</li>
     <li>各个库对布尔 mask 的约定不同：本仓库是 True=保留。<code>torch.nn.MultiheadAttention</code> 的布尔 <code>attn_mask</code> 则是 True=<b>不允许</b>注意。接别人的 API 时先看文档。</li>
@@ -448,7 +471,7 @@ Q:(…,Tq,d)  K:(…,Tk,d)  V:(…,Tk,dv)
     <li>为什么用点积而不是加性注意力？点积可以用高度优化的矩阵乘法实现，更快更省空间（缩放之后质量也不差）。</li>
     <li>缩放可以怎么理解？相当于给 softmax 加了一个与 d_k 有关的温度。</li>
     <li>自注意力和交叉注意力的区别？q 与 k、v 是否来自同一序列。</li>
-    <li>注意力权重每行加起来是多少？1。被屏蔽的位置是 0。</li>
+    <li>注意力权重每行加起来是多少？1，被屏蔽的位置是 0（前提是该行至少有一个位置未被屏蔽，否则是 NaN）。</li>
   </ol>
   <h3>资料与核对</h3>
   <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/harvardnlp/annotated-transformer/blob/master/the_annotated_transformer.py" target="_blank" rel="noopener">Annotated Transformer</a> <span class="sub">（缩放的解释、点积与加性注意力的比较）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py" target="_blank" rel="noopener">Hugging Face：modeling_llama.py</a> <span class="sub">（softmax 在 float32 下计算）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/functional.py" target="_blank" rel="noopener">PyTorch：nn.MultiheadAttention 与 F.multi_head_attention_forward 的源码文档</a> <span class="sub">（布尔 attn_mask 的语义：MHA 与 scaled_dot_product_attention 相反）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/llm_tutorial_optimization.md" target="_blank" rel="noopener">Hugging Face：LLM 优化指南</a> <span class="sub">（FlashAttention 的原理、与标准注意力数值一致、显存线性增长）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">Vaswani 等，Attention Is All You Need</a> <span class="sub">（缩放的动机与方差为 d_k 的推导）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2205.14135" target="_blank" rel="noopener">Dao 等，FlashAttention</a> <span class="sub">（IO 感知、分块、更少的 HBM 访问、摘要里的速度数字）</span></span></li></ul>
@@ -483,7 +506,7 @@ Q:(…,Tq,d)  K:(…,Tk,d)  V:(…,Tk,dv)
   <h3>要想清楚</h3>
   <ol class="q">
     <li>为什么缩放用 <code>sqrt(d_head)</code>，而不是 <code>sqrt(d_model)</code>？点积是在每个头内部做的，累加了 d_head 项。</li>
-    <li><code>transpose</code> 之后直接 <code>view</code> 会报错或出错，为什么？内存不连续，要先 <code>.contiguous()</code> 或改用 <code>reshape</code>。</li>
+    <li><code>transpose</code> 之后直接 <code>view</code> 会报错（RuntimeError）：内存不连续，要先 <code>.contiguous()</code> 或改用 <code>reshape</code>。更隐蔽的错是拆头时跳过 transpose，直接 <code>view(B, h, T, dh)</code>：形状对，但每个头拿到的是错的数据。</li>
     <li>为什么还需要输出投影 W_O？拼接只是把各头并排放，W_O 负责让不同头的信息互相混合。</li>
     <li>mask 怎么对上形状？<code>(T, T)</code> 的布尔 mask 会广播到 <code>(B, h, T, T)</code>。本仓库约定 <b>True=保留</b>，屏蔽位置在 softmax 前填 <code>-inf</code>。</li>
     <li>参数量？四个 d×d 矩阵，约 4d²（不计偏置）。头数不改变参数量。</li>
@@ -498,12 +521,15 @@ Q:(…,Tq,d)  K:(…,Tk,d)  V:(…,Tk,dv)
 <pre><code>(B,T,d) → view → (B,T,h,dh) → transpose(1,2) → (B,h,T,dh)
 合头: (B,h,T,dh) → transpose(1,2) → .contiguous() → view → (B,T,d)
       （转置后内存不连续，view 前要 contiguous，或直接用 reshape）</code></pre>
+  <p><b>4′. 两种等价的写法。</b>论文写作 <code>head_i = Attention(X·W_Q^i, X·W_K^i, X·W_V^i)</code>：用一个 d×d 的大矩阵 W_Q 再拆成 h 份，等价于 h 个 d×d_head 的小矩阵 W_Q^i。输出投影也可以拆开看：</p>
+<pre><code>concat(head_1, …, head_h) · W_O = Σ_i head_i · W_O[i·dh : (i+1)·dh, :]</code></pre>
+  <p>即每个头各自投影回 d 维再相加，这正是 W_O 让各个头的信息互相混合的方式。</p>
   <p><b>5. 变体。</b>减少 K/V 头数（MQA、GQA，见 2.2）；限制每个 token 能看的范围（滑动窗口，见 2.4）；压缩 KV（如 DeepSeek 的 MLA，可按名称检索）。</p>
   <h3>面试常追问</h3>
   <ol class="q">
     <li>头数越多越好吗？总宽度固定时，头越多每个头越窄（d_head 变小），表达单个注意力模式的能力下降。常见 d_head 取 64 或 128。</li>
     <li>多头和一个宽头有什么本质区别？每个头有自己独立的注意力分布，可以同时关注不同位置；单头只有一个分布。</li>
-    <li>如果把 d_model 改大但头数不变，会怎样？d_head 变大，参数和计算量按 d² 增长。</li>
+    <li>如果把 d_model 改大但头数不变，会怎样？d_head 变大。参数量和投影的计算量（O(T·d²)）按 d² 增长；注意力分数这部分（O(T²·d)）只随 d 线性增长。</li>
     <li>训练和推理时哪一块最贵？训练时是注意力的 T² 项和各投影矩阵；推理解码时是读取 KV cache（见 2.3）。</li>
   </ol>
   <h3>资料与核对</h3>
@@ -525,13 +551,13 @@ Q:(…,Tq,d)  K:(…,Tk,d)  V:(…,Tk,dv)
     <tr><th>方案</th><th>Q 头</th><th>K/V 头</th><th>cache 大小</th><th>典型用法</th></tr>
     <tr><td>MHA</td><td>h</td><td>h</td><td>1×</td><td>原始 Transformer</td></tr>
     <tr><td>GQA</td><td>h</td><td>g（1 &lt; g &lt; h）</td><td>g/h</td><td>LLaMA-2 70B、Mistral 7B</td></tr>
-    <tr><td>MQA</td><td>h</td><td>1</td><td>1/h</td><td>PaLM、Falcon</td></tr>
+    <tr><td>MQA</td><td>h</td><td>1</td><td>1/h</td><td>PaLM（Hugging Face 指南列出的例子）</td></tr>
   </table></div>
   <h3>实现要点</h3>
 <pre><code>Q 投影到 h · d_head；K、V 只投影到 g · d_head      ← 节省就发生在这里
 K, V: (B, g, T, d_head)  →  repeat_interleave(h // g, dim=1)  →  (B, h, T, d_head)
 之后和普通多头注意力完全一样</code></pre>
-  <p>Q 头 i 使用 K/V 组 <code>i // (h/g)</code>，所以要用 <code>repeat_interleave</code>（逐个复制），而不是 <code>repeat</code>（整体平铺）。</p>
+  <p>Q 头 i 使用 K/V 组 <code>i // (h/g)</code>，所以要用 <code>repeat_interleave</code>（逐个复制），而不是 <code>repeat</code>（整体平铺）。例如 h=4、g=2：<code>repeat_interleave</code> 得到 [K0, K0, K1, K1]，Q0、Q1 用 K0，Q2、Q3 用 K1；<code>repeat</code> 得到 [K0, K1, K0, K1]，Q1 会错配到 K1。</p>
   <h3>试一试：头的分组与 cache 大小</h3>
   <div class="demo">
     <div class="row"><label for="gqa-h">Q 头数 h</label>
@@ -545,16 +571,16 @@ K, V: (B, g, T, d_head)  →  repeat_interleave(h // g, dim=1)  →  (B, h, T, d
   <h3>要想清楚</h3>
   <ol class="q">
     <li>为什么 g 必须整除 h？每个 K/V 组要服务相同数量的 Q 头，否则没法对齐。判题会检查 g=3、h=4 是否被拒绝。</li>
-    <li>g = h 时就是 MHA，g = 1 时就是 MQA，判题里能验证这一点吗？输出形状一致，但权重随机，只能靠结构保证。</li>
+    <li>g = h 时就是 MHA，g = 1 时就是 MQA。怎么验证？形状可以直接比；数值上，只要固定随机种子、按同样顺序创建投影层，g=h 的输出应与 2.1 的 MHA 完全相同。</li>
     <li>K/V 投影的输出维度是 <code>g·d_head</code>，不是 <code>d_model</code>。</li>
     <li>质量损失大吗？论文和实践都显示，GQA 的质量接近 MHA，速度接近 MQA。</li>
-    <li>训练参数量变少了多少？K、V 两个矩阵从 d×d 变成 d×(g·d_head)。</li>
+    <li>训练参数量变少了多少？K、V 两个矩阵从 d×d 变成 d×(g·d_head)，每层少 <code>2·d·(d − g·d_head) = 2d²(1 − g/h)</code>。例如 d=4096、h=32、g=8 时每层少 25,165,824 个。</li>
   </ol>
   <h3>深入一层</h3>
   <p><b>1. 从 MQA 到 GQA。</b>MQA 论文的摘要写道：增量推理很慢，因为要反复加载很大的 keys 和 values 张量，受限于内存带宽；MQA 让 K/V 在所有头之间共享，大幅缩小这两个张量。GQA 论文的摘要则指出：MQA 可能带来质量下降，而且为了更快推理单独训练一个模型也不一定划算。所以它 (1) 提出把已有的多头检查点用原始预训练算力的 <b>5%</b> 做 uptraining（继续训练），转换成 MQA 模型；(2) 提出 GQA，用介于 1 和 query 头数之间的 K/V 头数。结论是：uptrain 过的 GQA 质量接近 MHA，速度与 MQA 相当。转换时，各头的 K/V 投影矩阵对组内的头做 <b>mean pooling</b>（论文图 1）。</p>
   <p><b>2. cache 的大小。</b>每个 token 每层要存的 K 和 V 共 <code>2 × g × d_head</code> 个数；整个 cache 是</p>
 <pre><code>2 · 层数 · g · d_head · 序列长度 · batch · 每元素字节数</code></pre>
-  <p>g 从 h 降到 g，cache 就缩小到原来的 g/h。</p>
+  <p>K/V 头数从 h 降到 g，cache 就缩小到原来的 g/h。</p>
   <p><b>3. 省的是带宽，不只是容量。</b>解码时每步都要把整个 KV cache 从显存读一遍，带宽常常是瓶颈（Hugging Face 的指南在讲 MQA 时说得很清楚）。缩小 cache 同时减少了每步要读的数据。</p>
   <p><b>4. 只在有 cache 时有意义。</b>指南里还强调：不使用 KV cache 的单次前向，峰值显存不会因 MQA 而变化，因为每个头仍然有各自的 Q，仍要算出各自的 <code>QKᵀ</code>。</p>
   <p><b>5. 复制 K/V 的写法。</b>Hugging Face 的 <code>repeat_kv</code> 文档字符串写明它等价于 <code>torch.repeat_interleave(x, dim=1, repeats=n_rep)</code>。Llama 3 官方仓库的 <code>repeat_kv</code> 则是先 <code>expand</code> 再 <code>reshape</code>，写法不同，结果一样。</p>
@@ -590,7 +616,7 @@ K, V: (B, g, T, d_head)  →  repeat_interleave(h // g, dim=1)  →  (B, h, T, d
   </ul>
   <h3>试一试：缓存省了多少计算</h3>
   <div class="demo">
-    <div class="row"><label for="kv-n">生成的 token 数 N</label>
+    <div class="row"><label for="kv-n">生成的 token 数 N（假设提示为空）</label>
       <input type="range" id="kv-n" min="1" max="2048" value="256" style="flex:1;min-width:120px;accent-color:var(--accent)">
       <span class="pill" id="kv-lab"></span></div>
     <pre id="kv-out" style="margin:0"></pre>
@@ -599,7 +625,9 @@ K, V: (B, g, T, d_head)  →  repeat_interleave(h // g, dim=1)  →  (B, h, T, d
 <pre><code>缓存形状: (batch, heads, seq_len, d_head)
 update(new_k, new_v): 沿 dim=2 拼接，返回完整的 K、V
 解码时: x 是 (B, 1, d_model) → 只算新 token 的 Q/K/V → update → 对完整 K/V 做注意力
-        不需要 mask：缓存里只有过去，新 token 本来就能看到全部</code></pre>
+        不需要 mask：缓存里只有过去，新 token 本来就能看到全部
+        （只在每次只喂 1 个新 token 时成立；一次追加多个 token，如分块预填充、投机解码，
+          需要一个按缓存长度偏移的因果 mask）</code></pre>
   <h3>要想清楚</h3>
   <ol class="q">
     <li>正确性标准是什么？逐 token 用缓存生成的输出，必须等于对整段序列一次性带因果 mask 计算的输出。判题就检查这一条。</li>
@@ -612,12 +640,12 @@ update(new_k, new_v): 沿 dim=2 拼接，返回完整的 K、V
   <h3>深入一层</h3>
   <p><b>1. 好处有两个。</b>Hugging Face 的指南总结得很准：计算量减少（<code>QKᵀ</code> 退化成 <code>q_c Kᵀ</code>，q_c 是当前 token 的查询向量）；峰值显存随生成长度线性增长，而不是二次增长。</p>
   <p><b>2. 输出一致，但不一定逐位相同。</b>同一份指南里有个提示：用缓存后输出可能略有不同，这是矩阵乘法 kernel 自身的性质。所以本题的判题用 <code>allclose</code>（容差 1e-5），而不是逐位相等。</p>
-  <p><b>3. 估算大小。</b>指南里的例子：缓存里的浮点数个数是“2 × 序列长度 × 头数 × 头维度 × 层数”。对 <code>bigcode/octocoder</code> 在序列长度 16000 时约 78.6 亿个，fp16 下约 15 GB，大约是模型权重的一半。</p>
+  <p><b>3. 估算大小。</b>指南里的例子：缓存里的浮点数个数是“2 × 序列长度 × 头数 × 头维度 × 层数”。对 <code>bigcode/octocoder</code> 在序列长度 16000 时约 78.6 亿个，fp16 下约 15 GB，大约是模型权重的一半。注意这里是按 48 个头<b>都</b>存 K/V（即 MHA）计算的；该模型实际用的是 MQA，只存 1 个 K/V 头，同一份指南随后指出 MQA 能把它降到 400 MB 以下（见 2.2）。</p>
   <p>vLLM 论文给了一个更权威的例子：对 13B 参数的 OPT 模型，单个 token 的 KV cache 是 <code>2（K 和 V）× 5120（隐状态维度）× 40（层数）× 2（fp16 的字节数）</code> = 800 KB；OPT 最多生成 2048 个 token，所以<b>一个请求</b>的 KV cache 最多可达 1.6 GB。显存只有几十 GB，即使全部给 KV cache，也只能同时容纳几十个请求。</p>
   <p>再来一个自己能心算的例子，<b>假设</b>一个 32 层、32 个 K/V 头、d_head=128、fp16 的模型：</p>
-<pre><code>每个 token：2 × 32 × 32 × 128 × 2 字节 = 524,288 字节 = 512 KB
-序列 4096：512 KB × 4096 = 2 GiB          （batch=1）
-改成 8 个 K/V 头（GQA）：每个 token 128 KB，同样序列 0.5 GiB</code></pre>
+<pre><code>每个 token：2 × 32 × 32 × 128 × 2 字节 = 524,288 字节 = 512 KiB
+序列 4096：512 KiB × 4096 = 2 GiB          （batch=1）
+改成 8 个 K/V 头（GQA）：每个 token 128 KiB，同样序列 0.5 GiB</code></pre>
   <p><b>4. 缓存有几种形态。</b>Hugging Face 的 KV cache 文档列出：动态缓存（默认，随长度增长）、静态缓存（预先分配好最大长度，固定大小，便于 <code>torch.compile</code> 这类即时编译优化）、量化缓存（占用更少显存）、把缓存卸载到 CPU（省显存、会变慢）。对使用滑动窗口的模型（如 Mistral），缓存在达到窗口大小后不再增长。</p>
   <p><b>5. 多轮对话。</b>聊天场景下，把上一轮的缓存继续用下去，只需处理新增的那段提示，不用重新编码全部历史。</p>
   <p><b>6. 显存管理。</b>vLLM 论文指出，现有系统要预先按最大长度为每个请求预留一整块连续显存，既造成内部浪费，也产生外部碎片：它们的 profiling 显示，KV cache 显存里只有 <b>20.4%–38.2%</b> 真正用来存放 token 的状态。PagedAttention 借鉴操作系统的分页，把 KV cache 切成块来管理，目标是几乎零浪费，并允许在请求之间共享 KV cache。论文报告在相同延迟水平下，吞吐比 FasterTransformer、Orca 等最先进系统提高 2–4 倍。</p>
@@ -625,13 +653,12 @@ update(new_k, new_v): 沿 dim=2 拼接，返回完整的 K、V
   <ul>
     <li>位置：用 RoPE 时，新 token 的位置编号 = 缓存当前长度（见 1.3）。</li>
     <li>批量：一个 batch 内各序列长度不同，需要 padding 并对齐；beam search 还需要按选中的路径重新排列缓存。</li>
-    <li>拼接：每步 <code>torch.cat</code> 都会复制整个缓存。静态缓存的思路是预分配，再原地写入。</li>
+    
     <li>预填充 (prefill) 和解码 (decode) 的瓶颈不同：前者一次处理很多 token，偏计算密集；后者每步一个 token，偏带宽密集。</li>
   </ul>
   <h3>面试常追问</h3>
   <ol class="q">
     <li>缓存里为什么没有 Q？Q 只用于当前 token，用完就不再需要。</li>
-    <li>缓存里的 K 是旋转前还是旋转后的？通常存旋转后的，它的位置已经固定。</li>
     <li>怎么在不增加参数的情况下减小缓存？GQA/MQA、滑动窗口、量化、卸载、分页管理，各自权衡不同。</li>
     <li>长上下文为什么推理会变慢？每步要读的缓存越来越大，带宽成为瓶颈。</li>
   </ol>
@@ -647,9 +674,9 @@ update(new_k, new_v): 沿 dim=2 拼接，返回完整的 K、V
 <!-- ============ 2.4 Sliding Window ============ -->
 <section id="swa" data-title="2.4 Sliding Window" hidden>
   <h2>2.4 Sliding Window Attention</h2>
-  <p class="sub">长序列下，让每个 token 只看附近的 w 个位置。</p>
+  <p class="sub">长序列下，让每个 token 只看距离不超过 w 的位置。</p>
   <h3>为什么</h3>
-  <p>完整注意力的计算和显存是 O(n²)，序列一长就撑不住。滑动窗口让 token i 只看 <code>[i−w, i+w]</code>，复杂度降到 O(n·w)。Mistral、Longformer 都用这个思路。</p>
+  <p>完整注意力的计算和显存是 O(n²)，序列一长就撑不住。滑动窗口让 token i 只看 <code>[i−w, i+w]</code>（共 2w+1 个；因果版 <code>i−w ≤ j ≤ i</code> 共 w+1 个），复杂度降到 O(n·w)。Mistral、Longformer 都用这个思路。</p>
   <h3>试一试：窗口和感受野</h3>
   <div class="demo">
     <div class="row"><label for="swa-w">窗口 w</label>
@@ -664,27 +691,28 @@ update(new_k, new_v): 沿 dim=2 拼接，返回完整的 K、V
 <pre><code>距离矩阵  |i − j|            i: (n,1)  j: (1,n)  → (n, n)
 mask = (距离 &lt;= w)             布尔，True = 允许
 scores.masked_fill(~mask, −inf)   在 softmax 之前
-w &gt;= n 时什么都没屏蔽，必须与 full_attention 完全相同</code></pre>
+w ≥ n−1 时什么都没屏蔽，必须与 full_attention 完全相同
+
+双向：|i − j| ≤ w          因果：0 ≤ i − j ≤ w          ← 本题判题检查的是双向版本</code></pre>
   <h3>要想清楚</h3>
   <ol class="q">
-    <li>只看附近，会不会丢掉远处信息？一层只看 w，但 L 层叠起来，信息最远可以传播 <b>L·w</b>。上面的演示会算出来。</li>
+    <li>只看附近，会不会丢掉远处信息？一层只看距离 w 以内，但 L 层叠起来，信息最远能传播 <b>L·w 个位置的距离</b>：因果版共覆盖 L·w+1 个位置（含自己），双向版覆盖 2L·w+1 个。上面的演示显示的是覆盖的位置个数。</li>
     <li>为什么这道题的 mask 是对称的？这里是双向版本。Mistral 是<b>因果 + 窗口</b>：<code>i−w ≤ j ≤ i</code>。勾选“因果”就是它。</li>
-    <li>用 mask 实现仍然先算了完整的 n×n 分数，只是把大部分丢掉，并没有真省算力。要真省，需要 <code>unfold</code> 之类的分块实现，这是题目里的加分项。</li>
-    <li>和 KV cache 的关系？解码时只需保留最近 w 个 K/V，缓存大小从 O(n) 变成 O(w)。用环形缓冲区实现。</li>
+        <li>和 KV cache 的关系？按本节的因果约定，解码时缓存需保留最近 w 个过去的 K/V（加上当前 token 共 w+1 个），缓存大小从 O(n) 变成 O(w)，用环形缓冲区实现。</li>
     <li>窗口的代价？超出窗口的精确细节要靠层数传递，或者再配少量全局注意力的 token。</li>
   </ol>
   <h3>深入一层</h3>
   <p><b>1. 滑动窗口 + 全局 token。</b>Hugging Face 对 Longformer 的描述：它把局部窗口注意力与任务相关的全局注意力结合起来，计算随序列长度线性增长，因此能处理几千 token 的文档。</p>
   <p><b>2. Mistral 的做法。</b>Mistral 7B 论文的架构表：<code>window_size=4096</code>、<code>context_len=8192</code>、32 层。论文说，第 k 层位置 i 的隐状态只关注上一层位置在 <code>i−W</code> 到 <code>i</code> 之间的隐状态；递归地看，它最远能访问输入层上 <code>W×k</code> 个 token 之外的信息。<code>MistralConfig</code> 里 <code>sliding_window</code> 的默认值也是 4096。</p>
   <p><b>3. 环形缓冲区 (rolling buffer)。</b>论文描述：固定的注意力跨度意味着缓存大小可以固定为 W；位置 i 的 K/V 存放在缓存的 <code>i mod W</code> 位置，超出后旧的被覆盖。mistral-inference 的缓存代码里有 <code>position = seqlen % cache.shape[0]</code>：第 i 个 token 的 K/V 写在位置 <code>i mod W</code>，旧的被覆盖。缓存大小因此固定为 W，不随序列增长。同一份代码里 <code>get_cache_sizes</code> 还支持给<b>每一层</b>设不同的窗口（整数，或一个按层重复的列表，列表里 <code>None</code> 表示该层用完整长度），也就是“有的层用窗口，有的层看全部”。</p>
-  <p><b>4. 感受野会逐层放大。</b>单层最远只看 w，但 L 层叠起来，信息最多可传播 <code>L·w</code>（因果窗口）。W=4096、32 层时，4096 × 32 = 131,072；Mistral 论文也给出同样的估计：理论上的注意力跨度约 131K 个 token。这只是传播的理论上界，实际有效范围更小，远处信息要经过多层逐步传递。论文还说，序列长度 16K、W=4096 时，对 FlashAttention 和 xFormers 的改动让速度比普通注意力基线快 2 倍。</p>
+  <p><b>4. 感受野会逐层放大。</b>单层最远只看距离 w，但 L 层叠起来，信息最远可传播 <code>L·w</code> 个位置的距离（因果窗口）。W=4096、32 层时，4096 × 32 = 131,072；Mistral 论文也给出同样的估计：理论上的注意力跨度约 131K 个 token。这只是传播的理论上界，实际有效范围更小，远处信息要经过多层逐步传递。论文还说，序列长度 16K、W=4096 时，对 FlashAttention 和 xFormers 的改动让速度比普通注意力基线快 2 倍。</p>
   <p><b>5. 掩码实现与真正省算力的区别。</b>本题的主体用掩码实现：先算完整的 n×n 分数，再屏蔽。这样只省了“有效的格数”，并没有省实际的计算与显存。要真正省，需要分块或 <code>unfold</code>（题目里的加分项）。</p>
   <p><b>6. 保留“开头”的变体。</b>StreamingLLM 的摘要写道：只缓存最近 KV 的窗口注意力，在文本长度超过缓存大小时会失效；他们观察到“attention sink”现象：<b>保留最初几个 token 的 KV</b>，就能大幅恢复窗口注意力的表现，因为模型会把很强的注意力分数投向最初的 token，即使它们语义上并不重要。基于此，StreamingLLM 让用有限窗口训练的模型无需微调就能处理很长的序列（摘要称可达 400 万 token 以上）。</p>
   <p><b>7. 预填充与分块。</b>Mistral 论文还提到：提示很长时，可以把它切成小块，逐块预填充缓存，并取窗口大小作为块大小；每一块要对“缓存”和“本块”两部分做注意力。</p>
   <h3>面试常追问</h3>
   <ol class="q">
     <li>窗口注意力会丢掉远处信息吗？单层会，多层叠加后信息可以逐层传递，但精确的远距离细节依然会损失。</li>
-    <li>和 KV cache 的关系？解码时只需保留最近 W 个 K/V，缓存是 O(W)，而不是 O(n)。</li>
+    <li>窗口边界差 1 的问题：Mistral 论文写“关注 i−W 到 i”，而环形缓冲区大小为 W。不同实现对“窗口含不含当前 token”的约定不同，自己实现时要前后统一。</li>
     <li>窗口注意力和稀疏注意力的区别？窗口是稀疏模式的一种（局部带状）；还有全局 token、跨步（dilated）等其他模式。</li>
     <li>窗口大小怎么选？越大越接近完整注意力，代价线性增加；要和任务所需的依赖距离匹配。</li>
   </ol>
@@ -704,7 +732,7 @@ w &gt;= n 时什么都没屏蔽，必须与 full_attention 完全相同</code></
   <h3>全貌</h3>
 <pre><code>token id          (B, T)
  → Embedding      (V, d)                          → (B, T, d)
- → 重复 N 次的解码层：
+ → 重复 L 次的解码层：
        x ← x + Attention( RMSNorm(x) )            RoPE + GQA，因果 mask
        x ← x + MLP( RMSNorm(x) )                  SwiGLU
  → RMSNorm
@@ -720,14 +748,15 @@ w &gt;= n 时什么都没屏蔽，必须与 full_attention 完全相同</code></
   </ul>
   <h3>SwiGLU 是什么</h3>
   <p>Shazeer 的 GLU 变体论文里，Transformer 的前馈层写成</p>
-<pre><code>FFN_SwiGLU(x) = ( Swish₁(x·W) ⊗ (x·V) ) · W₂          Swish₁(z) = z·σ(z)，也叫 SiLU</code></pre>
+<pre><code>FFN_SwiGLU(x) = ( SiLU(x·W_gate) ⊙ (x·W_up) ) · W_down       SiLU(z) = z·σ(z)，⊙ 为逐元素乘
+                 （论文原文把三个矩阵记作 W、V、W₂，激活记作 Swish₁）</code></pre>
   <p>它有<b>三个</b>权重矩阵，而原来的前馈层只有两个。为了让计算量保持不变，论文把隐藏维度 d_ff 缩小到原来的 2/3；它沿用 T5 的做法，不加偏置。Hugging Face 的 Llama 实现是 <code>down_proj( silu(gate_proj(x)) * up_proj(x) )</code>；Meta 官方实现里的隐藏维度是 <code>int(2 * hidden_dim / 3)</code>，再向上取整到 <code>multiple_of</code> 的倍数。</p>
   <h3>一层的代码结构</h3>
   <p>Meta 官方实现的 <code>TransformerBlock.forward</code> 正是这两行：</p>
 <pre><code>h   = x + attention( attention_norm(x), ... )
 out = h + feed_forward( ffn_norm(h) )</code></pre>
   <h3>权重共享（tied embeddings）</h3>
-  <p>输入嵌入矩阵 E（V×d）把 token 变成向量，输出层 lm_head 把向量变回 V 维 logits。Press 和 Wolf 的论文指出，输出层这个矩阵本身就是一个有效的词嵌入，并建议训练语言模型时把输入嵌入和输出嵌入<b>绑在一起</b>。好处是省掉 V·d 个参数。SmolLM2-1.7B 的配置表里写明“Tied embedding: Yes”；而 Hugging Face 的 <code>LlamaConfig</code> 里 <code>tie_word_embeddings</code> 默认是 False，可见这是各个模型自己的选择。</p>
+  <p>输入嵌入矩阵 E（V×d）把 token 变成向量，输出层 lm_head 把向量变回 V 维 logits。lm_head 没有偏置，共享权重后就是 <code>logits = h · Eᵀ</code>。Press 和 Wolf 的论文指出，输出层这个矩阵本身就是一个有效的词嵌入，并建议训练语言模型时把输入嵌入和输出嵌入<b>绑在一起</b>。好处是省掉 V·d 个参数。SmolLM2-1.7B 的配置表里写明“Tied embedding: Yes”；而 Hugging Face 的 <code>LlamaConfig</code> 里 <code>tie_word_embeddings</code> 默认是 False，可见这是各个模型自己的选择。</p>
   <h3>SmolLM2 的配置（论文表格）</h3>
   <div class="scroll"><table>
     <tr><th>项</th><th>SmolLM2-1.7B</th></tr>
@@ -737,6 +766,7 @@ out = h + feed_forward( ffn_norm(h) )</code></pre>
     <tr><td>位置编码</td><td>RoPE（θ = 10,000）</td></tr><tr><td>激活函数</td><td>SwiGLU</td></tr>
   </table></div>
   <p>论文还写明：SmolLM2-135M 和 360M 与 1.7B 的架构相同，但使用了分组查询注意力（GQA，见 2.2）。</p>
+  <p class="note"><b>注意：</b>SmolLM2-1.7B 的 FFN 维度 8192 正好是 4d，<b>没有</b>按 2/3 缩小。“(2/3)·4d”是 Llama 论文为了让计算量与原前馈层对齐所做的选择，不是 SwiGLU 的硬性要求。所以下面的参数量里 MLP 是 3·d·4d，比“等计算量”的版本多 50%。</p>
   <h3>数一数参数量</h3>
 <pre><code>注意力   q: d·(h·dh)    k、v: 各 d·(g·dh)    o: (h·dh)·d
 MLP      3 · d · I
@@ -745,7 +775,10 @@ MLP      3 · d · I
   <p>用上面 1.7B 的表（<b>我的算术</b>；论文表里没有列 K/V 头数，这里按 K/V 头数 = 头数的 MHA 算）：每层 4·2048² + 3·2048·8192 + 2·2048 = 67,112,960；24 层 = 1,610,711,040；嵌入 49,152 × 2048 = 100,663,296；再加最终归一化 2,048。总计 <b>1,711,376,384，约 1.71B</b>，与“1.7B”吻合。</p>
   <h3>训练与推理</h3>
   <ul>
-    <li><b>训练</b>：整段序列一次送入，所有位置并行算 next-token 损失（因果 mask 保证不泄漏未来）。若输出接近均匀分布，损失约为 <code>ln V</code>；V=49,152 时是 10.80（我的算术）。</li>
+    <li><b>训练</b>：整段序列一次送入，所有位置并行算 next-token 损失（因果 mask 保证不泄漏未来）：
+<pre><code>L = −1/(B·(T−1)) · Σ_{b,t} log softmax(z_{b,t})[ y_{b,t+1} ]
+∂L/∂z_{b,t} = ( softmax(z_{b,t}) − onehot(y_{b,t+1}) ) / (B·(T−1))</code></pre>
+      若输出是均匀分布，每个位置的损失都是 <code>−log(1/V) = ln V</code>；V=49,152 时是 10.80（我的算术）。</li>
     <li><b>推理</b>：一个 token 一个 token 地生成。朴素写法每步重算整段（3.3 就这样写），用 KV cache（2.3）可以只算新 token。</li>
     <li><b>训练算力估算</b>：Kaplan 等人估计每个训练 token 约需 6N 次浮点运算（前向约 2N，反向约是前向的两倍）；Chinchilla 论文也用 <code>FLOPs(N, D) ≈ 6ND</code>，N 是参数量，D 是训练 token 数。</li>
   </ul>
@@ -777,7 +810,7 @@ MLP      3 · d · I
   <h2>3.2 实现 RoPE + GQA 注意力块</h2>
   <p class="sub">SmolLM 里最复杂的零件：前几节学的东西在这里合到一起。</p>
   <h3>目标</h3>
-  <p>把 RoPE（1.3）、GQA（2.2）、带因果 mask 的缩放点积注意力（1.5）装进同一个模块 <code>RopeAttention</code>。题目来自仓库的 <code>smollm</code>，判题有 12 项检查。</p>
+  <p>把 RoPE（1.3）、GQA（2.2）、带因果 mask 的缩放点积注意力（1.5）装进同一个模块 <code>RopeAttention</code>。题目来自仓库的 <code>smollm</code>，判题共 12 项检查，下面的表按“它在抓什么错”归成 8 类。</p>
   <h3>五个零件</h3>
   <div class="scroll"><table>
     <tr><th>零件</th><th>做什么</th><th>最容易错的地方</th></tr>
@@ -788,23 +821,23 @@ MLP      3 · d · I
     <tr><td><code>RopeAttention</code></td><td>投影 → 拆头 → 旋转 → repeat_kv → 注意力 → 合头</td><td>K/V 只投影到 <code>g·head_dim</code>；mask 是加性的</td></tr>
   </table></div>
   <h3>RotaryEmbedder 的构造</h3>
-<pre><code>inv_freq = 1 / base ** ( arange(0, dim, 2) / dim )        形状 (dim/2,)
+<pre><code>inv_freq = 1.0 / ( base ** ( arange(0, head_dim, 2) / head_dim ) )   形状 (head_dim/2,)
 angle    = outer( arange(S), inv_freq )                    形状 (S, dim/2)
 emb      = cat([angle, angle], dim=-1)                     形状 (S, dim)   ← 前后两半用同一组角度
 cos, sin = emb.cos(), emb.sin()                            再补成 (1, S, dim)</code></pre>
   <p>把同一组角度拼两遍，是为了和 <code>rotate_half</code> 的“前后半段配对”对上：第 i 维与第 i+dim/2 维共用一个角度。这也是判题里“同一个角度驱动一对分量”的含义。</p>
   <h3>RopeAttention 的形状流水</h3>
 <pre><code>x                      (B, S, hidden)
-q = q_proj(x)          (B, S, h·dh)   → view → (B, h, S, dh)
-k = k_proj(x)          (B, S, g·dh)   → view → (B, g, S, dh)
+q = q_proj(x)          (B, S, h·dh) → view(B, S, h, dh) → transpose(1,2) → (B, h, S, dh)
+k = k_proj(x)          (B, S, g·dh) → view(B, S, g, dh) → transpose(1,2) → (B, g, S, dh)
 v = v_proj(x)          同 k
 旋转 q、k              cos/sin: (1, S, dh)  → 补 head 维 → (1, 1, S, dh)
 k, v = repeat_kv(·, h // g)           (B, h, S, dh)
 分数 = q @ kᵀ / sqrt(dh)              (B, h, S, S)
 分数 = 分数 + attention_mask           加性：屏蔽处为 −inf，形状 (1,1,S,S)
 权重 = softmax(分数)；输出 = 权重 @ v   (B, h, S, dh)
-合头 → (B, S, h·dh) → o_proj → (B, S, hidden)</code></pre>
-  <p>注意 mask 是<b>加到分数上</b>的，不是像 1.5 那样用布尔值填充。Hugging Face 的实现也是这种形式：softmax 在 float32 里算，再转回 q 的精度。</p>
+合头: (B, h, S, dh) → transpose(1,2) → reshape(B, S, h·dh) → o_proj → (B, S, hidden)</code></pre>
+  <p>注意 mask 是<b>加到分数上</b>的，不是像 1.5 那样用布尔值填充。在 bf16/fp16 下，加性 mask 常用 <code>torch.finfo(dtype).min</code> 代替 −inf，以免整行被屏蔽时出现 NaN。Hugging Face 的实现也是这种形式：softmax 在 float32 里算，再转回 q 的精度。</p>
   <h3>判题会检查什么</h3>
   <div class="scroll"><table>
     <tr><th>检查</th><th>它在抓什么错</th></tr>
@@ -855,7 +888,9 @@ k, v = repeat_kv(·, h // g)           (B, h, S, dh)
 2. x = embed_tokens(input_ids)
 3. 依次通过每个 DecoderLayer：x = layer(x, mask)
 4. logits = lm_head( norm(x) )
-5. 有 labels 时：loss = cross_entropy( logits[:, :-1], labels[:, 1:] )   ← 错开一位</code></pre>
+5. 有 labels 时：loss = cross_entropy( logits[:, :-1].reshape(-1, V), labels[:, 1:].reshape(-1) )
+                 ← 错开一位，再展平成 (B·(S−1), V)：cross_entropy 要求类别维在第 1 维
+   真实训练里 padding 位置的 label 设为 −100（ignore_index），不计入损失（见 4.3）</code></pre>
   <h3>判题检查什么（共 9 项）</h3>
   <div class="scroll"><table>
     <tr><th>检查</th><th>它在抓什么错</th></tr>
@@ -874,7 +909,7 @@ k, v = repeat_kv(·, h // g)           (B, h, S, dh)
     <li>为什么 loss 要错开一位？位置 t 的输出要去预测位置 t+1 的 token，所以拿 <code>logits[:, :-1]</code> 对 <code>labels[:, 1:]</code>。</li>
     <li>共享权重在 PyTorch 里怎么写？让 <code>lm_head.weight</code> 指向同一个 <code>Parameter</code>：<code>lm_head.weight = embed_tokens.weight</code>。<code>model.parameters()</code> 会自动去重，所以参数量只算一次。</li>
     <li>生成时为什么要 <code>@torch.no_grad()</code>？不需要梯度，省显存。<code>model.eval()</code> 与它是两回事：前者关梯度，后者关 dropout 等训练行为。</li>
-    <li>这个生成循环有什么低效之处？每一步都把整段序列重新过一遍，代价是 O(T²) 次前向。接上 2.3 的 KV cache，每步只处理新 token。</li>
+    <li>这个生成循环有什么低效之处？每一步都把整段序列重新过一遍：调用 n 次前向，但累计处理的 token 数是 O(T²)（注意力部分总计 O(T³)）。接上 2.3 的 KV cache，每步只处理 1 个新 token。</li>
     <li>贪心生成有什么问题？总选概率最大的，容易重复、缺乏多样性。采样（温度、top-k、top-p）在第 5 节讲。</li>
   </ol>
   <h3>可选的延伸</h3>
@@ -887,7 +922,299 @@ k, v = repeat_kv(·, h // g)           (B, h, S, dh)
   <pre><code>文件  study/submissions/s3_3_smollm_model.py
 实现  SwiGLU · SmolLM · greedy_generate（以及粘贴进来的 RMSNorm、RopeAttention）
 核验  python study/board.py check 3.3</code></pre>
-  <div class="next"><button class="btn ghost" data-go="sblock">← 3.2</button><button class="btn" data-go="board">去看板 →</button></div>
+  <div class="next"><button class="btn ghost" data-go="sblock">← 3.2</button><button class="btn" data-go="kl">下一课 4.1 →</button></div>
+</section>
+
+<!-- ============ 4.1 KL ============ -->
+<section id="kl" data-title="4.1 KL 散度" hidden>
+  <h2>4.1 KL 散度</h2>
+  <p class="sub">对齐训练里几乎每个算法都有它：它衡量“模型离参考模型有多远”。</p>
+  <h3>定义</h3>
+<pre><code>KL(P‖Q) = Σ_x P(x) · log( P(x) / Q(x) )  =  E_{x∼P}[ log P(x) − log Q(x) ]</code></pre>
+  <ul>
+    <li><b>非负</b>，且只有 P = Q 时等于 0（吉布斯不等式）。</li>
+    <li><b>不对称</b>：KL(P‖Q) ≠ KL(Q‖P)，所以它不是“距离”。写代码时参数顺序非常重要。</li>
+    <li>P(x) &gt; 0 而 Q(x) = 0 的地方，KL 是无穷大：Q 绝不能在 P 有概率的地方给 0。</li>
+  </ul>
+  <h3>和交叉熵的关系</h3>
+<pre><code>H(P, Q) = −Σ P log Q = H(P) + KL(P‖Q)</code></pre>
+  <p>训练语言模型时，P 是数据分布（固定的），Q 是模型。H(P) 是常数，所以<b>最小化交叉熵就等于最小化 KL(P_数据‖Q_模型)</b>。预训练和 SFT 本质上都在做这件事。</p>
+  <h3>方向不同，行为不同</h3>
+  <div class="scroll"><table>
+    <tr><th></th><th>前向 KL(P‖Q)，对 Q 优化</th><th>反向 KL(Q‖P)，对 Q 优化</th></tr>
+    <tr><td>期望在谁下面取</td><td>P（数据）</td><td>Q（模型自己）</td></tr>
+    <tr><td>惩罚什么</td><td>P 有概率、Q 却很小的地方</td><td>Q 有概率、P 却很小的地方</td></tr>
+    <tr><td>倾向</td><td>覆盖 P 的所有模式（mode-covering）</td><td>集中在 P 的某一个模式（mode-seeking）</td></tr>
+    <tr><td>典型场景</td><td>最大似然、交叉熵、知识蒸馏</td><td>RLHF 里的 KL 惩罚 KL(π_θ‖π_ref)</td></tr>
+  </table></div>
+  <h3>从 logits 稳定地计算</h3>
+<pre><code>log P = log_softmax(p_logits)      log Q = log_softmax(q_logits)
+KL    = Σ exp(log P) · (log P − log Q)        沿词表维求和</code></pre>
+  <p>不要先 <code>softmax</code> 再 <code>log</code>：logits 很大时 softmax 会下溢成 0，log(0) = −∞。</p>
+  <p class="note"><b>PyTorch 的坑：</b><code>F.kl_div(input, target)</code> 要求 <code>input</code> 是 <b>log 概率</b>，<code>target</code> 默认是<b>概率</b>，它算的是 KL(target‖input 对应的分布)，顺序与数学写法相反。<code>reduction</code> 要用 <code>"batchmean"</code> 才与数学定义一致（文档原话）。</p>
+  <h3>RLHF 里为什么要“估计” KL</h3>
+  <p>对一整段回答，真正的 KL 要对所有可能的序列求和（V^T 种），算不出来。实际做法是：用策略 π 采样出回答，然后在<b>被采样的 token 上</b>逐个估计。设 x 从 π 采样，<code>r = π_ref(x) / π(x)</code>：</p>
+<pre><code>k1 = log π(x) − log π_ref(x)  = −log r        无偏，但单个样本可能为负，方差大
+k3 = r − log r − 1                            无偏，且每个样本都 ≥ 0</code></pre>
+  <p><b>为什么 k3 无偏</b>（一行推导）：<code>E_{x∼π}[r] = Σ π(x)·π_ref(x)/π(x) = Σ π_ref(x) = 1</code>，所以 <code>E[r − 1] = 0</code>，<code>E[k3] = E[−log r] = KL(π‖π_ref)</code>。<b>为什么非负</b>：对任意 r &gt; 0 有 <code>log r ≤ r − 1</code>。</p>
+  <p>两个分布接近时，k3 的方差通常比 k1 小（判题里有这一项）。DeepSeekMath 的 GRPO 就用了 k3，并注明它“保证为正”；InstructGPT 则在<b>每个 token</b>上加了来自 SFT 模型的 KL 惩罚。</p>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>RLHF 的 KL 惩罚为什么写成 KL(π_θ‖π_ref)，而不是反过来？期望要在 π_θ 下取，才能用策略自己采的样本来估计。</li>
+    <li>为什么要有这个惩罚？DPO 论文的解释：防止模型偏离奖励模型准确的分布，并保持生成多样性、避免塌缩到单一的高分回答。</li>
+    <li>k1 的样本均值可能是负的吗？可能。真实 KL 非负，但有限样本的 k1 均值可以为负；k3 不会。</li>
+    <li>知识蒸馏用的是哪个方向？通常是 KL(教师‖学生)，即前向 KL：让学生覆盖教师的整个分布。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs">
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2402.03300" target="_blank" rel="noopener">Shao 等，DeepSeekMath（GRPO）</a> <span class="sub">（k3 形式的无偏估计，引用 Schulman 2020，“保证为正”）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2203.02155" target="_blank" rel="noopener">Ouyang 等，InstructGPT</a> <span class="sub">（在每个 token 上加入来自 SFT 模型的 KL 惩罚）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2305.18290" target="_blank" rel="noopener">Rafailov 等，DPO</a> <span class="sub">（RLHF 目标中的 β·KL(π_θ‖π_ref) 及其作用）</span></span></li>
+    <li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/functional.py" target="_blank" rel="noopener">PyTorch：F.kl_div 文档</a> <span class="sub">（input 是 log 概率、target 是概率、batchmean 与数学定义一致）</span></span></li>
+  </ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s4_1_kl.py
+实现  kl_divergence(p_logits, q_logits) · kl_estimators(logp, logp_ref)
+核验  python study/board.py check 4.1</code></pre>
+  <div class="next"><button class="btn ghost" data-go="smodel">← 3.3</button><button class="btn" data-go="lora">下一课 4.2 →</button></div>
+</section>
+
+<!-- ============ 4.2 LoRA ============ -->
+<section id="lora" data-title="4.2 LoRA" hidden>
+  <h2>4.2 LoRA：低秩适配</h2>
+  <p class="sub">只训练极少的参数，就能把大模型调到新任务上。</p>
+  <h3>为什么</h3>
+  <p>全量微调要为每个任务存一整份模型，还要为全部参数保存梯度和优化器状态（Adam 每个参数要额外两份）。LoRA 的论文把思路说得很直接：<b>冻结预训练权重，只在每层注入可训练的低秩分解矩阵</b>。</p>
+  <h3>公式</h3>
+<pre><code>论文写法（列向量）：  h = W₀x + ΔW x = W₀x + B A x
+                      W₀ ∈ ℝ^{d×k} 冻结；B ∈ ℝ^{d×r}，A ∈ ℝ^{r×k}，r ≪ min(d, k)
+                      输出再乘缩放 α/r：h = W₀x + (α/r)·B A x</code></pre>
+  <p><b>初始化</b>：A 用随机高斯，B 用 0，所以训练开始时 ΔW = BA = 0，模型和原模型完全一样。</p>
+  <p class="note"><b>本题的写法不同，别搞混：</b>本题按 PyTorch 的“行向量”习惯写成 <code>out = linear(x) + (α/r)·(x @ A) @ B</code>，其中 A 是 (d_in, r)、B 是 (r, d_out)，初始化是 A 随机、B 为 0。<code>nn.Linear</code> 的权重形状是 (d_out, d_in)，所以合并时要转置：<code>W_new = W + (α/r)·(A @ B).T</code>。</p>
+  <h3>省了多少</h3>
+<pre><code>原矩阵参数量    d · k
+LoRA 参数量     r · (d + k)
+例：d = k = 4096，r = 8：  65,536  对  16,777,216，约 0.39%      （我的算术）</code></pre>
+  <p>论文的数字：与用 Adam 全量微调 GPT-3 175B 相比，可训练参数减少约 <b>10,000 倍</b>，GPU 显存需求减少约 <b>3 倍</b>，质量相当或更好。</p>
+  <h3>几个关键设计</h3>
+  <ul>
+    <li><b>为什么 B 置 0、A 随机，而不是两个都置 0？</b>两个都为 0 时，A 和 B 的梯度都为 0，永远学不动。B=0、A 随机时，B 的梯度 ∝ A x ≠ 0，第一步之后 B 就不再是 0。</li>
+    <li><b>缩放 α/r 的作用</b>：论文说，用 Adam 时调 α 大致等同于调学习率；他们把 α 设成第一次尝试的 r 就不再调，这样改变 r 时不必重新调其他超参数。</li>
+    <li><b>加在哪些层</b>：论文的多数实验只对注意力里的 W_q 和 W_v 用 LoRA。</li>
+    <li><b>推理零开销</b>：部署时把 BA 直接加回 W₀，结构和原模型一样，没有额外延迟（这也是它相对 Adapter 的优点）。换任务时减去旧的 BA、加上新的即可。</li>
+  </ul>
+  <h3>QLoRA</h3>
+  <p>QLoRA 把冻结的底座模型量化到 4-bit，梯度穿过这个 4-bit 模型传到 LoRA 适配器上。论文摘要说，这样可以在单张 48GB GPU 上微调 65B 参数的模型，同时保持 16-bit 全量微调的任务表现。它引入了 4-bit NormalFloat（NF4）等新数据类型。</p>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>LoRA 省的显存主要来自哪里？梯度和优化器状态只为极少的可训练参数保存；前向的激活仍然需要。</li>
+    <li>r 越大越好吗？r 大表达能力更强，但参数和显存增加；论文里很小的 r 已经有效。</li>
+    <li>合并之后还能继续用 LoRA 训练吗？可以，但已合并的增量就成了底座的一部分，无法再单独撤销。</li>
+    <li>apply_lora 怎么替换子模块？找到目标层的父模块，用 <code>setattr(父模块, 名字, LoRALinear(原层))</code> 换掉。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs">
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2106.09685" target="_blank" rel="noopener">Hu 等，LoRA</a> <span class="sub">（W₀ + BA、初始化、α/r、只对 W_q/W_v、10,000 倍与 3 倍、无推理延迟）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2305.14314" target="_blank" rel="noopener">Dettmers 等，QLoRA</a> <span class="sub">（4-bit 底座、单张 48GB GPU 微调 65B、NF4）</span></span></li>
+  </ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s4_2_lora.py
+实现  LoRALinear · apply_lora · merge_lora
+核验  python study/board.py check 4.2</code></pre>
+  <div class="next"><button class="btn ghost" data-go="kl">← 4.1</button><button class="btn" data-go="sft">下一课 4.3 →</button></div>
+</section>
+
+<!-- ============ 4.3 SFT ============ -->
+<section id="sft" data-title="4.3 SFT" hidden>
+  <h2>4.3 SFT：有监督微调</h2>
+  <p class="sub">让预训练模型学会“按指令回答”。数据怎么拼、损失算在哪里，是这一课的全部。</p>
+  <h3>它在流程中的位置</h3>
+  <p>InstructGPT 的三步：<b>(1) 收集示范数据，训练有监督策略（SFT）；(2) 收集比较数据，训练奖励模型；(3) 用 PPO 针对奖励模型优化策略</b>。它的 SFT 数据约 1.3 万个训练提示，奖励模型数据约 3.3 万个，PPO 数据约 3.1 万个。DPO（4.4）也以 SFT 模型作为参考模型。</p>
+  <h3>损失：只在回答上算</h3>
+<pre><code>样本 = 提示 x + 回答 y + 结束符
+L = −(1/N) · Σ_{t ∈ 回答与结束符} log p_θ( token_t | 之前所有 token )      N 是被计入的 token 数</code></pre>
+  <p>Llama 2 论文写得很清楚：把训练集里所有的提示和回答拼接起来填满序列长度，用特殊 token 分隔提示和回答，使用自回归目标，<b>把用户提示部分的损失清零</b>，只在回答 token 上反向传播；共微调 2 个 epoch。</p>
+  <h3>工程实现</h3>
+<pre><code>input_ids = [提示..., 回答..., eos]
+labels    = [-100,..., 回答..., eos]          提示位置换成 ignore_index
+loss      = cross_entropy( logits[:, :-1], labels[:, 1:], ignore_index=-100 )</code></pre>
+  <ul>
+    <li><code>-100</code> 是 PyTorch <code>cross_entropy</code> 的默认 <code>ignore_index</code>，被忽略的位置既不计入损失，也不计入平均的分母。</li>
+    <li><b>结束符要计入损失</b>：否则模型学不会“何时停”。</li>
+    <li><b>补齐</b>：input 用 pad id，labels 用 −100，attention_mask 标出真实 token。</li>
+    <li><b>平均方式</b>：对批内所有有效 token 平均（本题的约定），长回答的权重更大；先按序列平均再平均，则每条样本等权。两者都有人用，要和训练框架保持一致。</li>
+  </ul>
+  <h3>数据比数量重要</h3>
+  <p>Llama 2 的作者发现，第三方 SFT 数据多样性和质量不足；他们改用数量更少但质量更高的自有标注，结果明显变好，标注到 27,540 条就停止了，并认为“几万条量级”已足够。微调设置：余弦学习率、初始学习率 2×10⁻⁵、权重衰减 0.1、批大小 64、序列长度 4096。</p>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么不在提示上算损失？我们要模型学会“给出回答”，而不是模仿用户怎么提问；提示上的损失会浪费容量，还可能让模型学会编造用户的话。</li>
+    <li>多轮对话怎么 mask？只在 assistant 的轮次上算损失，user 和 system 的轮次都换成 −100。</li>
+    <li>把多条样本拼进同一个序列（packing）有什么风险？如果不做额外的注意力隔离，后一条样本能“看到”前一条。</li>
+    <li>SFT 之后为什么常常还要做偏好训练？SFT 只能模仿示范，无法表达“这个回答比那个更好”。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs">
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2203.02155" target="_blank" rel="noopener">Ouyang 等，InstructGPT</a> <span class="sub">（三步流程与三份数据集的规模）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2307.09288" target="_blank" rel="noopener">Touvron 等，Llama 2</a> <span class="sub">（拼接、分隔符、提示损失清零、2 个 epoch、质量优先、超参数）</span></span></li>
+    <li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/functional.py" target="_blank" rel="noopener">PyTorch：F.cross_entropy</a> <span class="sub">（ignore_index 默认 −100）</span></span></li>
+  </ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s4_3_sft.py
+实现  build_sft_example · collate · sft_loss
+核验  python study/board.py check 4.3</code></pre>
+  <div class="next"><button class="btn ghost" data-go="lora">← 4.2</button><button class="btn" data-go="dpo">下一课 4.4 →</button></div>
+</section>
+
+<!-- ============ 4.4 DPO ============ -->
+<section id="dpo" data-title="4.4 DPO" hidden>
+  <h2>4.4 DPO：直接偏好优化</h2>
+  <p class="sub">不训练奖励模型、不跑强化学习，只用一个分类式的损失就完成偏好对齐。</p>
+  <h3>出发点：RLHF 的目标</h3>
+<pre><code>max_π  E_{x, y∼π}[ r(x, y) ]  −  β · KL( π(·|x) ‖ π_ref(·|x) )</code></pre>
+  <p>β 控制模型能离参考模型（通常是 SFT 模型）多远。</p>
+  <h3>推导：四步</h3>
+  <p><b>第 1 步</b>，这个带 KL 约束的目标有闭式最优解：</p>
+<pre><code>π*(y|x) = (1/Z(x)) · π_ref(y|x) · exp( r(x,y) / β ),      Z(x) = Σ_y π_ref(y|x) exp( r(x,y)/β )</code></pre>
+  <p><b>第 2 步</b>，两边取对数并整理，把奖励用最优策略表示出来：</p>
+<pre><code>r(x, y) = β · log( π*(y|x) / π_ref(y|x) ) + β · log Z(x)</code></pre>
+  <p><b>第 3 步</b>，人类偏好用 Bradley–Terry 模型描述，它只依赖两个回答的奖励之差：</p>
+<pre><code>P( y_w ≻ y_l | x ) = σ( r(x, y_w) − r(x, y_l) )</code></pre>
+  <p>把第 2 步代进去，<b>β log Z(x) 两边相同，正好抵消</b>，难算的配分函数消失了。</p>
+  <p><b>第 4 步</b>，对偏好数据做最大似然，就得到 DPO 损失：</p>
+<pre><code>L_DPO = −E[ log σ( β·log(π_θ(y_w|x)/π_ref(y_w|x)) − β·log(π_θ(y_l|x)/π_ref(y_l|x)) ) ]</code></pre>
+  <p>y_w 是被偏好的回答（chosen），y_l 是不被偏好的（rejected）。</p>
+  <h3>直觉：隐式奖励</h3>
+  <p>论文把 <code>r̂_θ(x, y) = β · log(π_θ(y|x) / π_ref(y|x))</code> 称为隐式奖励：“你的语言模型其实就是一个奖励模型”。它的梯度是</p>
+<pre><code>∇L = −β · E[ σ( r̂(x,y_l) − r̂(x,y_w) ) · ( ∇log π(y_w|x) − ∇log π(y_l|x) ) ]</code></pre>
+  <p>提高 chosen 的概率、降低 rejected 的概率，而权重 <code>σ(r̂_l − r̂_w)</code> 在隐式奖励<b>排错序</b>时更大。论文报告，去掉这个权重的朴素版本会让模型退化。</p>
+  <h3>实现</h3>
+<pre><code>1. 对 chosen 和 rejected，分别用 策略 π_θ 和 参考 π_ref（不求梯度）算序列对数概率：共 4 个
+   序列对数概率 = Σ_t log p(token_{t+1} | 前缀)        通常只对“回答”部分的 token 求和
+2. logits = β · ( (π_c − ref_c) − (π_r − ref_r) )
+3. loss = −mean( logsigmoid(logits) )                  logsigmoid 比 log(sigmoid(·)) 稳定</code></pre>
+  <p class="note"><b>与本题的区别：</b>本题的 <code>get_batch_logps</code> 对整条序列（除第一个 token）求和；实际训练里提示部分对 chosen 和 rejected 相同，通常会 mask 掉，只对回答部分求和。论文还建议：π_ref 用 SFT 模型初始化；没有 SFT 模型时，先在被偏好的回答上做最大似然得到 π_ref。</p>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么 DPO 需要参考模型？没有它就失去了 KL 约束，模型可以无限压低 rejected 的概率而偏离原分布。</li>
+    <li>β 大和小分别意味着什么？β 越大，越强烈地约束模型靠近 π_ref。</li>
+    <li>训练时看哪些指标？chosen 与 rejected 的隐式奖励之差（margin），以及 chosen 隐式奖励更高的比例（准确率）。</li>
+    <li>DPO 和 PPO 最大的区别？DPO 用的是离线的偏好数据，不在训练中采样新回答；PPO 在线采样、要奖励模型和价值模型。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs">
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2305.18290" target="_blank" rel="noopener">Rafailov 等，DPO</a> <span class="sub">（公式 3–7、Bradley–Terry、隐式奖励、梯度与加权、参考模型的初始化）</span></span></li>
+  </ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s4_4_dpo.py
+实现  get_batch_logps · dpo_loss
+核验  python study/board.py check 4.4</code></pre>
+  <div class="next"><button class="btn ghost" data-go="sft">← 4.3</button><button class="btn" data-go="ppo">下一课 4.5 →</button></div>
+</section>
+
+<!-- ============ 4.5 PPO ============ -->
+<section id="ppo" data-title="4.5 PPO-RLHF" hidden>
+  <h2>4.5 PPO-RLHF</h2>
+  <p class="sub">经典 RLHF 的第三步：用强化学习让策略去追奖励模型的高分，同时不要跑太远。</p>
+  <h3>四个模型</h3>
+  <div class="scroll"><table>
+    <tr><th>模型</th><th>是否训练</th><th>作用</th></tr>
+    <tr><td>策略 π_θ</td><td>训练</td><td>生成回答（从 SFT 模型初始化）</td></tr>
+    <tr><td>参考 π_ref</td><td>冻结</td><td>算 KL 惩罚（就是 SFT 模型）</td></tr>
+    <tr><td>奖励模型 r_φ</td><td>冻结</td><td>给完整回答打分</td></tr>
+    <tr><td>价值模型 V</td><td>训练</td><td>估计每个位置之后的期望回报，用作基线（InstructGPT 从奖励模型初始化它）</td></tr>
+  </table></div>
+  <h3>每个 token 的奖励</h3>
+<pre><code>r_t = −β · ( log π_θ(a_t|s_t) − log π_ref(a_t|s_t) )        每个 token 的 KL 惩罚
+r_T 再加上 奖励模型对整段回答的打分 r_φ(x, y)                 只在最后一个 token</code></pre>
+  <p>InstructGPT 在每个 token 上加入来自 SFT 模型的 KL 惩罚，以缓解对奖励模型的过度优化。</p>
+  <h3>优势：GAE</h3>
+<pre><code>δ_t = r_t + γ·V(s_{t+1}) − V(s_t)                  V(s_T) 记为 0
+A_t = Σ_{l≥0} (γλ)^l · δ_{t+l}  =  δ_t + γλ·A_{t+1}     从后往前递推
+returns_t = A_t + V(s_t)                            价值模型的回归目标</code></pre>
+  <p>两个特例（GAE 论文）：λ = 0 时 <code>A_t = δ_t</code>（方差小，但 V 不准就有偏）；λ = 1 时 <code>A_t = Σ γ^l r_{t+l} − V(s_t)</code>（无偏，但方差大）。λ 在两者之间折中。</p>
+  <h3>PPO 的截断目标</h3>
+<pre><code>ratio_t = π_θ(a_t|s_t) / π_old(a_t|s_t) = exp( log π_θ − log π_old )
+L_CLIP  = E_t[ min( ratio_t · A_t,  clip(ratio_t, 1−ε, 1+ε) · A_t ) ]          论文里的例子 ε = 0.2</code></pre>
+  <p>PPO 论文说明：这是未截断目标的一个<b>下界（悲观界）</b>。当 ratio 的变化会让目标变好时，超出 [1−ε, 1+ε] 的部分被截掉，不再给奖励；当变化让目标变差时，保留它。这让同一批样本可以安全地做<b>多个 epoch 的小批量更新</b>。</p>
+  <p>完整的损失（PPO 论文里加上价值损失和熵奖励，本题不含熵项）：</p>
+<pre><code>total_loss = −L_CLIP + c₁ · mean( (V(s_t) − returns_t)² ) + β_KL · KL       本题 c₁ = 0.5</code></pre>
+  <h3>实现时最容易错的：对齐</h3>
+<pre><code>all_input_ids = [BOS, a_0, a_1, ..., a_{T−1}]
+第 t 个动作 a_t 是在前缀 all_input_ids[:, :t+1] 之后采样的
+→ 重新打分时取 logits[:, t] 位置上 a_t 的对数概率</code></pre>
+  <p>判题里有一项“策略没变时 ratio 必须处处为 1”：生成时记录的对数概率和 <code>ppo_step</code> 重算的只要错开一位，这一项就会失败。</p>
+  <h3>结果与变体</h3>
+  <ul>
+    <li>InstructGPT 报告：在他们的提示分布上，1.3B 的 InstructGPT 的输出比 175B 的 GPT-3 更受偏好，尽管参数少 100 倍。</li>
+    <li><b>PPO-ptx</b>：把预训练的梯度混进 PPO 的梯度，用来修复在公开 NLP 数据集上的性能退化。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么要用 ratio 而不是直接最大化 log π·A？采样来自旧策略，ratio 是重要性采样的修正，让同一批数据可以复用多次。</li>
+    <li>A &lt; 0 时，截断起什么作用？阻止把这个动作的概率压得太低（ratio 小于 1−ε 后不再奖励继续下压）。</li>
+    <li>为什么生成时必须采样而不能 argmax？策略梯度需要探索；贪心生成的每组样本几乎相同。</li>
+    <li>PPO 为什么贵？要同时维护四个模型，其中价值模型和策略差不多大。这正是 GRPO（4.6）要解决的问题。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs">
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1707.06347" target="_blank" rel="noopener">Schulman 等，PPO</a> <span class="sub">（L_CLIP、ε=0.2、悲观界、多 epoch 小批量、价值损失与熵项）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1506.02438" target="_blank" rel="noopener">Schulman 等，GAE</a> <span class="sub">（λ=0 与 λ=1 两个特例、偏差与方差的折中）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2203.02155" target="_blank" rel="noopener">Ouyang 等，InstructGPT</a> <span class="sub">（逐 token KL 惩罚、价值模型从奖励模型初始化、PPO-ptx、1.3B 胜过 175B）</span></span></li>
+  </ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s4_5_ppo.py
+实现  generate_sequences · compute_gae · ppo_step
+核验  python study/board.py check 4.5</code></pre>
+  <div class="next"><button class="btn ghost" data-go="dpo">← 4.4</button><button class="btn" data-go="grpo">下一课 4.6 →</button></div>
+</section>
+
+<!-- ============ 4.6 GRPO ============ -->
+<section id="grpo" data-title="4.6 GRPO" hidden>
+  <h2>4.6 GRPO：组相对策略优化</h2>
+  <p class="sub">去掉价值模型，用“同一题目的一组回答”互相比较来当基线。</p>
+  <h3>为什么</h3>
+  <p>DeepSeekMath 论文的理由：PPO 的价值模型通常和策略差不多大，带来很大的显存和计算负担；而且在 LLM 里奖励模型通常只给最后一个 token 打分，训练一个在每个 token 上都准确的价值函数很困难。GRPO <b>放弃了价值模型（critic）</b>，改用同一问题下多个采样回答的平均奖励作为基线。</p>
+  <h3>算法</h3>
+<pre><code>对每个问题 q：
+  1. 用旧策略 π_old 采样 G 个回答 o_1 … o_G
+  2. 奖励模型打分，得到 r_1 … r_G
+  3. 组内标准化：  Â_i = ( r_i − mean(r) ) / std(r)      该回答的所有 token 共用这个优势
+  4. 最大化
+     J = (1/G) Σ_i (1/|o_i|) Σ_t [ min( ratio_{i,t}·Â_i, clip(ratio_{i,t}, 1−ε, 1+ε)·Â_i ) − β·D_KL ]
+     ratio_{i,t} = π_θ(o_{i,t} | q, o_{i,&lt;t}) / π_old(o_{i,t} | q, o_{i,&lt;t})</code></pre>
+  <p>这里的 D_KL 用的是 4.1 讲的 k3 估计。和 PPO 不同，GRPO <b>把 KL 直接加在损失里</b>，而不是加进奖励，这样计算优势时不会被 KL 项搅进去。</p>
+  <h3>为什么“组内标准化”合理</h3>
+  <ul>
+    <li>同一个问题的回答才能公平比较；不同问题的难度不同，奖励的尺度也不同，所以<b>不能</b>用全局均值。判题会用两组“形状相同、尺度差 100 倍”的奖励检查这一点。</li>
+    <li>论文也指出，奖励模型本来就是在“同一问题的输出两两比较”的数据上训练的，组相对的优势与这种比较性质相契合。</li>
+    <li>如果一组回答的奖励全都相同，std = 0，优势全为 0：这组没有学习信号。实现里要加 eps 防止除零。</li>
+  </ul>
+  <h3>PPO、GRPO、DPO 对比</h3>
+  <div class="scroll"><table>
+    <tr><th></th><th>PPO-RLHF</th><th>GRPO</th><th>DPO</th></tr>
+    <tr><td>在线采样</td><td>是</td><td>是，每题一组</td><td>否（离线偏好对）</td></tr>
+    <tr><td>奖励模型</td><td>需要</td><td>需要（或规则奖励）</td><td>不需要</td></tr>
+    <tr><td>价值模型</td><td>需要</td><td>不需要</td><td>不需要</td></tr>
+    <tr><td>基线 / 优势</td><td>GAE + 价值模型</td><td>组内标准化</td><td>无（隐式奖励之差）</td></tr>
+    <tr><td>KL 放在哪</td><td>奖励里，逐 token</td><td>损失里，k3 估计</td><td>隐含在目标的推导里</td></tr>
+  </table></div>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>G 取多大？G 越大，组均值作为基线越准，但每个问题的采样成本越高。</li>
+    <li>为什么回答必须是采样出来的？一组完全相同的贪心回答奖励相同，优势全为 0，等于没学。</li>
+    <li>一组回答为什么要连续存放？这样 <code>reshape(题目数, G)</code> 就能按行算均值和标准差。</li>
+    <li>(1/|o_i|) 这一项起什么作用？先在每个回答内按 token 平均，再在组内平均，使长回答和短回答的权重相同。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs">
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2402.03300" target="_blank" rel="noopener">Shao 等，DeepSeekMath</a> <span class="sub">（放弃价值模型的理由、目标函数、组内标准化、KL 直接加入损失、k3 估计、算法 1）</span></span></li>
+  </ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s4_6_grpo.py
+实现  generate_group_completions · compute_group_advantages · grpo_loss
+核验  python study/board.py check 4.6</code></pre>
+  <div class="next"><button class="btn ghost" data-go="ppo">← 4.5</button><button class="btn" data-go="board">去看板 →</button></div>
 </section>
 
 <!-- ============ A.0 策略 ============ -->
@@ -1415,7 +1742,7 @@ pip install torch numpy pandas</code></pre>
   <p class="note"><b>注意：</b>请用 <code>python study/board.py</code> 运行。在仓库根目录直接 <code>import torch</code> 会被根目录的 <code>torch/</code> 题目文件夹遮住。</p>
   <h3>命令</h3>
 <pre><code>python study/board.py                       # 终端里的进度看板
-python study/board.py check 1.1             # 第 1、2、3 节 / 应用 ML（1.x、2.x、3.x、A.1 ~ A.9）
+python study/board.py check 1.1             # 第 1–4 节 / 应用 ML（1.x–4.x、A.1 ~ A.9）
 python study/board.py tl list basics        # TorchLeet 全题库
 python study/board.py tl init  lin-regression   # 生成桩文件
 python study/board.py tl check lin-regression   # 自动核验
@@ -1424,7 +1751,7 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
   <div id="global-verify"></div>
   <h3>题库进度</h3>
   <div id="bank-progress"></div>
-  <h3>课程进度表 <span class="pill" id="prog">0 / 20</span></h3>
+  <h3>课程进度表 <span class="pill" id="prog">0 / 26</span></h3>
   <div id="checks"></div>
   <p class="sub" style="margin-top:12px">通过的结果也会写入本机 <code>~/.torchleet/progress.json</code>，终端看板以它为准。这里的进度只记在这个浏览器里；也可以手动勾选。</p>
   <div class="next"><button class="btn ghost" data-go="attention">← 1.5</button><span></span></div>
@@ -1440,13 +1767,14 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
     {name:'第 1 节 Foundations',ids:['bpe','sinusoidal','rope','rmsnorm','attention']},
     {name:'第 2 节 Core Transformer',ids:['mha','gqa','kvcache','swa']},
     {name:'第 3 节 Full Model',ids:['arch','sblock','smodel']},
+    {name:'第 4 节 Alignment',ids:['kl','lora','sft','dpo','ppo','grpo']},
     {name:'应用 ML',ids:['a0','a1','a2','a3','a4','a5','a6','a7','a8','a9']},
     {name:'TorchLeet 题库',ids:['bank-llm','bank-basics','bank-advanced']},
     {name:'看板',ids:['board']}];
   var order=[].concat.apply([],groups.map(function(g){return g.ids}));
   var lessons=[['bpe','1.1 BPE','s1_1_bpe.py'],['sinusoidal','1.2 Sinusoidal','s1_2_sinusoidal.py'],
     ['rope','1.3 RoPE','s1_3_rope.py'],['rmsnorm','1.4 RMSNorm','s1_4_rmsnorm.py'],['attention','1.5 Attention','s1_5_attention.py'],
-    ['mha','2.1 Multi-Head Attention','s2_1_mha.py'],['gqa','2.2 Grouped Query Attention','s2_2_gqa.py'],['kvcache','2.3 KV Cache','s2_3_kvcache.py'],['swa','2.4 Sliding Window','s2_4_swa.py'],['sblock','3.2 RoPE+GQA 注意力块','s3_2_rope_gqa_block.py'],['smodel','3.3 组装完整 SmolLM','s3_3_smollm_model.py'],
+    ['mha','2.1 Multi-Head Attention','s2_1_mha.py'],['gqa','2.2 Grouped Query Attention','s2_2_gqa.py'],['kvcache','2.3 KV Cache','s2_3_kvcache.py'],['swa','2.4 Sliding Window','s2_4_swa.py'],['sblock','3.2 RoPE+GQA 注意力块','s3_2_rope_gqa_block.py'],['smodel','3.3 组装完整 SmolLM','s3_3_smollm_model.py'],['kl','4.1 KL 散度','s4_1_kl.py'],['lora','4.2 LoRA','s4_2_lora.py'],['sft','4.3 SFT','s4_3_sft.py'],['dpo','4.4 DPO','s4_4_dpo.py'],['ppo','4.5 PPO-RLHF','s4_5_ppo.py'],['grpo','4.6 GRPO','s4_6_grpo.py'],
     ['a1','A.1 评估指标','a1_metrics.py'],['a2','A.2 数据预处理','a2_preprocess.py'],['a3','A.3 划分与交叉验证','a3_splits.py'],
     ['a4','A.4 线性/岭回归','a4_linreg.py'],['a5','A.5 逻辑回归','a5_logreg.py'],['a6','A.6 KNN','a6_knn.py'],
     ['a7','A.7 决策树划分','a7_tree.py'],['a8','A.8 PCA','a8_pca.py'],['a9','A.9 pandas','a9_pandas.py']];
@@ -1580,7 +1908,7 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
   /* ================= results, widgets, checklist ================= */
   var pidMap={bpe:'byte-pair-encoder',sinusoidal:'sinusoidal-positional-embedding',rope:'rotary-positional-embedding',
     rmsnorm:'rms-norm',attention:'implement-attention-from-scratch',a1:'a1-metrics',a2:'a2-preprocess',a3:'a3-splits',
-    sblock:'smollm',smodel:'s3-smollm-model',mha:'multi-head-attention',gqa:'grouped-query-attention',kvcache:'kv-cache',swa:'sliding-window-attention',a4:'a4-linreg',a5:'a5-logreg',a6:'a6-knn',a7:'a7-tree',a8:'a8-pca',a9:'a9-pandas'};
+    sblock:'smollm',kl:'s4-kl',lora:'lora',sft:'s4-sft',dpo:'dpo',ppo:'ppo-rlhf',grpo:'grpo',smodel:'s3-smollm-model',mha:'multi-head-attention',gqa:'grouped-query-attention',kvcache:'kv-cache',swa:'sliding-window-attention',a4:'a4-linreg',a5:'a5-logreg',a6:'a6-knn',a7:'a7-tree',a8:'a8-pca',a9:'a9-pandas'};
   var results={};try{results=JSON.parse(store.get('tl-results')||'{}')}catch(e){}
   function stat(pid){
     var r=results[pid];if(!r)return 'none';
@@ -1945,7 +2273,7 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
     document.getElementById('kv-out').textContent=
       '不缓存：第 t 步重新投影 t 个 token 的 K、V，共 N(N+1)/2 = '+no.toLocaleString()+' 次\n'+
       '缓存  ：每步只投影 1 个新 token，共 N = '+n.toLocaleString()+' 次\n'+
-      '少算了 '+(no/n).toFixed(1)+' 倍的 K/V 投影；代价是要常驻显存保存全部历史 K/V。';
+      '不缓存的投影次数是缓存版的 '+((n+1)/2).toFixed(1)+' 倍，即 (N+1)/2；有长度为 P 的提示时，不缓存是 N·P + N(N+1)/2 次。\n代价是要常驻显存保存全部历史 K/V。';
   }
   function drawSwa(){
     var w=+document.getElementById('swa-w').value,causal=document.getElementById('swa-c').checked,n=24;
@@ -1960,7 +2288,7 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
     var rows=[1,2,4,8,16].map(function(L){var reach=causal?Math.min(n,L*w+1):Math.min(n,2*L*w+1);return 'L='+L+': '+reach});
     document.getElementById('swa-out').textContent=
       '允许的注意力格 '+on+' / '+(n*n)+'（'+(100*on/(n*n)).toFixed(0)+'% 的完整注意力）\n'+
-      '堆叠 L 层后，一个 token 最远能间接看到的范围（n='+n+'）：\n  '+rows.join('   ');
+      '堆叠 L 层后，一个 token 能间接看到的位置个数（含自身，n='+n+'）：\n  '+rows.join('   ');
   }
   ['mha-d','mha-h'].forEach(function(i){document.getElementById(i).onchange=updMha});
   ['gqa-h','gqa-g','gqa-s'].forEach(function(i){document.getElementById(i).onchange=updGqa});

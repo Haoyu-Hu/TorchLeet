@@ -17,7 +17,7 @@ python study/board.py hint 1.1
 | 应用 ML（笔试向） | 指标 · 预处理 · CV · 回归 · KNN · 决策树 · PCA · pandas，编号 A.1~A.9，只需 numpy/pandas | ✅ 看板就绪（讲义在线文档里） |
 | 2 Core Transformer | MHA · GQA · KV Cache · Sliding Window | ✅ 看板就绪（提交桩 `s2_*.py`） |
 | 3 Full Model | 架构总览 · RoPE+GQA 注意力块 · 组装 SmolLM（`s3_*.py`） | ✅ 看板就绪 |
-| 4 Alignment | KL · LoRA · SFT · DPO · PPO · GRPO | 待开讲 |
+| 4 Alignment | KL · LoRA · SFT · DPO · PPO-RLHF · GRPO（`s4_*.py`；4.1、4.3 为本仓库自建判题） | ✅ 看板就绪 |
 | 5 Decoding & Inference | 采样 · 投机解码 · 连续批处理 · 推理引擎 | 待开讲 |
 | 6 Systems | MoE | 待开讲 |
 | Basics | 线性回归 → CNN/RNN/LSTM → 经典 ML | 待开讲 |

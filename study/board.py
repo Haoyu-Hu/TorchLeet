@@ -44,6 +44,13 @@ TASKS = {
             ["rotate_half", "apply_rotary_pos_emb", "repeat_kv", "RotaryEmbedder", "RopeAttention"]),
     "3.3": ("3 Full Model", "组装完整 SmolLM", "s3-smollm-model", "s3_3_smollm_model.py",
             ["RMSNorm", "RopeAttention", "SwiGLU", "SmolLM", "greedy_generate"]),
+    "4.1": ("4 Alignment", "KL 散度", "s4-kl", "s4_1_kl.py", ["kl_divergence", "kl_estimators"]),
+    "4.2": ("4 Alignment", "LoRA", "lora", "s4_2_lora.py", ["LoRALinear", "apply_lora", "merge_lora"]),
+    "4.3": ("4 Alignment", "SFT 数据与损失", "s4-sft", "s4_3_sft.py", ["build_sft_example", "collate", "sft_loss"]),
+    "4.4": ("4 Alignment", "DPO", "dpo", "s4_4_dpo.py", ["get_batch_logps", "dpo_loss"]),
+    "4.5": ("4 Alignment", "PPO-RLHF", "ppo-rlhf", "s4_5_ppo.py", ["generate_sequences", "compute_gae", "ppo_step"]),
+    "4.6": ("4 Alignment", "GRPO", "grpo", "s4_6_grpo.py",
+            ["generate_group_completions", "compute_group_advantages", "grpo_loss"]),
 }
 APPLIED = {
     "A.1": ("评估指标", "a1-metrics", "a1_metrics.py"),
