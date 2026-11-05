@@ -40,6 +40,10 @@ TASKS = {
             "s2_3_kvcache.py", ["KVCache", "CachedAttention"]),
     "2.4": ("2 Core Transformer", "Sliding Window Attention", "sliding-window-attention",
             "s2_4_swa.py", ["create_sliding_window_mask", "full_attention", "sliding_window_attention"]),
+    "3.2": ("3 Full Model", "RoPE + GQA 注意力块", "smollm", "s3_2_rope_gqa_block.py",
+            ["rotate_half", "apply_rotary_pos_emb", "repeat_kv", "RotaryEmbedder", "RopeAttention"]),
+    "3.3": ("3 Full Model", "组装完整 SmolLM", "s3-smollm-model", "s3_3_smollm_model.py",
+            ["RMSNorm", "RopeAttention", "SwiGLU", "SmolLM", "greedy_generate"]),
 }
 APPLIED = {
     "A.1": ("评估指标", "a1-metrics", "a1_metrics.py"),
@@ -153,10 +157,10 @@ def tl(a):
     print("  🎉 通过！\n" if ok else f"  还没通过；需要提示: python study/board.py tl hint {pid}\n")
 
 
-def applied(cmd, tid, a):
+def applied(cmd, tid, a, spec=None):
     sys.path.insert(0, str(ROOT))
     import applied_checks as A
-    title, pid, f = APPLIED[tid]
+    title, pid, f = spec or APPLIED[tid]
     spec = A.CHECKS[pid]
     if cmd == "hint":
         hs = spec["hints"]
@@ -206,6 +210,10 @@ def main():
     if tid not in TASKS:
         sys.exit(f"未知编号 {tid}，可选: {', '.join(list(TASKS) + list(APPLIED))}")
     _, title, pid, f, names = TASKS[tid]
+    sys.path.insert(0, str(ROOT))
+    import applied_checks as _A
+    if pid in _A.CHECKS:                       # 本仓库自带的判题（非 torchleet 包）
+        return applied(cmd, tid, a, spec=(title, pid, f))
     import torchleet
     if cmd == "hint":
         return torchleet.hint(pid, int(a[2]) if len(a) > 2 else None)

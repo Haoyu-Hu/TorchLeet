@@ -1,0 +1,5 @@
+# study/ 目录的运行依赖
+# torch: PyPI 上 Linux 版默认带 CUDA，体积很大；只想跑 CPU 题可自行换成 CPU 版 wheel
+numpy
+pandas
+torch

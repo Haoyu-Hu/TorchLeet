@@ -424,3 +424,160 @@ def check_merge(ns):
     d = {r.country: (r.sum, r.count) for r in out.itertuples()}
     assert d.get("FR") == (7, 1) and d.get("US") == (35, 3), f"得到 {d}（country 缺失的订单 user 9 不应混入已知国家）"
     assert list(out.columns)[:1] == ["country"], "第一列应是 country（reset_index 之后）"
+
+
+# ============================================================ 3.3 SmolLM 完整模型（PyTorch）
+add = reg("s3-smollm-model", ["RMSNorm", "RopeAttention", "SwiGLU", "SmolLM", "greedy_generate"], [
+    "解码层是两个“归一化 → 子层 → 残差相加”：x = x + Attn(RMSNorm(x))；x = x + MLP(RMSNorm(x))。",
+    "SwiGLU：down( silu(gate(x)) * up(x) )，三个 Linear 都不带偏置，参数量 3·hidden·intermediate。",
+    "SmolLM 需要有属性 embed_tokens（nn.Embedding）、layers（nn.ModuleList）、norm（最终 RMSNorm）、lm_head（nn.Linear，无偏置）。",
+    "SmolLM.forward(input_ids, labels=None) 返回 (logits, loss)。next-token 损失要错开一位：logits[:, :-1] 对 labels[:, 1:]。",
+    "权重共享：lm_head.weight = embed.weight；cfg.tie_word_embeddings 为 False 时不共享。",
+    "因果 mask 是加性的：上三角（不含对角）为 -inf，形状 (1,1,S,S)，在 RopeAttention 里加到分数上。",
+    "greedy_generate：循环 max_new_tokens 次，每次取最后一个位置 logits 的 argmax 追加到序列。",
+])
+
+
+def _lm_cfg(tie=True, layers=2, vocab=50, hidden=32, heads=4, kv=2):
+    from types import SimpleNamespace
+    return SimpleNamespace(vocab_size=vocab, hidden_size=hidden, intermediate_size=2 * hidden, num_layers=layers,
+                           num_heads=heads, kv_heads=kv, num_key_value_heads=kv, head_dim=hidden // heads,
+                           rope_theta=10000.0, rms_norm_eps=1e-6, tie_word_embeddings=tie)
+
+
+def _build(ns, **kw):
+    import torch
+    torch.manual_seed(0)
+    return ns.SmolLM(_lm_cfg(**kw)).eval()
+
+
+def _nparams(m):
+    return sum(p.numel() for p in m.parameters())
+
+
+@add
+def check_swiglu_shape_and_params(ns):
+    import torch
+    torch.manual_seed(0)
+    H, I = 16, 40
+    m = ns.SwiGLU(H, I)
+    x = torch.randn(2, 5, H)
+    out = m(x)
+    assert tuple(out.shape) == (2, 5, H), f"SwiGLU 输出应为 (2,5,{H})，得到 {tuple(out.shape)}"
+    assert _nparams(m) == 3 * H * I, f"无偏置的 SwiGLU 应有 3·H·I={3 * H * I} 个参数，得到 {_nparams(m)}"
+    assert not torch.allclose(m(2 * x), 2 * out, atol=1e-4), "SwiGLU 是非线性的，f(2x) 不应等于 2f(x)"
+
+
+@add
+def check_forward_shapes(ns):
+    import torch
+    m = _build(ns)
+    ids = torch.randint(0, 50, (3, 7))
+    r = m(ids)
+    assert isinstance(r, tuple) and len(r) == 2, "forward 应返回 (logits, loss)"
+    logits, loss = r
+    assert tuple(logits.shape) == (3, 7, 50), f"logits 应为 (3,7,50)，得到 {tuple(logits.shape)}"
+    assert loss is None, "没传 labels 时 loss 应为 None"
+    _, loss = m(ids, labels=ids)
+    assert loss is not None and loss.dim() == 0 and torch.isfinite(loss), "传了 labels 后 loss 应为有限的标量"
+
+
+@add
+def check_loss_is_next_token(ns):
+    import torch
+    import torch.nn.functional as F
+    m = _build(ns)
+    torch.manual_seed(1)
+    ids = torch.randint(0, 50, (2, 9))
+    logits, loss = m(ids, labels=ids)
+    exp = F.cross_entropy(logits[:, :-1].reshape(-1, 50), ids[:, 1:].reshape(-1))
+    assert torch.allclose(loss, exp, atol=1e-5), f"loss={float(loss):.4f}，按“预测下一个 token”应为 {float(exp):.4f}（要错开一位）"
+
+
+@add
+def check_causal(ns):
+    import torch
+    m = _build(ns)
+    torch.manual_seed(2)
+    ids = torch.randint(0, 50, (2, 8))
+    ids2 = ids.clone()
+    ids2[:, -1] = (ids2[:, -1] + 7) % 50
+    with torch.no_grad():
+        a, _ = m(ids)
+        b, _ = m(ids2)
+    drift = (a[:, :-1] - b[:, :-1]).abs().max()
+    assert drift < 1e-5, f"改最后一个 token 影响了前面的 logits（最大差 {float(drift):.2e}）：因果 mask 没生效"
+    assert (a[:, -1] - b[:, -1]).abs().max() > 1e-6, "改最后一个 token 应该改变最后一个位置的输出"
+
+
+@add
+def check_weight_tying(ns):
+    V, H = 50, 32
+    tied, untied = _nparams(_build(ns, tie=True)), _nparams(_build(ns, tie=False))
+    assert untied - tied == V * H, f"不共享比共享应多 V·H={V * H} 个参数，实际多 {untied - tied}"
+
+
+@add
+def check_layers_stack(ns):
+    p1, p2, p3 = (_nparams(_build(ns, layers=n)) for n in (1, 2, 3))
+    assert p2 > p1 and p2 - p1 == p3 - p2, f"每多一层应增加相同数量的参数，得到 {p1},{p2},{p3}"
+
+
+@add
+def check_residual_connections(ns):
+    """把每个解码层的参数全部清零：若两处都有残差连接，每层都应是恒等映射，
+    整个模型就等于 lm_head(norm(embed_tokens(ids)))。"""
+    import torch
+    m = _build(ns)
+    for n in ("embed_tokens", "layers", "norm", "lm_head"):
+        assert hasattr(m, n), f"SmolLM 需要有属性 `{n}`（沿用 Hugging Face Llama 的命名）"
+    ids = torch.randint(0, 50, (2, 6))
+    with torch.no_grad():
+        for p in m.layers.parameters():
+            p.zero_()
+        got, _ = m(ids)
+        exp = m.lm_head(m.norm(m.embed_tokens(ids)))
+    assert torch.allclose(got, exp, atol=1e-5), "层参数清零后输出不等于“嵌入 → 最终归一化 → lm_head”：注意力和 MLP 两处都要有残差相加"
+
+
+@add
+def check_all_params_get_gradients(ns):
+    import torch
+    m = _build(ns)
+    m.train()
+    ids = torch.randint(0, 50, (2, 6))
+    _, loss = m(ids, labels=ids)
+    loss.backward()
+    dead = [n for n, p in m.named_parameters() if p.grad is None or float(p.grad.abs().sum()) == 0.0]
+    assert not dead, f"这些参数没有收到梯度: {dead[:4]}"
+
+
+@add
+def check_greedy_generate(ns):
+    import torch
+    m = _build(ns)
+    torch.manual_seed(3)
+    prompt = torch.randint(0, 50, (2, 4))
+    out = ns.greedy_generate(m, prompt, max_new_tokens=5)
+    assert tuple(out.shape) == (2, 9), f"应返回 (2, 4+5)，得到 {tuple(out.shape)}"
+    assert torch.equal(out[:, :4], prompt), "返回序列的前缀应是原提示"
+    with torch.no_grad():
+        for t in range(4, 9):
+            nxt = m(out[:, :t])[0][:, -1].argmax(-1)
+            assert torch.equal(nxt, out[:, t]), f"第 {t - 4} 个新 token 不是上一步最后位置 logits 的 argmax"
+    again = ns.greedy_generate(m, prompt, max_new_tokens=5)
+    assert torch.equal(out, again), "贪心生成应是确定的"
+
+
+# ============================================================ 流水线自检用（不出现在看板里）
+add = reg("selftest-add", ["add"], ["add(a, b) 返回 a + b。这道题只用来检查流水线本身是否工作正常。"])
+
+
+@add
+def check_add_integers(ns):
+    assert ns.add(2, 3) == 5 and ns.add(-1, 1) == 0, "整数加法不对"
+
+
+@add
+def check_add_floats(ns):
+    assert abs(ns.add(0.5, 0.25) - 0.75) < 1e-12, "浮点加法不对"

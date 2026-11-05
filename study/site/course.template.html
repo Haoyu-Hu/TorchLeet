@@ -1,0 +1,1983 @@
+<title>TorchLeet 学习路线</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: sticky tab strip on top, single reading column below; lessons share one skeleton (why / intuition / math / questions / check). */
+:root{
+  --bg:#f6f7f4; --surface:#ffffff; --fg:#1d2420; --muted:#5d6a63; --line:#dde2dc;
+  --accent:#0b6b57; --accent-soft:#dff0ea; --code-bg:#eef1ec; --warn:#a8531a; --warn-soft:#f8e9dc;
+  --font-display:'Fraunces',Georgia,serif;
+  --font-body:'IBM Plex Sans SC',system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121815; --surface:#1a221e; --fg:#e6ebe7; --muted:#9aa89f; --line:#2c3732;
+  --accent:#58c4a6; --accent-soft:#1b3a31; --code-bg:#222c27; --warn:#e69a62; --warn-soft:#3a2a1d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121815; --surface:#1a221e; --fg:#e6ebe7; --muted:#9aa89f; --line:#2c3732;
+  --accent:#58c4a6; --accent-soft:#1b3a31; --code-bg:#222c27; --warn:#e69a62; --warn-soft:#3a2a1d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:16px;line-height:1.75;margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:820px;margin:0 auto}
+header{padding-block:28px 8px}
+header h1{font-family:var(--font-display);font-size:clamp(28px,5vw,40px);line-height:1.2;margin:0 0 6px;text-wrap:balance}
+header p{margin:0;color:var(--muted)}
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);margin-top:16px}
+.tabs{display:flex;gap:4px;overflow-x:auto;padding-block:8px;scrollbar-width:thin}
+.tab{flex:none;border:1px solid transparent;background:none;color:var(--muted);font:500 14px var(--font-body);
+  padding:7px 12px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.tab:hover{color:var(--fg)}
+.tab[aria-selected="true"]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.tab:focus-visible,.btn:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tab .done{color:var(--accent)}
+.groups{border-bottom:1px solid var(--line);padding-block:6px 4px}
+.groups .tab{font-weight:600}
+.tabs:empty{display:none}
+main{padding-block:24px 64px}
+section[hidden]{display:none}
+h2{font-family:var(--font-display);font-size:26px;margin:0 0 4px;text-wrap:balance}
+h3{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:32px 0 8px;font-weight:600}
+.sub{color:var(--muted);margin:0 0 8px}
+p{margin:0 0 12px}
+code{font-family:var(--font-mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:4px}
+pre{font-family:var(--font-mono);font-size:13.5px;line-height:1.6;background:var(--code-bg);border:1px solid var(--line);
+  border-radius:8px;padding:14px 16px;overflow-x:auto;margin:0 0 14px}
+pre code{background:none;padding:0;font-size:inherit}
+:not(pre)>code{overflow-wrap:anywhere}
+.cbody{min-width:0}
+ul,ol{padding-left:22px;margin:0 0 12px} li{margin-bottom:6px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 16px 6px 38px;margin:0 0 14px}
+.q li{padding-left:2px}
+.q li::marker{color:var(--accent)}
+.note{background:var(--warn-soft);color:var(--fg);border-radius:8px;padding:10px 14px;margin:0 0 14px;font-size:15px}
+.note b{color:var(--warn)}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:13px}
+.scroll{overflow-x:auto;margin-bottom:14px}
+.demo{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0 0 14px}
+.demo .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.btn{font:500 14px var(--font-body);border:1px solid var(--accent);background:var(--accent);color:var(--bg);
+  padding:6px 14px;border-radius:6px;cursor:pointer}
+.btn.ghost{background:none;color:var(--accent)}
+input[type=text],select{font:14px var(--font-mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0}
+.vocab{font-family:var(--font-mono);font-size:13.5px;line-height:2}
+.sym{display:inline-block;border:1px solid var(--line);background:var(--bg);border-radius:4px;padding:0 6px;margin:0 2px}
+.sym.m{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.cnt{color:var(--muted);margin-left:8px}
+canvas{width:100%;height:auto;border-radius:6px;border:1px solid var(--line);display:block}
+.check{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.check input{margin-top:7px;accent-color:var(--accent)}
+.next{display:flex;justify-content:space-between;gap:12px;margin-top:36px;flex-wrap:wrap}
+.pill{display:inline-block;font:500 12px var(--font-mono);padding:1px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}
+.soon{color:var(--muted)}
+
+.bankbar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 16px;align-items:center}
+.bankbar input[type=search]{flex:1;min-width:160px;font:14px var(--font-body);background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
+.bankbar select{font:14px var(--font-body)}
+.count{color:var(--muted);font-size:13px}
+details.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;margin-bottom:8px}
+details.card>summary{cursor:pointer;list-style:none;padding:10px 14px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary::before{content:"\25B8";color:var(--muted);flex:none}
+details.card[open]>summary::before{content:"\25BE"}
+details.card .ttl{font-weight:600;flex:1;min-width:140px}
+.pill.d-basic,.pill.d-easy{background:var(--accent-soft);color:var(--accent)}
+.pill.d-medium{background:var(--warn-soft);color:var(--warn)}
+.pill.d-hard,.pill.d-expert{background:var(--fg);color:var(--bg)}
+.pill.co{background:var(--code-bg);color:var(--muted)}
+.pill.ok{background:var(--accent);color:var(--bg)}
+.pill.pt{background:var(--warn-soft);color:var(--warn)}
+.cbody{padding:2px 16px 16px;border-top:1px solid var(--line)}
+.cbody h4{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:22px 0 8px;font-weight:600}
+.md h5,.md h6,.md .mh{font-size:15px;margin:16px 0 6px}
+.md p{margin:0 0 10px}
+.md table{margin-bottom:10px}
+.md blockquote{margin:0 0 10px;padding:2px 12px;border-left:3px solid var(--line);color:var(--muted)}
+.codewrap{position:relative}
+.codewrap .btn{position:absolute;top:8px;right:8px;padding:3px 10px;font-size:12px}
+.codewrap pre{padding-top:34px;max-height:420px}
+.chk-list{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;padding:0;list-style:none}
+.chk-list li{margin:0;font:12.5px var(--font-mono);background:var(--code-bg);border-radius:4px;padding:2px 8px;cursor:help}
+.verify{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:14px 0}
+.verify .vhead{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.verify textarea{width:100%;font:13px var(--font-mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;resize:vertical;min-width:0}
+.verify .row{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.hintbox{margin:6px 0 0}
+.hintbox p{background:var(--accent-soft);border-radius:6px;padding:6px 12px;margin:0 0 6px;font-size:15px}
+.bar{height:8px;background:var(--code-bg);border-radius:99px;overflow:hidden;margin:4px 0 12px}
+.bar i{display:block;height:100%;background:var(--accent)}
+
+.submit{background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;margin:14px 0}
+.submit textarea{width:100%;min-height:150px;font:13px/1.5 var(--font-mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;resize:vertical;min-width:0;tab-size:4}
+.submit .row{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.submit .res{margin-top:10px}
+.res ul{list-style:none;padding:0;margin:8px 0 0}
+.res li{font-size:14px;margin:0 0 4px;overflow-wrap:anywhere}
+.res .err{background:var(--warn-soft);border-radius:6px;padding:8px 12px;font-size:14px;overflow-wrap:anywhere}
+details.manual{margin:8px 0}
+details.manual>summary{cursor:pointer;color:var(--muted);font-size:14px}
+.pill.bad{background:var(--warn-soft);color:var(--warn)}
+
+a{color:var(--accent);text-underline-offset:2px}
+a:hover{text-decoration-thickness:2px}
+.refs{list-style:none;padding:0;margin:0 0 14px}
+.refs li{display:flex;gap:10px;align-items:baseline;margin:0 0 8px;font-size:14.5px;line-height:1.6}
+.refs li>span:last-child{min-width:0;overflow-wrap:anywhere}
+.refs .pill{flex:none;white-space:nowrap}
+@media (prefers-reduced-motion:no-preference){section{animation:in .18s ease-out}@keyframes in{from{opacity:.4}to{opacity:1}}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>TorchLeet 学习路线</h1>
+  <p>按仓库 README 的 LLM Learning Path 顺序：先学原理，再在本地写代码，用看板核验。</p>
+</header>
+<nav><div class="tabs groups" id="groups"></div><div class="tabs" role="tablist" id="tabs"></div></nav>
+
+<main>
+<!-- ============ 总览 ============ -->
+<section id="overview" data-title="总览" hidden>
+  <h2>总览与路线图</h2>
+  <p class="sub">目标：从文本进入模型的第一步，一直走到对齐训练和推理系统。</p>
+<pre><code>文本 ─BPE→ token id ─Embedding→ (B,T,d) ─+位置信息→ [RMSNorm → Attention → …] × N → logits</code></pre>
+  <h3>路线</h3>
+  <div class="scroll"><table>
+    <tr><th>节</th><th>内容</th><th>状态</th></tr>
+    <tr><td>1 Foundations</td><td>BPE · Sinusoidal · RoPE · RMSNorm · Attention</td><td><span class="pill">已开讲</span></td></tr>
+    <tr><td>2 Core Transformer</td><td>Multi-Head · GQA · KV Cache · Sliding Window</td><td><span class="pill">已开讲</span></td></tr>
+    <tr><td>3 Full Model</td><td>架构总览 · RoPE+GQA 注意力块 · 组装 SmolLM 并生成</td><td><span class="pill">已开讲</span></td></tr>
+    <tr><td>4 Alignment</td><td>KL · LoRA · SFT · DPO · PPO · GRPO</td><td class="soon">待开讲</td></tr>
+    <tr><td>5 Decoding &amp; Inference</td><td>Temperature / Top-k / Top-p · 投机解码 · 连续批处理 · 推理引擎</td><td class="soon">待开讲</td></tr>
+    <tr><td>6 Systems</td><td>Mixture of Experts</td><td class="soon">待开讲</td></tr>
+    <tr><td>应用 ML</td><td>指标 · 预处理 · 交叉验证 · 回归 · KNN · 决策树 · PCA · pandas（numpy / pandas 笔试向）</td><td><span class="pill">已开讲</span></td></tr>
+    <tr><td>TorchLeet 题库</td><td>全部 68 题：题面、起始代码、判题项、分级提示，可搜索（LLM 路径 / Basics / Advanced）</td><td><span class="pill">已嵌入</span></td></tr>
+    <tr><td>Basics</td><td>线性回归 → CNN/RNN/LSTM → K-Means / KNN / 逻辑回归</td><td class="soon">待开讲</td></tr>
+  </table></div>
+  <h3>资料来源与核对方式</h3>
+  <p>每节的“深入一层”是在题目之外补充的内容，“资料与核对”列出出处，分三种：</p>
+  <ul>
+    <li><span class="pill">已核对</span> 我直接读取了 GitHub 上的官方源码或文档（Hugging Face、scikit-learn、pandas、Llama、Mistral、tiktoken 等），并核对了文中对应的说法。</li>
+    <li><span class="pill">论文·已读原文</span> 我下载了 arXiv 上的论文全文，核对了文中引用的说法和数字。</li>
+    <li><span class="pill co">论文·未核对</span> 只给出链接、没读过原文的条目。目前没有这一类。</li>
+  </ul>
+  <p>凡是我自己推导或心算的内容（例如缓存大小的例子、参数量、<code>C</code> 与 <code>l2</code> 的换算），文中都写明了是推导或假设。另外要提醒：论文里的数字只在论文自己的设定下成立，不要当成通用结论。</p>
+  <h3>每一课的节奏</h3>
+  <ol>
+    <li>读本页对应的标签页：为什么 → 直觉 → 公式 → 要想清楚的问题。</li>
+    <li>打开本地的提交文件，填写 <code>...</code> 与 TODO。</li>
+    <li>运行 <code>python study/board.py check &lt;编号&gt;</code> 核验。</li>
+    <li>卡住就运行 <code>hint</code>，或来问我；我会用提问引导，不直接给答案。</li>
+  </ol>
+  <div class="next"><span></span><button class="btn ghost" data-go="a0">应用 ML 笔试向 →</button><button class="btn ghost" data-go="bank-llm">TorchLeet 题库 →</button><button class="btn" data-go="bpe">开始 1.1 BPE →</button></div>
+</section>
+
+<!-- ============ 1.1 BPE ============ -->
+<section id="bpe" data-title="1.1 BPE" hidden>
+  <h2>1.1 Byte Pair Encoding</h2>
+  <p class="sub">把文本切成模型能吃的 token。</p>
+  <h3>为什么</h3>
+  <p>模型只吃数字。按“词”切，词表会爆炸，遇到生词（OOV）就失效；按字符切，序列又太长。BPE 取折中：高频的字符组合合成一个 token，生词也能拆成已知碎片，所以不会 OOV。</p>
+  <h3>训练算法</h3>
+  <ol>
+    <li>每个词拆成字符并加结尾符 <code>&lt;/w&gt;</code>（区分词尾的 “est” 和词中的 “est”），统计词频。</li>
+    <li>统计所有<b>相邻符号对</b>的次数，<b>按词频加权</b>（“low” 出现 4 次，它的每个相邻对就记 4 次）。</li>
+    <li>取最高频的对，在所有词里合并为一个新符号，记录这次 merge。</li>
+    <li>重复 N 次，词表大约增加 N 个符号。</li>
+  </ol>
+  <h3>试一试：逐步合并</h3>
+  <div class="demo">
+    <div class="row"><label for="bpe-corpus">语料（空格分隔）</label>
+      <input type="text" id="bpe-corpus" value="low low low low lowest newer wider newest" size="38">
+      <button class="btn" id="bpe-step">合并下一步</button><button class="btn ghost" id="bpe-reset">重置</button></div>
+    <div class="vocab" id="bpe-out"></div>
+    <p class="sub" id="bpe-log" style="margin:8px 0 0"></p>
+  </div>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>合并之后，词的拼写变了吗？（只变切分方式，拼写不变。）</li>
+    <li>合并 <code>(a,a)</code> 时，在 <code>a a a</code> 里怎么扫？从左到右贪心，同一个字符不能被用两次。</li>
+    <li>频次相同怎么办？任选，但要有固定的 tie-break，保证结果可复现。</li>
+    <li>推理时怎么编码新词？按训练时的 merge 顺序依次应用。</li>
+  </ol>
+  <p class="note"><b>工业界：</b>GPT-2 起用 byte-level BPE，最底层符号是 256 个字节，任何语言和 emoji 都能编码。</p>
+  <h3>深入一层</h3>
+  <p><b>0. 论文原文怎么说。</b>Sennrich 等人写道：BPE（Gage, 1994）原本是一种简单的数据压缩技术，反复把序列中最频繁的字节对替换成一个没用过的新字节；他们把它改造成词的切分算法，合并的对象是字符或字符序列。做法是：用字符表初始化符号表，把每个词表示成字符序列，<b>外加一个特殊的词尾符号</b>（作者说这能让翻译之后还原原来的分词），然后反复统计所有符号对，把出现次数最多的那一对替换成一个新符号。</p>
+  <p><b>1. 词尾符与字节级。</b>经典做法（Sennrich 等人）从字符出发，并在每个词最后一个符号后接 <code>&lt;/w&gt;</code>。参考实现 subword-nmt 里确实是这样处理的。现代大模型多用<b>字节级 BPE</b>：起点是 256 个字节值，因此任何文本都能编码，不再需要 <code>&lt;unk&gt;</code>。</p>
+  <p><b>2. 词表大小 = 基础词表 + 合并次数。</b>例如 tiktoken 里 <code>gpt2</code> 编码的词表大小是 50257。Llama 2 的论文写明：分词器沿用 Llama 1，用 SentencePiece 实现的 BPE，词表 32k，<b>所有数字都被拆成单个数字</b>，遇到未知的 UTF-8 字符就用字节来分解。Llama 3 的论文写明：词表扩大到 128K，由 tiktoken 的 100K 个 token 加上 28K 个选定的非英语语言 token 组成。</p>
+  <p><b>3. 先预分词，再做 BPE。</b>实际的分词器会先用一个正则把文本切成“词块”，BPE 只在词块内部合并，避免合并跨越单词和标点。Llama 3 的分词器基于 tiktoken，它的正则里有 <code>\p{N}{1,3}</code>，意思是数字最多每 3 位一组切开。</p>
+  <p><b>4. 训练产出的是一张有序的合并表。</b>编码新词时，从字符（或字节）出发，每次应用“排名最靠前（最早学到）”的可合并对，直到没有可合并的为止。</p>
+  <p><b>5. 复杂度。</b>像本题这样每轮重扫整个词表，总代价约是“合并次数 × 语料规模”。工业实现会维护相邻对的计数索引，只增量更新被合并影响到的那几个词。</p>
+  <h3>和另外几种分词算法的区别</h3>
+  <div class="scroll"><table>
+    <tr><th>算法</th><th>怎么选下一步</th></tr>
+    <tr><td>BPE</td><td>总是合并出现次数最多的相邻对，结果是确定的</td></tr>
+    <tr><td>WordPiece</td><td>合并“信息量”最大的对：合并后的词频相对于各自词频的比例</td></tr>
+    <tr><td>Unigram</td><td>从大词表出发逐步删减；同一个词可有多种切分，取概率最高的</td></tr>
+    <tr><td>SentencePiece</td><td>不是新算法，而是直接在原始文本上跑 BPE 或 Unigram，不假设空格分词（适合中日文）</td></tr>
+  </table></div>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>词表越大越好吗？大了：嵌入矩阵和输出层变大，低频 token 训练不足。小了：序列变长，注意力和推理更贵。</li>
+    <li>为什么不直接按字符或按词切？字符太长；词表太大且有 OOV。</li>
+    <li>训练语料偏英文会怎样？其他语言的词被切得更碎，同样的内容要更多 token。</li>
+    <li>特殊 token（如句子结束符）参与合并吗？不参与，它们是单独加入词表的。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/rsennrich/subword-nmt/blob/master/subword_nmt/learn_bpe.py" target="_blank" rel="noopener">subword-nmt：learn_bpe.py</a> <span class="sub">（词尾符 &lt;/w&gt; 的处理）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/tokenizer_summary.md" target="_blank" rel="noopener">Hugging Face：tokenizer_summary</a> <span class="sub">（BPE 流程、字节级 BPE、WordPiece/Unigram/SentencePiece 的区别）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py" target="_blank" rel="noopener">tiktoken：openai_public.py</a> <span class="sub">（gpt2 词表 50257、预分词正则）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/meta-llama/llama3/blob/main/llama/tokenizer.py" target="_blank" rel="noopener">Llama 3：tokenizer.py</a> <span class="sub">（基于 tiktoken，正则里的数字分组）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/model_doc/llama3.md" target="_blank" rel="noopener">Hugging Face：Llama 3 文档</a> <span class="sub">（Llama 3 用 tiktoken 系 BPE，Llama 2 用 sentencepiece）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1508.07909" target="_blank" rel="noopener">Sennrich 等，Neural Machine Translation of Rare Words with Subword Units</a> <span class="sub">（BPE 的来源与适配方式、词尾符号）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2307.09288" target="_blank" rel="noopener">Touvron 等，Llama 2</a> <span class="sub">（SentencePiece 实现的 BPE，32k 词表，数字拆成单个数字）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2407.21783" target="_blank" rel="noopener">Llama Team，The Llama 3 Herd of Models</a> <span class="sub">（128K 词表 = tiktoken 的 100K + 28K 非英语 token）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s1_1_bpe.py
+实现  get_vocab · get_stats · merge_vocab · byte_pair_encoding
+核验  python study/board.py check 1.1</code></pre>
+  <div class="next"><span></span><button class="btn" data-go="sinusoidal">下一课 1.2 →</button></div>
+</section>
+
+<!-- ============ 1.2 Sinusoidal ============ -->
+<section id="sinusoidal" data-title="1.2 Sinusoidal" hidden>
+  <h2>1.2 Sinusoidal 位置编码</h2>
+  <p class="sub">让 Attention 知道“我是第几个”。</p>
+  <h3>为什么</h3>
+  <p>Attention 对输入是<b>置换不变</b>的：打乱 token 顺序，输出只是跟着打乱。要让模型感知顺序，就得把位置信息显式注入。</p>
+  <h3>公式</h3>
+<pre><code>PE[pos, 2i]   = sin( pos / 10000^(2i/d) )
+PE[pos, 2i+1] = cos( pos / 10000^(2i/d) )</code></pre>
+  <h3>直觉</h3>
+  <p>每一对维度 (2i, 2i+1) 是一根以角频率 ω<sub>i</sub> 转动的指针。i 小频率高，像秒针；i 大频率低，像时针。多根指针组合起来，每个位置就有唯一的“读数”。而且 <code>PE[pos+k]</code> 是 <code>PE[pos]</code> 的线性变换（一个旋转），所以相对位移容易学。</p>
+  <h3>热力图：行是位置，列是维度</h3>
+  <div class="demo">
+    <div class="row"><label for="pe-d">d_model</label>
+      <select id="pe-d"><option>32</option><option selected>64</option><option>128</option></select></div>
+    <canvas id="pe-canvas" width="640" height="240" aria-label="位置编码热力图"></canvas>
+    <p class="sub" style="margin:8px 0 0">左边列（低维）变化快，右边列（高维）几乎不动。</p>
+  </div>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>频率下标 i 取 0 … d/2−1，<b>不是</b>原始维度下标；sin 和 cos 共用同一个 ω。</li>
+    <li>为什么用 <code>register_buffer</code> 而不是 <code>nn.Parameter</code>？（固定函数、不训练，但要随 <code>.to(device)</code> 移动并存入 state_dict。）</li>
+    <li>数值上 <code>10000^(-2i/d)</code> 常写成 <code>exp(-2i/d · ln 10000)</code>，更稳。</li>
+    <li><code>forward</code> 只看 <code>x.shape[1]</code>，返回前 seq_len 行，形状 <code>(1, seq_len, d)</code>，加法由调用方完成。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>0. 论文原文怎么说。</b>原文写道：每个维度对应一条正弦曲线，波长构成从 2π 到 10000·2π 的几何级数；作者也试过学习式位置嵌入，发现两者结果几乎相同（论文表 3 的 (E) 行）；选正弦版本，是因为它可能让模型外推到比训练时更长的序列。</p>
+  <p><b>1. 波长。</b>第 i 对的角频率是 <code>ω_i = 10000^(−2i/d)</code>，波长是 <code>2π/ω_i = 2π·10000^(2i/d)</code>。i=0 时约 6.28 个位置（最快），i 接近 d/2 时接近 <code>2π·10000</code>（最慢）。</p>
+  <p><b>2. 相对位移就是旋转。</b>由和角公式可得：</p>
+<pre><code>[ sin((p+k)ω) ]   [  cos kω   sin kω ] [ sin pω ]
+[ cos((p+k)ω) ] = [ −sin kω   cos kω ] [ cos pω ]</code></pre>
+  <p>所以 <code>PE(p+k)</code> 是 <code>PE(p)</code> 按位移 k 做一次与 p 无关的线性变换，模型有机会学到“往后 k 个位置”的操作。</p>
+  <p><b>3. 两种常见的排布。</b>论文公式是 (2i, 2i+1) 交错排列，Annotated Transformer 的实现就是 <code>pe[:, 0::2]=sin</code>、<code>pe[:, 1::2]=cos</code>。而 Tensor2Tensor 的实现把所有 sin 放前半、所有 cos 放后半（它的文档写的是“concatenated in the channels dimension”）。两者只差维度的排列，但<b>要对齐已有权重时必须用同一种</b>。本题的判题按交错排列检查。</p>
+  <p><b>4. 怎么用。</b>Annotated Transformer 里，词嵌入先乘 <code>sqrt(d_model)</code>，再与位置编码相加，然后做 dropout。位置编码的取值在 [−1, 1]，乘上 <code>sqrt(d_model)</code> 能让词嵌入的量级不被它淹没。</p>
+  <p><b>5. 数值写法。</b>实现里常用 <code>exp(−(2i/d)·ln 10000)</code> 来算频率，而不是直接算 10000 的幂。</p>
+  <h3>局限与替代</h3>
+  <ul>
+    <li><b>学习式位置嵌入</b>：每个位置一个可训练向量，最大长度固定，不能直接外推。</li>
+    <li><b>RoPE</b>（见 1.3）：不再把位置“加”到输入上，而是旋转 q 和 k。</li>
+    <li><b>ALiBi</b>：在 softmax 之前，给 <code>QKᵀ</code> 加一个与相对距离成比例的负偏置。Hugging Face 的优化指南提到，它在不做额外处理时比 RoPE 更容易外推到更长的输入。</li>
+  </ul>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>为什么不直接用位置下标 pos 当特征？它无界，量级随位置增长，会压过词嵌入。</li>
+    <li>为什么不用 one-hot？维度等于最大长度，且不同位置之间没有“远近”的结构。</li>
+    <li>10000 是怎么来的？它是个经验超参，决定最慢那一对的波长。</li>
+    <li>为什么要 sin 和 cos 成对？由和角公式，<code>sin((p+k)ω)</code> 里同时需要 <code>sin pω</code> 和 <code>cos pω</code>。只用 sin，就无法把位移写成与位置无关的线性变换。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/harvardnlp/annotated-transformer/blob/master/the_annotated_transformer.py" target="_blank" rel="noopener">Annotated Transformer</a> <span class="sub">（交错排布、词嵌入乘 sqrt(d_model)、加完位置编码后 dropout、exp 写法）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/layers/common_attention.py" target="_blank" rel="noopener">Tensor2Tensor：get_timing_signal_1d</a> <span class="sub">（几何级数的时间尺度，min=1、max=1e4，sin/cos 拼接）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/llm_tutorial_optimization.md" target="_blank" rel="noopener">Hugging Face：LLM 优化指南</a> <span class="sub">（RoPE 与 ALiBi 的说明、外推比较）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">Vaswani 等，Attention Is All You Need</a> <span class="sub">（波长从 2π 到 10000·2π、学习式与正弦式结果几乎相同、选正弦的理由）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s1_2_sinusoidal.py
+实现  SinusoidalPositionalEmbedding(max_seq_len, d_model)
+核验  python study/board.py check 1.2</code></pre>
+  <div class="next"><button class="btn ghost" data-go="bpe">← 1.1</button><button class="btn" data-go="rope">下一课 1.3 →</button></div>
+</section>
+
+<!-- ============ 1.3 RoPE ============ -->
+<section id="rope" data-title="1.3 RoPE" hidden>
+  <h2>1.3 RoPE 旋转位置编码</h2>
+  <p class="sub">LLaMA、Mistral、Qwen 都在用。</p>
+  <h3>为什么</h3>
+  <p>绝对位置编码是“加”在输入上的，注意力分数里相对距离不明显，长度外推也差。RoPE 改为<b>旋转 q 和 k</b>，使 <code>q<sub>m</sub>·k<sub>n</sub></code> 只依赖相对距离 <code>m−n</code>。</p>
+  <h3>数学</h3>
+  <p>把向量两两配对看作二维平面上的点，位置 m 处整体转 mθ 角：</p>
+<pre><code>[x1']   [cos mθ  −sin mθ] [x1]
+[x2'] = [sin mθ   cos mθ] [x2]
+
+(R_m q) · (R_n k) = q · R_{n−m} k      ← 只剩相对位移</code></pre>
+  <h3>实现的关键恒等式（half 配对）</h3>
+<pre><code>q' = q * cos + rotate_half(q) * sin
+rotate_half([x1, x2]) = [−x2, x1]     # 最后一维切成两半</code></pre>
+  <ul>
+    <li><code>θ<sub>i</sub> = 10000^(−2i/d)</code>，和 sinusoidal 同一套频率；cos/sin 表按位置预先算好并缓存。</li>
+    <li>只作用在 <b>q 和 k</b>，不作用在 v。</li>
+    <li>cos/sin 形状要能广播到 <code>(batch, heads, seq, head_dim)</code>。</li>
+  </ul>
+  <h3>试一试：旋转一个二维向量</h3>
+  <div class="demo">
+    <div class="row"><label for="rope-pos">位置 m</label>
+      <input type="range" id="rope-pos" min="0" max="12" value="3" style="flex:1;min-width:120px;accent-color:var(--accent)">
+      <span id="rope-lab" class="pill"></span></div>
+    <canvas id="rope-canvas" width="640" height="260" aria-label="二维旋转示意"></canvas>
+    <p class="sub" style="margin:8px 0 0">三根向量长度相同；高频维度转得快，低频维度转得慢。长度不变，只有方向变。</p>
+  </div>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么旋转不改变向量长度？（正交变换，所以 attention 的数值尺度不受影响。）</li>
+    <li><code>rotate_half</code> 连用两次得到什么？（<code>−x</code>，判题器会检查。）</li>
+    <li>cos=1、sin=0 时应当什么都不变；cos=0、sin=1 时结果恰为 <code>rotate_half(x)</code>。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>0. 论文原文怎么说。</b>RoFormer 的摘要列出 RoPE 的几个性质：序列长度可灵活变化；token 之间的依赖随相对距离增大而衰减；能给线性自注意力配上相对位置编码。</p>
+  <p><b>1. 频率。</b>第 i 对用 <code>θ_i = base^(−2i/d)</code>，位置 m 处转 <code>m·θ_i</code>。Llama 3 的论文把 RoPE 的基频设为 θ = 500,000，并说明这样能更好地支持更长的上下文（它引用的先前工作表明该值对 32,768 以内的上下文有效）。Llama 3 官方仓库里 <code>precompute_freqs_cis</code> 的写法是 <code>1 / (theta ** (arange(0, dim, 2)[:dim//2] / dim))</code>，函数默认 theta 是 10000，而 <code>ModelArgs.rope_theta</code> 设为 <b>500000</b>。最长波长约为 <code>2π·base</code>，所以 base 越大，低频那几对转得越慢。</p>
+  <p><b>2. 为什么只依赖相对距离。</b>把每一对看作复数，旋转就是乘 <code>e^{imθ}</code>：</p>
+<pre><code>(q·e^{imθ}) · conj(k·e^{inθ})  →  Re( q·conj(k)·e^{i(m−n)θ} )</code></pre>
+  <p>结果里只剩 <code>m−n</code>。</p>
+  <p><b>3. 两种配对方式，不能混用。</b>Meta 的原始实现把相邻两维 (x₀,x₁)、(x₂,x₃)… 当成复数（<code>view_as_complex(x.reshape(…, −1, 2))</code>）。Hugging Face 的实现用 <code>rotate_half</code>，把前半和后半配对。两者只差维度排列，但 q/k 的权重必须与所用配对方式一致，不能直接互换。本题用的是 <code>rotate_half</code> 这一种。</p>
+  <p><b>4. 只作用在 q 和 k。</b>位置信息要进入的是注意力分数 <code>q·k</code>，v 只负责被加权求和，不需要旋转。</p>
+  <p><b>5. 精度。</b>Llama 3 仓库在旋转前先把 q、k 转成 float32，算完再转回原精度。</p>
+  <p><b>6. 与 KV cache 配合。</b>缓存里存的是旋转之后的 K，所以新 token 的位置编号必须是缓存当前的长度，不能从 0 开始。</p>
+  <h3>长度外推</h3>
+  <p>Hugging Face 的优化指南指出：RoPE 若保持训练时的 θ，在远长于训练长度的输入上效果会变差，社区提出了若干办法来适配更长的输入。常被提到的做法有：位置插值（Position Interpolation，摘要写明可把 LLaMA 模型的上下文窗口扩展到最长 32768，微调在 1000 步以内），以及 YaRN（摘要写明相比之前的方法少用 10 倍的 token、少 2.5 倍的训练步数）。另外，把 base 调大（如上面的 500000）也是在拉长最慢那几对的波长。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>head_dim 为什么必须是偶数？要两两配对。</li>
+    <li>RoPE 有可训练参数吗？没有，cos/sin 表由位置和 base 决定。</li>
+    <li>RoPE 能和线性注意力一起用吗？RoFormer 的说明里提到可以。</li>
+    <li>训练长度 4k，推理给 32k 会怎样？超出训练长度的旋转角没见过，效果会变差，需要插值类方法或继续训练。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/model_doc/roformer.md" target="_blank" rel="noopener">Hugging Face：RoFormer 文档</a> <span class="sub">（用 2D 旋转编码位置，兼顾绝对与相对，可用于线性自注意力）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/meta-llama/llama3/blob/main/llama/model.py" target="_blank" rel="noopener">Llama 3：model.py</a> <span class="sub">（precompute_freqs_cis、view_as_complex 配对、float32、rope_theta=500000）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py" target="_blank" rel="noopener">Hugging Face：modeling_llama.py</a> <span class="sub">（rotate_half 与 q·cos + rotate_half(q)·sin）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/llm_tutorial_optimization.md" target="_blank" rel="noopener">Hugging Face：LLM 优化指南</a> <span class="sub">（RoPE 外推的说明）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2104.09864" target="_blank" rel="noopener">Su 等，RoFormer</a> <span class="sub">（摘要中列出的 RoPE 性质）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2407.21783" target="_blank" rel="noopener">Llama Team，The Llama 3 Herd of Models</a> <span class="sub">（RoPE 基频 500,000 及其理由）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2306.15595" target="_blank" rel="noopener">Chen 等，Extending Context Window of Large Language Models via Positional Interpolation</a> <span class="sub">（扩展到 32768，微调 1000 步以内）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2309.00071" target="_blank" rel="noopener">Peng 等，YaRN</a> <span class="sub">（少用 10 倍 token、少 2.5 倍训练步数）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s1_3_rope.py
+实现  rotate_half(x) · apply_rotary_pos_emb(q, k, cos, sin)
+核验  python study/board.py check 1.3</code></pre>
+  <div class="next"><button class="btn ghost" data-go="sinusoidal">← 1.2</button><button class="btn" data-go="rmsnorm">下一课 1.4 →</button></div>
+</section>
+
+<!-- ============ 1.4 RMSNorm ============ -->
+<section id="rmsnorm" data-title="1.4 RMSNorm" hidden>
+  <h2>1.4 RMSNorm</h2>
+  <p class="sub">更轻的归一化，现代大模型的默认选择。</p>
+  <h3>为什么</h3>
+  <p>深层网络需要归一化来稳定激活。LayerNorm = 减均值 + 除标准差。RMSNorm 去掉“减均值”这一步，效果几乎不变，却少一次 reduce，更快。LLaMA 等模型全面采用。</p>
+  <h3>公式</h3>
+<pre><code>RMSNorm(x) = x / sqrt( mean(x², dim=-1) + eps ) · γ</code></pre>
+  <ul>
+    <li>沿<b>最后一维</b>（特征维）计算；γ 形状 <code>(dim,)</code>，初始化为 1，可学习。</li>
+    <li>eps 防止全零输入除以 0。</li>
+  </ul>
+  <h3>对比 LayerNorm</h3>
+  <div class="scroll"><table>
+    <tr><th></th><th>LayerNorm</th><th>RMSNorm</th></tr>
+    <tr><td>减均值</td><td>是</td><td>否</td></tr>
+    <tr><td>分母</td><td>标准差</td><td>均方根</td></tr>
+    <tr><td>可学习参数</td><td>γ 和 β</td><td>只有 γ</td></tr>
+    <tr><td>输出均值</td><td>≈ β</td><td>不为 0</td></tr>
+  </table></div>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li><code>keepdim=True</code> 为什么必要？（让 <code>(…,1)</code> 能广播回 <code>(…,dim)</code>。）</li>
+    <li>输出的均方根大约是多少？（γ=1 时约为 1。）</li>
+    <li>fp16/bf16 下通常先转 float32 算 RMS 再转回，为什么？（平方后容易溢出或丢精度。）</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>0. 论文原文怎么说。</b>作者假设：LayerNorm 的成功主要靠“重新缩放不变性”，而不是“重新居中不变性”。于是提出 RMSNorm，只按均方根（RMS）归一化，让模型具有重新缩放不变性。摘要写明它的效果与 LayerNorm 相当，但<b>运行时间减少 7%～64%</b>（不同模型上的幅度不同）。</p>
+<pre><code>LayerNorm(x) = (x − mean) / sqrt(var + eps) · γ + β       参数 2d 个
+RMSNorm(x)   =  x / sqrt(mean(x²) + eps) · γ              参数 d 个</code></pre>
+  <p><b>1. 工业实现长什么样。</b>Hugging Face 的 <code>LlamaRMSNorm</code>：先把输入转成 float32，算 <code>x²</code> 的均值，乘 <code>rsqrt(var + eps)</code>，<b>再转回输入精度</b>，最后乘 <code>weight</code>。它的 eps 默认是 <b>1e-6</b>（本题 notebook 默认 1e-8）。</p>
+  <p><b>2. 放在哪。</b>Llama 的每个解码层里有两个 RMSNorm：<code>input_layernorm</code> 在注意力<b>之前</b>，<code>post_attention_layernorm</code> 在 MLP <b>之前</b>，整个模型最后还有一个。这种“先归一化、再进子层”的写法叫 Pre-Norm。</p>
+  <p><b>3. 为什么更快。</b>少一次沿特征维的均值计算，也没有 β 偏置。RMSNorm 作者的仓库说明里提到：LayerNorm 会在每个运行步骤上带来额外的计算开销，抵消了一部分它带来的训练稳定性收益。</p>
+  <p><b>4. 直觉。</b>它只“重新缩放”，不“重新居中”：保持向量方向不变，把均方根固定到 1（γ=1 时）。</p>
+  <p><b>5. 数值。</b>平方运算在 fp16/bf16 下容易溢出或丢精度，所以先转 float32。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>对输入整体加一个常数，输出变吗？LayerNorm 不变（它先减均值），RMSNorm 会变。</li>
+    <li>对输入整体乘一个常数呢？两者在忽略 eps 时都基本不变。</li>
+    <li>为什么一个模型里要放那么多归一化？稳定每一层的激活量级，让深层网络可训练。</li>
+    <li>RMSNorm 输出的均值是 0 吗？不是，它没有居中。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py" target="_blank" rel="noopener">Hugging Face：modeling_llama.py</a> <span class="sub">（LlamaRMSNorm 的 float32 计算顺序、input_layernorm 与 post_attention_layernorm 的位置）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/configuration_llama.py" target="_blank" rel="noopener">Hugging Face：configuration_llama.py</a> <span class="sub">（rms_norm_eps 默认值 1e-6）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/bzhangGo/rmsnorm" target="_blank" rel="noopener">RMSNorm 作者的仓库</a> <span class="sub">（说明 RMSNorm 是 LayerNorm 的简化）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1910.07467" target="_blank" rel="noopener">Zhang &amp; Sennrich，Root Mean Square Layer Normalization</a> <span class="sub">（重新居中与重新缩放不变性的假设、运行时间减少 7%～64%）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s1_4_rmsnorm.py
+实现  RMSNorm(dim, eps=1e-8)
+核验  python study/board.py check 1.4</code></pre>
+  <div class="next"><button class="btn ghost" data-go="rope">← 1.3</button><button class="btn" data-go="attention">下一课 1.5 →</button></div>
+</section>
+
+<!-- ============ 1.5 Attention ============ -->
+<section id="attention" data-title="1.5 Attention" hidden>
+  <h2>1.5 Scaled Dot-Product Attention</h2>
+  <p class="sub">第 1 节的终点，也是后面所有内容的地基。</p>
+  <h3>直觉</h3>
+  <p>q 是“我在找什么”，k 是“我有什么标签”，v 是“我的内容”。q·k 越大越相关，softmax 把它变成权重，再对 v 加权平均。</p>
+  <h3>公式与形状</h3>
+<pre><code>Attention(Q,K,V) = softmax( Q Kᵀ / sqrt(d_k) ) V
+
+Q:(…,Tq,d)  K:(…,Tk,d)  V:(…,Tk,dv)
+分数 (…,Tq,Tk)  →  输出 (…,Tq,dv)</code></pre>
+  <h3>试一试：缩放的作用</h3>
+  <div class="demo">
+    <div class="row"><label for="att-d">d_k</label>
+      <input type="range" id="att-d" min="1" max="512" value="64" style="flex:1;min-width:120px;accent-color:var(--accent)">
+      <span id="att-lab" class="pill"></span></div>
+    <canvas id="att-canvas" width="640" height="220" aria-label="softmax 权重对比"></canvas>
+    <p class="sub" style="margin:8px 0 0">随机 q、k 的点积方差等于 d_k。不缩放（上）softmax 随 d_k 增大趋于 one-hot，梯度消失；缩放后（下）保持平滑。</p>
+  </div>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么除以 <code>sqrt(d_k)</code>？设 q、k 各分量均值 0、方差 1，则 q·k 的方差为 d_k；除以 sqrt(d_k) 让方差回到 1。</li>
+    <li>Mask 必须在 softmax <b>之前</b>把屏蔽位置设为 <code>−inf</code>。softmax 之后再乘 0，每行的和就不是 1 了。</li>
+    <li>因果 mask 是下三角：token t 只能看 ≤ t 的位置。</li>
+    <li>softmax 沿哪一维？沿 Tk（最后一维），每个 query 对所有 key 归一。</li>
+  </ol>
+  <p class="note"><b>约定：</b>判题器的 mask 是布尔型，True 表示保留、False 表示屏蔽。返回值是 <code>(output, attention_weights)</code>。禁止调用 <code>F.scaled_dot_product_attention</code>。</p>
+  <h3>深入一层</h3>
+  <p><b>1. 为什么除以 sqrt(d_k)。</b>论文原文就是这样解释的：点积变大会把 softmax 推到梯度极小的区域，所以要把点积除以 √d_k；脚注里给出推导：假设 q、k 的分量是均值 0、方差 1 的独立随机变量，那么 q·k 的均值为 0、方差为 d_k。Annotated Transformer 里逐字复述了论文的解释：对于较大的 d_k，点积的量级会变大，把 softmax 推到梯度极小的区域；要看出点积为什么变大，假设 q 和 k 的各分量是独立随机变量、均值 0、方差 1，那么 q·k 的方差是 d_k。它还提到，不缩放的点积注意力在 d_k 较大时不如加性注意力。</p>
+  <p><b>2. 代价。</b>分数矩阵是 <code>T×T</code>（每个头一份），时间 O(T²·d)，显存 O(T²)。序列越长，这块越先成为瓶颈。</p>
+  <p><b>3. 精度。</b>Hugging Face 的 Llama 实现里，softmax 用 float32 算，再转回 q 的精度。</p>
+  <p><b>4. FlashAttention。</b>它不把 <code>QKᵀ</code> 整个算出来，而是分块计算，同时维护 softmax 的归一化统计量。输出与标准注意力<b>数值上一致</b>，显存随序列长度线性增长。它的 FLOPs 反而更多，但因为大幅减少了对慢速显存（HBM）的读写，实际更快。FlashAttention 论文的摘要把它称为“IO 感知的精确注意力算法”：用分块（tiling）减少 GPU 高带宽显存与片上 SRAM 之间的读写次数，并分析了它的 IO 复杂度，证明访问 HBM 的次数比标准注意力更少。摘要报告：相对 MLPerf 1.1 的训练速度记录，BERT-large（序列长度 512）端到端提速 15%；GPT-2（序列长度 1K）快 3 倍。</p>
+  <h3>mask 的几个坑</h3>
+  <ul>
+    <li>屏蔽要在 softmax <b>之前</b>设为 <code>−inf</code>。</li>
+    <li>如果某一整行都被屏蔽，softmax 的输入全是 −inf，结果是 NaN。做 padding mask 时要留意。</li>
+    <li>padding mask 和因果 mask 要做“并”（任何一个屏蔽就屏蔽）。</li>
+    <li>各个库对布尔 mask 的约定不同：本仓库是 True=保留。<code>torch.nn.MultiheadAttention</code> 的布尔 <code>attn_mask</code> 则是 True=<b>不允许</b>注意。接别人的 API 时先看文档。</li>
+  </ul>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>为什么用点积而不是加性注意力？点积可以用高度优化的矩阵乘法实现，更快更省空间（缩放之后质量也不差）。</li>
+    <li>缩放可以怎么理解？相当于给 softmax 加了一个与 d_k 有关的温度。</li>
+    <li>自注意力和交叉注意力的区别？q 与 k、v 是否来自同一序列。</li>
+    <li>注意力权重每行加起来是多少？1。被屏蔽的位置是 0。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/harvardnlp/annotated-transformer/blob/master/the_annotated_transformer.py" target="_blank" rel="noopener">Annotated Transformer</a> <span class="sub">（缩放的解释、点积与加性注意力的比较）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py" target="_blank" rel="noopener">Hugging Face：modeling_llama.py</a> <span class="sub">（softmax 在 float32 下计算）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pytorch/pytorch/blob/main/torch/nn/functional.py" target="_blank" rel="noopener">PyTorch：nn.MultiheadAttention 与 F.multi_head_attention_forward 的源码文档</a> <span class="sub">（布尔 attn_mask 的语义：MHA 与 scaled_dot_product_attention 相反）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/llm_tutorial_optimization.md" target="_blank" rel="noopener">Hugging Face：LLM 优化指南</a> <span class="sub">（FlashAttention 的原理、与标准注意力数值一致、显存线性增长）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">Vaswani 等，Attention Is All You Need</a> <span class="sub">（缩放的动机与方差为 d_k 的推导）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2205.14135" target="_blank" rel="noopener">Dao 等，FlashAttention</a> <span class="sub">（IO 感知、分块、更少的 HBM 访问、摘要里的速度数字）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s1_5_attention.py
+实现  scaled_dot_product_attention(q, k, v, mask=None)
+核验  python study/board.py check 1.5</code></pre>
+  <div class="next"><button class="btn ghost" data-go="rmsnorm">← 1.4</button><button class="btn" data-go="mha">下一课 2.1 →</button></div>
+</section>
+
+<!-- ============ 2.1 MHA ============ -->
+<section id="mha" data-title="2.1 Multi-Head" hidden>
+  <h2>2.1 Multi-Head Attention</h2>
+  <p class="sub">让同一层同时关注几种不同的关系。</p>
+  <h3>为什么</h3>
+  <p>单头注意力每个位置只产生<b>一个</b>注意力分布。但一句话里同时存在多种关系：语法上的主谓、指代、邻近词、远处的呼应。多头把表示拆成几个子空间，每个头各算一套注意力，最后拼起来，让不同的头去学不同的模式。</p>
+  <p>总计算量几乎不变：<code>d_head = d_model / h</code>，h 个头加起来的宽度还是 d_model。</p>
+  <h3>公式</h3>
+<pre><code>Q = X·W_Q    K = X·W_K    V = X·W_V               各是 (B, T, d_model)
+拆头:  (B, T, d_model) → (B, T, h, d_head) → (B, h, T, d_head)
+每个头: softmax( Q Kᵀ / sqrt(d_head) ) V            分数 (B, h, T, T)
+合头:  (B, h, T, d_head) → (B, T, h, d_head) → (B, T, d_model)
+输出:  concat(heads) · W_O</code></pre>
+  <h3>试一试：形状与参数量</h3>
+  <div class="demo">
+    <div class="row"><label for="mha-d">d_model</label>
+      <select id="mha-d"><option>64</option><option>256</option><option selected>512</option><option>768</option><option>4096</option></select>
+      <label for="mha-h">头数 h</label>
+      <select id="mha-h"><option>1</option><option>2</option><option>4</option><option selected>8</option><option>12</option><option>32</option></select></div>
+    <pre id="mha-out" style="margin:0"></pre>
+  </div>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么缩放用 <code>sqrt(d_head)</code>，而不是 <code>sqrt(d_model)</code>？点积是在每个头内部做的，累加了 d_head 项。</li>
+    <li><code>transpose</code> 之后直接 <code>view</code> 会报错或出错，为什么？内存不连续，要先 <code>.contiguous()</code> 或改用 <code>reshape</code>。</li>
+    <li>为什么还需要输出投影 W_O？拼接只是把各头并排放，W_O 负责让不同头的信息互相混合。</li>
+    <li>mask 怎么对上形状？<code>(T, T)</code> 的布尔 mask 会广播到 <code>(B, h, T, T)</code>。本仓库约定 <b>True=保留</b>，屏蔽位置在 softmax 前填 <code>-inf</code>。</li>
+    <li>参数量？四个 d×d 矩阵，约 4d²（不计偏置）。头数不改变参数量。</li>
+    <li>自注意力与交叉注意力的区别？前者 q、k、v 来自同一序列；后者 q 来自解码器，k、v 来自编码器。同一个函数都能表达。</li>
+  </ol>
+  <p class="note"><b>关于评测接口：</b>判题要求写成函数 <code>multi_head_attention(q, k, v, num_heads, d_model, mask=None)</code>，投影层在函数里创建，所以权重每次调用都是随机的，判题会先固定随机种子。真实工程里投影要放进 <code>nn.Module</code>。建议先按函数通过判题，再自己改写成 Module。</p>
+  <h3>深入一层</h3>
+  <p><b>1. 动机，用论文的话说。</b>多头让模型“共同关注来自不同位置、不同表示子空间的信息”（Annotated Transformer 里逐字复述了这句）。</p>
+  <p><b>2. 原论文的配置。</b>论文原文：用 h = 8 个并行的注意力层（头），每个头取 <code>d_k = d_v = d_model/h = 64</code>；由于每个头的维度变小，总计算量与全维度的单头注意力相近。Llama 3 官方仓库里 <code>head_dim = dim // n_heads</code>，<code>ModelArgs</code> 默认 <code>dim=4096</code>、<code>n_heads=32</code>，所以 head_dim 是 128。</p>
+  <p><b>3. 参数量与实现技巧。</b>四个 d×d 的矩阵，共 4d²（不计偏置）。例如 d=512 时是 1,048,576。实现里常把 Q、K、V 三个投影合并成一个 d×3d 的矩阵，一次矩阵乘完成，再切开。结果等价，但更快。</p>
+  <p><b>4. 形状变换的细节。</b></p>
+<pre><code>(B,T,d) → view → (B,T,h,dh) → transpose(1,2) → (B,h,T,dh)
+合头: (B,h,T,dh) → transpose(1,2) → .contiguous() → view → (B,T,d)
+      （转置后内存不连续，view 前要 contiguous，或直接用 reshape）</code></pre>
+  <p><b>5. 变体。</b>减少 K/V 头数（MQA、GQA，见 2.2）；限制每个 token 能看的范围（滑动窗口，见 2.4）；压缩 KV（如 DeepSeek 的 MLA，可按名称检索）。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>头数越多越好吗？总宽度固定时，头越多每个头越窄（d_head 变小），表达单个注意力模式的能力下降。常见 d_head 取 64 或 128。</li>
+    <li>多头和一个宽头有什么本质区别？每个头有自己独立的注意力分布，可以同时关注不同位置；单头只有一个分布。</li>
+    <li>如果把 d_model 改大但头数不变，会怎样？d_head 变大，参数和计算量按 d² 增长。</li>
+    <li>训练和推理时哪一块最贵？训练时是注意力的 T² 项和各投影矩阵；推理解码时是读取 KV cache（见 2.3）。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/harvardnlp/annotated-transformer/blob/master/the_annotated_transformer.py" target="_blank" rel="noopener">Annotated Transformer</a> <span class="sub">（“不同表示子空间”的动机、h=8 与 d_k=d_v=64）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/meta-llama/llama3/blob/main/llama/model.py" target="_blank" rel="noopener">Llama 3：model.py</a> <span class="sub">（head_dim = dim // n_heads，ModelArgs 默认值）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">Vaswani 等，Attention Is All You Need</a> <span class="sub">（h=8、d_k=d_v=64、总计算量与单头相近）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s2_1_mha.py
+实现  multi_head_attention(q, k, v, num_heads, d_model, mask=None)
+核验  python study/board.py check 2.1</code></pre>
+  <div class="next"><button class="btn ghost" data-go="attention">← 1.5</button><button class="btn" data-go="gqa">下一课 2.2 →</button></div>
+</section>
+
+<!-- ============ 2.2 GQA ============ -->
+<section id="gqa" data-title="2.2 GQA" hidden>
+  <h2>2.2 Grouped Query Attention</h2>
+  <p class="sub">用更少的 K/V 头换推理时的显存和带宽。</p>
+  <h3>为什么</h3>
+  <p>大模型推理时的瓶颈常常是读写 KV cache，而不是算力。cache 的大小与 <b>K/V 头数</b>成正比。GQA 保留全部 Q 头，但让若干个 Q 头共享同一组 K/V，把 cache 缩小到原来的 g/h。</p>
+  <div class="scroll"><table>
+    <tr><th>方案</th><th>Q 头</th><th>K/V 头</th><th>cache 大小</th><th>典型用法</th></tr>
+    <tr><td>MHA</td><td>h</td><td>h</td><td>1×</td><td>原始 Transformer</td></tr>
+    <tr><td>GQA</td><td>h</td><td>g（1 &lt; g &lt; h）</td><td>g/h</td><td>LLaMA-2 70B、Mistral 7B</td></tr>
+    <tr><td>MQA</td><td>h</td><td>1</td><td>1/h</td><td>PaLM、Falcon</td></tr>
+  </table></div>
+  <h3>实现要点</h3>
+<pre><code>Q 投影到 h · d_head；K、V 只投影到 g · d_head      ← 节省就发生在这里
+K, V: (B, g, T, d_head)  →  repeat_interleave(h // g, dim=1)  →  (B, h, T, d_head)
+之后和普通多头注意力完全一样</code></pre>
+  <p>Q 头 i 使用 K/V 组 <code>i // (h/g)</code>，所以要用 <code>repeat_interleave</code>（逐个复制），而不是 <code>repeat</code>（整体平铺）。</p>
+  <h3>试一试：头的分组与 cache 大小</h3>
+  <div class="demo">
+    <div class="row"><label for="gqa-h">Q 头数 h</label>
+      <select id="gqa-h"><option>8</option><option selected>16</option><option>32</option><option>64</option></select>
+      <label for="gqa-g">K/V 组数 g</label><select id="gqa-g"></select>
+      <label for="gqa-s">序列长度</label>
+      <select id="gqa-s"><option>2048</option><option selected>8192</option><option>32768</option><option>131072</option></select></div>
+    <div id="gqa-map" class="vocab"></div>
+    <pre id="gqa-out" style="margin:10px 0 0"></pre>
+  </div>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么 g 必须整除 h？每个 K/V 组要服务相同数量的 Q 头，否则没法对齐。判题会检查 g=3、h=4 是否被拒绝。</li>
+    <li>g = h 时就是 MHA，g = 1 时就是 MQA，判题里能验证这一点吗？输出形状一致，但权重随机，只能靠结构保证。</li>
+    <li>K/V 投影的输出维度是 <code>g·d_head</code>，不是 <code>d_model</code>。</li>
+    <li>质量损失大吗？论文和实践都显示，GQA 的质量接近 MHA，速度接近 MQA。</li>
+    <li>训练参数量变少了多少？K、V 两个矩阵从 d×d 变成 d×(g·d_head)。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. 从 MQA 到 GQA。</b>MQA 论文的摘要写道：增量推理很慢，因为要反复加载很大的 keys 和 values 张量，受限于内存带宽；MQA 让 K/V 在所有头之间共享，大幅缩小这两个张量。GQA 论文的摘要则指出：MQA 可能带来质量下降，而且为了更快推理单独训练一个模型也不一定划算。所以它 (1) 提出把已有的多头检查点用原始预训练算力的 <b>5%</b> 做 uptraining（继续训练），转换成 MQA 模型；(2) 提出 GQA，用介于 1 和 query 头数之间的 K/V 头数。结论是：uptrain 过的 GQA 质量接近 MHA，速度与 MQA 相当。转换时，各头的 K/V 投影矩阵对组内的头做 <b>mean pooling</b>（论文图 1）。</p>
+  <p><b>2. cache 的大小。</b>每个 token 每层要存的 K 和 V 共 <code>2 × g × d_head</code> 个数；整个 cache 是</p>
+<pre><code>2 · 层数 · g · d_head · 序列长度 · batch · 每元素字节数</code></pre>
+  <p>g 从 h 降到 g，cache 就缩小到原来的 g/h。</p>
+  <p><b>3. 省的是带宽，不只是容量。</b>解码时每步都要把整个 KV cache 从显存读一遍，带宽常常是瓶颈（Hugging Face 的指南在讲 MQA 时说得很清楚）。缩小 cache 同时减少了每步要读的数据。</p>
+  <p><b>4. 只在有 cache 时有意义。</b>指南里还强调：不使用 KV cache 的单次前向，峰值显存不会因 MQA 而变化，因为每个头仍然有各自的 Q，仍要算出各自的 <code>QKᵀ</code>。</p>
+  <p><b>5. 复制 K/V 的写法。</b>Hugging Face 的 <code>repeat_kv</code> 文档字符串写明它等价于 <code>torch.repeat_interleave(x, dim=1, repeats=n_rep)</code>。Llama 3 官方仓库的 <code>repeat_kv</code> 则是先 <code>expand</code> 再 <code>reshape</code>，写法不同，结果一样。</p>
+  <p><b>6. 与张量并行的关系。</b>Llama 3 仓库里 <code>n_local_kv_heads = n_kv_heads // model_parallel_size</code>，是整数除法。所以 K/V 头数通常要能被并行度整除，否则分不均。</p>
+  <p><b>7. 实际模型。</b>Llama 2 的论文写明 34B 和 70B 使用 GQA；公开发布的模型卡只列出 7B、13B、70B，其中只有 70B 使用 GQA。Llama 3 的论文写明使用 GQA、8 个 key-value 头。Mistral 7B 论文的架构表里：<code>n_heads=32</code>、<code>n_kv_heads=8</code>、<code>head_dim=128</code>，也就是每 4 个 Q 头共享一对 K/V。</p>
+  <p><b>8. 再往前一步：MLA。</b>DeepSeek-V2 的摘要说，它的 Multi-head Latent Attention（MLA）把 K/V cache 显著压缩成一个潜向量；与 DeepSeek 67B 相比，在整套改动（还包括 MoE 等）下，KV cache 减少 93.3%。注意这是整个模型对比的结果，不是 MLA 单独的消融。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>GQA 里 K/V 头数怎么选？要整除 Q 头数；常见做法是取 8 之类的小数，兼顾质量和 cache。</li>
+    <li>MQA 和 GQA 会减少 FLOPs 吗？K/V 投影的 FLOPs 会少一些，但主要收益是 cache 容量和读取带宽。</li>
+    <li>训练的时候也省吗？参数量和训练时的 FLOPs 略少，但主要优势出现在推理。</li>
+    <li>GQA 与 MHA 的数学关系？g=h 时就是 MHA，g=1 时就是 MQA。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/llm_tutorial_optimization.md" target="_blank" rel="noopener">Hugging Face：LLM 优化指南（MQA 与 GQA 两节）</a> <span class="sub">（MQA/GQA 的动机、带宽瓶颈、只在有 cache 时有意义、5% uptraining 的转述）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py" target="_blank" rel="noopener">Hugging Face：modeling_llama.py（repeat_kv）</a> <span class="sub">（等价于 repeat_interleave(dim=1)）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/meta-llama/llama3/blob/main/llama/model.py" target="_blank" rel="noopener">Llama 3：model.py</a> <span class="sub">（repeat_kv、n_kv_heads、n_local_kv_heads）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/meta-llama/llama/blob/main/MODEL_CARD.md" target="_blank" rel="noopener">Llama 2：MODEL_CARD.md</a> <span class="sub">（70B 用 GQA，7B/13B 不用）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/model_doc/mistral.md" target="_blank" rel="noopener">Hugging Face：Mistral 文档</a> <span class="sub">（SWA 与 GQA）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/mistral/configuration_mistral.py" target="_blank" rel="noopener">Hugging Face：MistralConfig</a> <span class="sub">（num_key_value_heads 默认 8）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1911.02150" target="_blank" rel="noopener">Shazeer，Fast Transformer Decoding: One Write-Head is All You Need（MQA）</a> <span class="sub">（瓶颈是反复加载 K/V 的内存带宽）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2305.13245" target="_blank" rel="noopener">Ainslie 等，GQA</a> <span class="sub">（5% uptraining、K/V 头数介于 1 与 Q 头数之间、质量接近 MHA、mean pooling）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2307.09288" target="_blank" rel="noopener">Touvron 等，Llama 2</a> <span class="sub">（34B 与 70B 用 GQA）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2407.21783" target="_blank" rel="noopener">Llama Team，The Llama 3 Herd of Models</a> <span class="sub">（GQA，8 个 key-value 头）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2310.06825" target="_blank" rel="noopener">Jiang 等，Mistral 7B</a> <span class="sub">（架构表：n_heads=32、n_kv_heads=8、head_dim=128）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2405.04434" target="_blank" rel="noopener">DeepSeek-AI，DeepSeek-V2</a> <span class="sub">（MLA；KV cache 减少 93.3% 是整套改动的结果）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s2_2_gqa.py
+实现  grouped_query_attention(q, k, v, num_query_heads, num_query_groups, d_model, mask=None)
+核验  python study/board.py check 2.2</code></pre>
+  <div class="next"><button class="btn ghost" data-go="mha">← 2.1</button><button class="btn" data-go="kvcache">下一课 2.3 →</button></div>
+</section>
+
+<!-- ============ 2.3 KV Cache ============ -->
+<section id="kvcache" data-title="2.3 KV Cache" hidden>
+  <h2>2.3 KV Cache</h2>
+  <p class="sub">自回归生成时不要重复算已经算过的东西。</p>
+  <h3>为什么</h3>
+  <p>生成第 t 个 token 时，前 t−1 个 token 的 K 和 V 和上一步完全一样。不缓存的话，每一步都把整段前缀重新投影一遍。KV cache 把它们存下来，每步只为<b>新 token</b> 计算 Q、K、V，再把新的 K、V 追加进缓存。</p>
+  <h3>两个阶段</h3>
+  <ul>
+    <li><b>预填充（prefill）</b>：一次处理整个提示词，带因果 mask，同时把所有 K/V 填进缓存。算力密集。</li>
+    <li><b>解码（decode）</b>：每步只输入 1 个 token，读取整个缓存。带宽密集，这就是 GQA 要省的东西。</li>
+  </ul>
+  <h3>试一试：缓存省了多少计算</h3>
+  <div class="demo">
+    <div class="row"><label for="kv-n">生成的 token 数 N</label>
+      <input type="range" id="kv-n" min="1" max="2048" value="256" style="flex:1;min-width:120px;accent-color:var(--accent)">
+      <span class="pill" id="kv-lab"></span></div>
+    <pre id="kv-out" style="margin:0"></pre>
+  </div>
+  <h3>实现要点</h3>
+<pre><code>缓存形状: (batch, heads, seq_len, d_head)
+update(new_k, new_v): 沿 dim=2 拼接，返回完整的 K、V
+解码时: x 是 (B, 1, d_model) → 只算新 token 的 Q/K/V → update → 对完整 K/V 做注意力
+        不需要 mask：缓存里只有过去，新 token 本来就能看到全部</code></pre>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>正确性标准是什么？逐 token 用缓存生成的输出，必须等于对整段序列一次性带因果 mask 计算的输出。判题就检查这一条。</li>
+    <li>用 RoPE 时，新 token 的位置编号是多少？是<b>缓存当前长度</b>。位置偏移弄错，结果会悄悄变差。</li>
+    <li>缓存里放的是旋转之后的 K，还是旋转之前的？通常放旋转之后的，因为它的位置已经固定。</li>
+    <li><code>torch.cat</code> 每步都会复制整个缓存，总拷贝量是 O(N²)。更好的做法是预分配最大长度的缓冲区，再往里写。</li>
+    <li>显存：<code>2 · 层数 · K/V头数 · d_head · 序列长度 · batch · 每元素字节</code>。长上下文和大 batch 时，缓存比权重还大。</li>
+    <li>服务端怎么管理缓存？分页（PagedAttention）、前缀复用、滑动窗口（见 2.4）。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. 好处有两个。</b>Hugging Face 的指南总结得很准：计算量减少（<code>QKᵀ</code> 退化成 <code>q_c Kᵀ</code>，q_c 是当前 token 的查询向量）；峰值显存随生成长度线性增长，而不是二次增长。</p>
+  <p><b>2. 输出一致，但不一定逐位相同。</b>同一份指南里有个提示：用缓存后输出可能略有不同，这是矩阵乘法 kernel 自身的性质。所以本题的判题用 <code>allclose</code>（容差 1e-5），而不是逐位相等。</p>
+  <p><b>3. 估算大小。</b>指南里的例子：缓存里的浮点数个数是“2 × 序列长度 × 头数 × 头维度 × 层数”。对 <code>bigcode/octocoder</code> 在序列长度 16000 时约 78.6 亿个，fp16 下约 15 GB，大约是模型权重的一半。</p>
+  <p>vLLM 论文给了一个更权威的例子：对 13B 参数的 OPT 模型，单个 token 的 KV cache 是 <code>2（K 和 V）× 5120（隐状态维度）× 40（层数）× 2（fp16 的字节数）</code> = 800 KB；OPT 最多生成 2048 个 token，所以<b>一个请求</b>的 KV cache 最多可达 1.6 GB。显存只有几十 GB，即使全部给 KV cache，也只能同时容纳几十个请求。</p>
+  <p>再来一个自己能心算的例子，<b>假设</b>一个 32 层、32 个 K/V 头、d_head=128、fp16 的模型：</p>
+<pre><code>每个 token：2 × 32 × 32 × 128 × 2 字节 = 524,288 字节 = 512 KB
+序列 4096：512 KB × 4096 = 2 GiB          （batch=1）
+改成 8 个 K/V 头（GQA）：每个 token 128 KB，同样序列 0.5 GiB</code></pre>
+  <p><b>4. 缓存有几种形态。</b>Hugging Face 的 KV cache 文档列出：动态缓存（默认，随长度增长）、静态缓存（预先分配好最大长度，固定大小，便于 <code>torch.compile</code> 这类即时编译优化）、量化缓存（占用更少显存）、把缓存卸载到 CPU（省显存、会变慢）。对使用滑动窗口的模型（如 Mistral），缓存在达到窗口大小后不再增长。</p>
+  <p><b>5. 多轮对话。</b>聊天场景下，把上一轮的缓存继续用下去，只需处理新增的那段提示，不用重新编码全部历史。</p>
+  <p><b>6. 显存管理。</b>vLLM 论文指出，现有系统要预先按最大长度为每个请求预留一整块连续显存，既造成内部浪费，也产生外部碎片：它们的 profiling 显示，KV cache 显存里只有 <b>20.4%–38.2%</b> 真正用来存放 token 的状态。PagedAttention 借鉴操作系统的分页，把 KV cache 切成块来管理，目标是几乎零浪费，并允许在请求之间共享 KV cache。论文报告在相同延迟水平下，吞吐比 FasterTransformer、Orca 等最先进系统提高 2–4 倍。</p>
+  <h3>实现时容易踩的坑</h3>
+  <ul>
+    <li>位置：用 RoPE 时，新 token 的位置编号 = 缓存当前长度（见 1.3）。</li>
+    <li>批量：一个 batch 内各序列长度不同，需要 padding 并对齐；beam search 还需要按选中的路径重新排列缓存。</li>
+    <li>拼接：每步 <code>torch.cat</code> 都会复制整个缓存。静态缓存的思路是预分配，再原地写入。</li>
+    <li>预填充 (prefill) 和解码 (decode) 的瓶颈不同：前者一次处理很多 token，偏计算密集；后者每步一个 token，偏带宽密集。</li>
+  </ul>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>缓存里为什么没有 Q？Q 只用于当前 token，用完就不再需要。</li>
+    <li>缓存里的 K 是旋转前还是旋转后的？通常存旋转后的，它的位置已经固定。</li>
+    <li>怎么在不增加参数的情况下减小缓存？GQA/MQA、滑动窗口、量化、卸载、分页管理，各自权衡不同。</li>
+    <li>长上下文为什么推理会变慢？每步要读的缓存越来越大，带宽成为瓶颈。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/llm_tutorial_optimization.md" target="_blank" rel="noopener">Hugging Face：LLM 优化指南（KV cache 一节）</a> <span class="sub">（好处、输出可能略有差异、大小估算、多轮对话）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/kv_cache.md" target="_blank" rel="noopener">Hugging Face：KV cache 文档</a> <span class="sub">（动态/静态/量化/卸载缓存，滑窗模型的缓存不再增长）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/vllm-project/vllm" target="_blank" rel="noopener">vLLM 仓库 README</a> <span class="sub">（PagedAttention 与论文标题）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2309.06180" target="_blank" rel="noopener">Kwon 等，Efficient Memory Management for Large Language Model Serving with PagedAttention</a> <span class="sub">（OPT-13B 的 800 KB/token、20.4%–38.2%、2–4 倍吞吐）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s2_3_kvcache.py
+实现  KVCache(update / get / reset) · CachedAttention(d_model, num_heads).forward(x, kv_cache=None)
+核验  python study/board.py check 2.3</code></pre>
+  <div class="next"><button class="btn ghost" data-go="gqa">← 2.2</button><button class="btn" data-go="swa">下一课 2.4 →</button></div>
+</section>
+
+<!-- ============ 2.4 Sliding Window ============ -->
+<section id="swa" data-title="2.4 Sliding Window" hidden>
+  <h2>2.4 Sliding Window Attention</h2>
+  <p class="sub">长序列下，让每个 token 只看附近的 w 个位置。</p>
+  <h3>为什么</h3>
+  <p>完整注意力的计算和显存是 O(n²)，序列一长就撑不住。滑动窗口让 token i 只看 <code>[i−w, i+w]</code>，复杂度降到 O(n·w)。Mistral、Longformer 都用这个思路。</p>
+  <h3>试一试：窗口和感受野</h3>
+  <div class="demo">
+    <div class="row"><label for="swa-w">窗口 w</label>
+      <input type="range" id="swa-w" min="0" max="12" value="3" style="flex:1;min-width:120px;accent-color:var(--accent)">
+      <span class="pill" id="swa-lab"></span>
+      <label><input type="checkbox" id="swa-c"> 因果（只看过去）</label></div>
+    <canvas id="swa-canvas" width="480" height="480" style="max-width:360px" aria-label="注意力掩码网格"></canvas>
+    <pre id="swa-out" style="margin:10px 0 0"></pre>
+  </div>
+  <p class="sub">横轴是被看的位置 j，纵轴是提问的位置 i，实心格是允许的注意力。</p>
+  <h3>实现要点</h3>
+<pre><code>距离矩阵  |i − j|            i: (n,1)  j: (1,n)  → (n, n)
+mask = (距离 &lt;= w)             布尔，True = 允许
+scores.masked_fill(~mask, −inf)   在 softmax 之前
+w &gt;= n 时什么都没屏蔽，必须与 full_attention 完全相同</code></pre>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>只看附近，会不会丢掉远处信息？一层只看 w，但 L 层叠起来，信息最远可以传播 <b>L·w</b>。上面的演示会算出来。</li>
+    <li>为什么这道题的 mask 是对称的？这里是双向版本。Mistral 是<b>因果 + 窗口</b>：<code>i−w ≤ j ≤ i</code>。勾选“因果”就是它。</li>
+    <li>用 mask 实现仍然先算了完整的 n×n 分数，只是把大部分丢掉，并没有真省算力。要真省，需要 <code>unfold</code> 之类的分块实现，这是题目里的加分项。</li>
+    <li>和 KV cache 的关系？解码时只需保留最近 w 个 K/V，缓存大小从 O(n) 变成 O(w)。用环形缓冲区实现。</li>
+    <li>窗口的代价？超出窗口的精确细节要靠层数传递，或者再配少量全局注意力的 token。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. 滑动窗口 + 全局 token。</b>Hugging Face 对 Longformer 的描述：它把局部窗口注意力与任务相关的全局注意力结合起来，计算随序列长度线性增长，因此能处理几千 token 的文档。</p>
+  <p><b>2. Mistral 的做法。</b>Mistral 7B 论文的架构表：<code>window_size=4096</code>、<code>context_len=8192</code>、32 层。论文说，第 k 层位置 i 的隐状态只关注上一层位置在 <code>i−W</code> 到 <code>i</code> 之间的隐状态；递归地看，它最远能访问输入层上 <code>W×k</code> 个 token 之外的信息。<code>MistralConfig</code> 里 <code>sliding_window</code> 的默认值也是 4096。</p>
+  <p><b>3. 环形缓冲区 (rolling buffer)。</b>论文描述：固定的注意力跨度意味着缓存大小可以固定为 W；位置 i 的 K/V 存放在缓存的 <code>i mod W</code> 位置，超出后旧的被覆盖。mistral-inference 的缓存代码里有 <code>position = seqlen % cache.shape[0]</code>：第 i 个 token 的 K/V 写在位置 <code>i mod W</code>，旧的被覆盖。缓存大小因此固定为 W，不随序列增长。同一份代码里 <code>get_cache_sizes</code> 还支持给<b>每一层</b>设不同的窗口（整数，或一个按层重复的列表，列表里 <code>None</code> 表示该层用完整长度），也就是“有的层用窗口，有的层看全部”。</p>
+  <p><b>4. 感受野会逐层放大。</b>单层最远只看 w，但 L 层叠起来，信息最多可传播 <code>L·w</code>（因果窗口）。W=4096、32 层时，4096 × 32 = 131,072；Mistral 论文也给出同样的估计：理论上的注意力跨度约 131K 个 token。这只是传播的理论上界，实际有效范围更小，远处信息要经过多层逐步传递。论文还说，序列长度 16K、W=4096 时，对 FlashAttention 和 xFormers 的改动让速度比普通注意力基线快 2 倍。</p>
+  <p><b>5. 掩码实现与真正省算力的区别。</b>本题的主体用掩码实现：先算完整的 n×n 分数，再屏蔽。这样只省了“有效的格数”，并没有省实际的计算与显存。要真正省，需要分块或 <code>unfold</code>（题目里的加分项）。</p>
+  <p><b>6. 保留“开头”的变体。</b>StreamingLLM 的摘要写道：只缓存最近 KV 的窗口注意力，在文本长度超过缓存大小时会失效；他们观察到“attention sink”现象：<b>保留最初几个 token 的 KV</b>，就能大幅恢复窗口注意力的表现，因为模型会把很强的注意力分数投向最初的 token，即使它们语义上并不重要。基于此，StreamingLLM 让用有限窗口训练的模型无需微调就能处理很长的序列（摘要称可达 400 万 token 以上）。</p>
+  <p><b>7. 预填充与分块。</b>Mistral 论文还提到：提示很长时，可以把它切成小块，逐块预填充缓存，并取窗口大小作为块大小；每一块要对“缓存”和“本块”两部分做注意力。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>窗口注意力会丢掉远处信息吗？单层会，多层叠加后信息可以逐层传递，但精确的远距离细节依然会损失。</li>
+    <li>和 KV cache 的关系？解码时只需保留最近 W 个 K/V，缓存是 O(W)，而不是 O(n)。</li>
+    <li>窗口注意力和稀疏注意力的区别？窗口是稀疏模式的一种（局部带状）；还有全局 token、跨步（dilated）等其他模式。</li>
+    <li>窗口大小怎么选？越大越接近完整注意力，代价线性增加；要和任务所需的依赖距离匹配。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/model_doc/longformer.md" target="_blank" rel="noopener">Hugging Face：Longformer 文档</a> <span class="sub">（局部窗口 + 任务相关的全局注意力，线性扩展）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/model_doc/mistral.md" target="_blank" rel="noopener">Hugging Face：Mistral 文档</a> <span class="sub">（SWA、8K 训练、固定缓存大小）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/mistral/configuration_mistral.py" target="_blank" rel="noopener">Hugging Face：MistralConfig</a> <span class="sub">（sliding_window 默认 4096）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/mistralai/mistral-inference/blob/main/src/mistral_inference/cache.py" target="_blank" rel="noopener">mistral-inference：cache.py</a> <span class="sub">（环形缓冲区 seqlen % 窗口，按层设置窗口）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/kv_cache.md" target="_blank" rel="noopener">Hugging Face：KV cache 文档</a> <span class="sub">（使用滑窗的模型缓存不再增长）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2004.05150" target="_blank" rel="noopener">Beltagy 等，Longformer</a> <span class="sub">（注意力随序列长度线性扩展；局部窗口 + 任务相关的全局注意力）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2310.06825" target="_blank" rel="noopener">Jiang 等，Mistral 7B</a> <span class="sub">（W=4096、W×k 的跨度、131K、滚动缓存、预填充与分块）</span></span></li><li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2309.17453" target="_blank" rel="noopener">Xiao 等，StreamingLLM</a> <span class="sub">（attention sink 与保留初始 token 的 KV）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s2_4_swa.py
+实现  create_sliding_window_mask · full_attention · sliding_window_attention
+核验  python study/board.py check 2.4</code></pre>
+  <div class="next"><button class="btn ghost" data-go="kvcache">← 2.3</button><button class="btn" data-go="arch">下一课 3.1 →</button></div>
+</section>
+
+<!-- ============ 3.1 架构总览 ============ -->
+<section id="arch" data-title="3.1 架构总览" hidden>
+  <h2>3.1 Llama 风格解码器：整体架构</h2>
+  <p class="sub">把前两节的零件拼成一个能说话的语言模型。</p>
+  <h3>全貌</h3>
+<pre><code>token id          (B, T)
+ → Embedding      (V, d)                          → (B, T, d)
+ → 重复 N 次的解码层：
+       x ← x + Attention( RMSNorm(x) )            RoPE + GQA，因果 mask
+       x ← x + MLP( RMSNorm(x) )                  SwiGLU
+ → RMSNorm
+ → lm_head        (d → V)，常与 Embedding 共享权重   → logits (B, T, V)
+ → 交叉熵：第 t 个位置预测第 t+1 个 token</code></pre>
+  <p>这条主干叫“残差流”：每个子层只往 x 里<b>加</b>一个增量，原来的 x 一直直通到底。</p>
+  <h3>相对原始 Transformer 的三处改动</h3>
+  <p>Llama 论文逐条列出了它做的改动，其他同类模型基本沿用：</p>
+  <ul>
+    <li><b>预归一化（Pre-normalization）</b>：不是归一化每个子层的输出，而是归一化每个子层的<b>输入</b>，用的是 RMSNorm（1.4）。</li>
+    <li><b>SwiGLU 激活</b>：用 SwiGLU 取代 ReLU，隐藏维度用 <code>(2/3)·4d</code>，而不是 PaLM 里的 <code>4d</code>。</li>
+    <li><b>旋转位置编码（RoPE）</b>：去掉绝对位置嵌入，改为在网络的每一层加入 RoPE（1.3）。</li>
+  </ul>
+  <h3>SwiGLU 是什么</h3>
+  <p>Shazeer 的 GLU 变体论文里，Transformer 的前馈层写成</p>
+<pre><code>FFN_SwiGLU(x) = ( Swish₁(x·W) ⊗ (x·V) ) · W₂          Swish₁(z) = z·σ(z)，也叫 SiLU</code></pre>
+  <p>它有<b>三个</b>权重矩阵，而原来的前馈层只有两个。为了让计算量保持不变，论文把隐藏维度 d_ff 缩小到原来的 2/3；它沿用 T5 的做法，不加偏置。Hugging Face 的 Llama 实现是 <code>down_proj( silu(gate_proj(x)) * up_proj(x) )</code>；Meta 官方实现里的隐藏维度是 <code>int(2 * hidden_dim / 3)</code>，再向上取整到 <code>multiple_of</code> 的倍数。</p>
+  <h3>一层的代码结构</h3>
+  <p>Meta 官方实现的 <code>TransformerBlock.forward</code> 正是这两行：</p>
+<pre><code>h   = x + attention( attention_norm(x), ... )
+out = h + feed_forward( ffn_norm(h) )</code></pre>
+  <h3>权重共享（tied embeddings）</h3>
+  <p>输入嵌入矩阵 E（V×d）把 token 变成向量，输出层 lm_head 把向量变回 V 维 logits。Press 和 Wolf 的论文指出，输出层这个矩阵本身就是一个有效的词嵌入，并建议训练语言模型时把输入嵌入和输出嵌入<b>绑在一起</b>。好处是省掉 V·d 个参数。SmolLM2-1.7B 的配置表里写明“Tied embedding: Yes”；而 Hugging Face 的 <code>LlamaConfig</code> 里 <code>tie_word_embeddings</code> 默认是 False，可见这是各个模型自己的选择。</p>
+  <h3>SmolLM2 的配置（论文表格）</h3>
+  <div class="scroll"><table>
+    <tr><th>项</th><th>SmolLM2-1.7B</th></tr>
+    <tr><td>层数</td><td>24</td></tr><tr><td>模型维度 d</td><td>2,048</td></tr><tr><td>FFN 维度</td><td>8,192</td></tr>
+    <tr><td>注意力头数</td><td>32</td></tr><tr><td>词表大小</td><td>49,152</td></tr>
+    <tr><td>词嵌入</td><td>共享（Tied embedding: Yes）</td></tr>
+    <tr><td>位置编码</td><td>RoPE（θ = 10,000）</td></tr><tr><td>激活函数</td><td>SwiGLU</td></tr>
+  </table></div>
+  <p>论文还写明：SmolLM2-135M 和 360M 与 1.7B 的架构相同，但使用了分组查询注意力（GQA，见 2.2）。</p>
+  <h3>数一数参数量</h3>
+<pre><code>注意力   q: d·(h·dh)    k、v: 各 d·(g·dh)    o: (h·dh)·d
+MLP      3 · d · I
+归一化   每层 2d，最后 1 个 d
+嵌入     V · d（共享时只算一次）</code></pre>
+  <p>用上面 1.7B 的表（<b>我的算术</b>；论文表里没有列 K/V 头数，这里按 K/V 头数 = 头数的 MHA 算）：每层 4·2048² + 3·2048·8192 + 2·2048 = 67,112,960；24 层 = 1,610,711,040；嵌入 49,152 × 2048 = 100,663,296；再加最终归一化 2,048。总计 <b>1,711,376,384，约 1.71B</b>，与“1.7B”吻合。</p>
+  <h3>训练与推理</h3>
+  <ul>
+    <li><b>训练</b>：整段序列一次送入，所有位置并行算 next-token 损失（因果 mask 保证不泄漏未来）。若输出接近均匀分布，损失约为 <code>ln V</code>；V=49,152 时是 10.80（我的算术）。</li>
+    <li><b>推理</b>：一个 token 一个 token 地生成。朴素写法每步重算整段（3.3 就这样写），用 KV cache（2.3）可以只算新 token。</li>
+    <li><b>训练算力估算</b>：Kaplan 等人估计每个训练 token 约需 6N 次浮点运算（前向约 2N，反向约是前向的两倍）；Chinchilla 论文也用 <code>FLOPs(N, D) ≈ 6ND</code>，N 是参数量，D 是训练 token 数。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么用 Pre-Norm 而不是 Post-Norm？Llama 论文给出的理由是提高训练稳定性。残差流直通也让很深的网络更容易训练。</li>
+    <li>SwiGLU 为什么要把隐藏维度缩到 2/3？它有 3 个矩阵而不是 2 个，缩小后总参数量和计算量才与原来的 4d 前馈层相当。</li>
+    <li>RoPE 为什么只出现在注意力里，而不是加在输入嵌入上？它作用于 q 和 k，让分数只依赖相对位置（1.3）。</li>
+    <li>共享嵌入有什么代价？输入和输出共用同一个矩阵，二者的需求不完全一致；小模型里它占总参数的比例大，省得更多（本例约 5.9%）。</li>
+    <li>decoder-only 和 encoder-decoder 的区别？前者只有因果自注意力的堆叠，生成时把已生成的文本接在提示后面继续；后者多一个编码器和交叉注意力。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs">
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2302.13971" target="_blank" rel="noopener">Touvron 等，LLaMA</a> <span class="sub">（预归一化 + RMSNorm、SwiGLU 与 (2/3)·4d、RoPE 取代绝对位置嵌入）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2002.05202" target="_blank" rel="noopener">Shazeer，GLU Variants Improve Transformer</a> <span class="sub">（FFN_SwiGLU 公式、三个权重矩阵、缩小 2/3 保持计算量、不加偏置）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/1608.05859" target="_blank" rel="noopener">Press &amp; Wolf，Using the Output Embedding to Improve Language Models</a> <span class="sub">（建议绑定输入与输出嵌入）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2502.02737" target="_blank" rel="noopener">Allal 等，SmolLM2</a> <span class="sub">（1.7B 配置表、词表 49,152、135M/360M 用 GQA）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2001.08361" target="_blank" rel="noopener">Kaplan 等，Scaling Laws for Neural Language Models</a> <span class="sub">（每个训练 token 约 6N 次运算）</span></span></li>
+    <li><span class="pill">论文·已读原文</span><span><a href="https://arxiv.org/abs/2203.15556" target="_blank" rel="noopener">Hoffmann 等，Training Compute-Optimal Large Language Models</a> <span class="sub">（FLOPs(N,D) ≈ 6ND）</span></span></li>
+    <li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py" target="_blank" rel="noopener">Hugging Face：modeling_llama.py</a> <span class="sub">（LlamaMLP、lm_head 无偏置与权重共享的映射）</span></span></li>
+    <li><span class="pill">已核对</span><span><a href="https://github.com/meta-llama/llama3/blob/main/llama/model.py" target="_blank" rel="noopener">Llama 3：model.py</a> <span class="sub">（FeedForward 的 2/3 与取整、TransformerBlock 的两行残差）</span></span></li>
+    <li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/configuration_llama.py" target="_blank" rel="noopener">Hugging Face：configuration_llama.py</a> <span class="sub">（hidden_act=silu、tie_word_embeddings 默认 False）</span></span></li>
+  </ul>
+  <div class="next"><button class="btn ghost" data-go="swa">← 2.4</button><button class="btn" data-go="sblock">下一课 3.2 →</button></div>
+</section>
+
+<!-- ============ 3.2 注意力块 ============ -->
+<section id="sblock" data-title="3.2 注意力块" hidden>
+  <h2>3.2 实现 RoPE + GQA 注意力块</h2>
+  <p class="sub">SmolLM 里最复杂的零件：前几节学的东西在这里合到一起。</p>
+  <h3>目标</h3>
+  <p>把 RoPE（1.3）、GQA（2.2）、带因果 mask 的缩放点积注意力（1.5）装进同一个模块 <code>RopeAttention</code>。题目来自仓库的 <code>smollm</code>，判题有 12 项检查。</p>
+  <h3>五个零件</h3>
+  <div class="scroll"><table>
+    <tr><th>零件</th><th>做什么</th><th>最容易错的地方</th></tr>
+    <tr><td><code>rotate_half</code></td><td>最后一维切两半，返回 (−x₂, x₁)</td><td>切分的位置；连用两次必须得到 −x</td></tr>
+    <tr><td><code>apply_rotary_pos_emb</code></td><td>q' = q·cos + rotate_half(q)·sin；k 同理</td><td>cos/sin 要先补出 head 维才能广播；cos=1、sin=0 时必须是恒等</td></tr>
+    <tr><td><code>repeat_kv</code></td><td>把 g 个 K/V 头复制成 h 个</td><td>第 i 个新头必须是第 <code>i // n_rep</code> 个旧头，不是整体平铺</td></tr>
+    <tr><td><code>RotaryEmbedder</code></td><td>按位置给出 cos、sin 表</td><td>位置从 0 开始（位置 0 角度为 0）；cos²+sin²=1</td></tr>
+    <tr><td><code>RopeAttention</code></td><td>投影 → 拆头 → 旋转 → repeat_kv → 注意力 → 合头</td><td>K/V 只投影到 <code>g·head_dim</code>；mask 是加性的</td></tr>
+  </table></div>
+  <h3>RotaryEmbedder 的构造</h3>
+<pre><code>inv_freq = 1 / base ** ( arange(0, dim, 2) / dim )        形状 (dim/2,)
+angle    = outer( arange(S), inv_freq )                    形状 (S, dim/2)
+emb      = cat([angle, angle], dim=-1)                     形状 (S, dim)   ← 前后两半用同一组角度
+cos, sin = emb.cos(), emb.sin()                            再补成 (1, S, dim)</code></pre>
+  <p>把同一组角度拼两遍，是为了和 <code>rotate_half</code> 的“前后半段配对”对上：第 i 维与第 i+dim/2 维共用一个角度。这也是判题里“同一个角度驱动一对分量”的含义。</p>
+  <h3>RopeAttention 的形状流水</h3>
+<pre><code>x                      (B, S, hidden)
+q = q_proj(x)          (B, S, h·dh)   → view → (B, h, S, dh)
+k = k_proj(x)          (B, S, g·dh)   → view → (B, g, S, dh)
+v = v_proj(x)          同 k
+旋转 q、k              cos/sin: (1, S, dh)  → 补 head 维 → (1, 1, S, dh)
+k, v = repeat_kv(·, h // g)           (B, h, S, dh)
+分数 = q @ kᵀ / sqrt(dh)              (B, h, S, S)
+分数 = 分数 + attention_mask           加性：屏蔽处为 −inf，形状 (1,1,S,S)
+权重 = softmax(分数)；输出 = 权重 @ v   (B, h, S, dh)
+合头 → (B, S, h·dh) → o_proj → (B, S, hidden)</code></pre>
+  <p>注意 mask 是<b>加到分数上</b>的，不是像 1.5 那样用布尔值填充。Hugging Face 的实现也是这种形式：softmax 在 float32 里算，再转回 q 的精度。</p>
+  <h3>判题会检查什么</h3>
+  <div class="scroll"><table>
+    <tr><th>检查</th><th>它在抓什么错</th></tr>
+    <tr><td>rotate_half 连用两次得 −x</td><td>切分位置、符号写反</td></tr>
+    <tr><td>cos=1, sin=0 是恒等</td><td>忘了把原向量加回去，或广播维度错</td></tr>
+    <tr><td>旋转保持向量长度</td><td>一对分量用了不同的角度</td></tr>
+    <tr><td>repeat_kv 逐头原位复制</td><td>用了整体平铺，把每个 Q 头配给了错的 K/V 头</td></tr>
+    <tr><td>RotaryEmbedder 在单位圆上、位置 0 角度为 0</td><td>位置下标差一位</td></tr>
+    <tr><td>注意力对位置敏感</td><td>根本没把旋转应用到 q、k 上</td></tr>
+    <tr><td>因果 mask 生效</td><td>mask 加错位置、加在 softmax 之后</td></tr>
+    <tr><td>K/V 投影更窄（参数量少于 MHA）</td><td>把 K/V 也投影到了 hidden</td></tr>
+  </table></div>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么 K 的头数少，旋转还能照常做？旋转只依赖位置和 head_dim，与头数无关；先旋转再复制，或先复制再旋转，结果一样，前者更省。</li>
+    <li>cos/sin 为什么不需要梯度？它们只由位置和 base 决定，没有可训练参数，所以 <code>forward</code> 用 <code>@torch.no_grad()</code>。</li>
+    <li>mask 为什么形状是 (1,1,S,S)？同一个因果 mask 对所有样本和所有头都一样，靠广播就够了。</li>
+    <li>如果输入的 dtype 是 bf16，哪些地方要小心？cos/sin 的角度在 float32 里算更准，再转成输入的 dtype；softmax 在 float32 里算。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs">
+    <li><span class="pill">已核对</span><span><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py" target="_blank" rel="noopener">Hugging Face：modeling_llama.py</a> <span class="sub">（rotate_half、apply_rotary_pos_emb、repeat_kv、softmax 用 float32）</span></span></li>
+    <li><span class="pill">已核对</span><span><a href="https://github.com/meta-llama/llama3/blob/main/llama/model.py" target="_blank" rel="noopener">Llama 3：model.py</a> <span class="sub">（precompute_freqs_cis 的频率公式、repeat_kv）</span></span></li>
+  </ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s3_2_rope_gqa_block.py
+实现  rotate_half · apply_rotary_pos_emb · repeat_kv · RotaryEmbedder · RopeAttention
+核验  python study/board.py check 3.2</code></pre>
+  <div class="next"><button class="btn ghost" data-go="arch">← 3.1</button><button class="btn" data-go="smodel">下一课 3.3 →</button></div>
+</section>
+
+<!-- ============ 3.3 组装完整模型 ============ -->
+<section id="smodel" data-title="3.3 组装模型" hidden>
+  <h2>3.3 组装完整的 SmolLM，并生成文本</h2>
+  <p class="sub">把解码层堆起来，接上词嵌入和输出层，再写一个贪心生成循环。</p>
+  <h3>先搭好脚手架</h3>
+  <p>提交文件里需要有你前面已经通过的两块代码：1.4 的 <code>RMSNorm</code>，和 3.2 的整套 RoPE + GQA 注意力。把它们粘贴到文件开头，再完成下面这些新零件：</p>
+  <div class="scroll"><table>
+    <tr><th>名字</th><th>职责</th></tr>
+    <tr><td><code>SwiGLU(hidden, intermediate)</code></td><td>三个无偏置 Linear：<code>down( silu(gate(x)) * up(x) )</code></td></tr>
+    <tr><td><code>DecoderLayer(cfg)</code></td><td>两个 RMSNorm + RopeAttention + SwiGLU，两处残差</td></tr>
+    <tr><td><code>SmolLM(cfg)</code></td><td><code>embed_tokens</code>、<code>layers</code>、<code>norm</code>、<code>lm_head</code>；可共享权重；<code>forward(input_ids, labels=None)</code> 返回 <code>(logits, loss)</code></td></tr>
+    <tr><td><code>greedy_generate(model, ids, n)</code></td><td>循环 n 次：取最后位置 logits 的 argmax，接到序列后面</td></tr>
+  </table></div>
+  <p>属性名沿用 Hugging Face Llama 的命名，判题要用它们找到各个部件。</p>
+  <h3>forward 的流程</h3>
+<pre><code>1. 造加性因果 mask：(1,1,S,S)，上三角（不含对角线）为 −inf，其余为 0
+2. x = embed_tokens(input_ids)
+3. 依次通过每个 DecoderLayer：x = layer(x, mask)
+4. logits = lm_head( norm(x) )
+5. 有 labels 时：loss = cross_entropy( logits[:, :-1], labels[:, 1:] )   ← 错开一位</code></pre>
+  <h3>判题检查什么（共 9 项）</h3>
+  <div class="scroll"><table>
+    <tr><th>检查</th><th>它在抓什么错</th></tr>
+    <tr><td>SwiGLU 形状与参数量</td><td>带了偏置、少了 up 或 gate；写成了线性</td></tr>
+    <tr><td>forward 的形状与返回值</td><td>返回格式不是 (logits, loss)；没 labels 时 loss 应为 None</td></tr>
+    <tr><td>loss 是 next-token</td><td>忘了错开一位，让每个位置去预测自己</td></tr>
+    <tr><td>因果性</td><td>改最后一个 token，前面位置的 logits 不能变</td></tr>
+    <tr><td>权重共享</td><td>共享与否的参数量之差必须正好是 V·d</td></tr>
+    <tr><td>层是逐层堆叠的</td><td>多一层增加的参数量必须相同（不能共用同一层）</td></tr>
+    <tr><td>残差连接</td><td>把每层参数清零后，整个模型必须等于 <code>lm_head(norm(embed_tokens(ids)))</code>，即两处残差都在</td></tr>
+    <tr><td>所有参数都收到梯度</td><td>某个子层没有真正参与计算（例如 SwiGLU 没用 up）</td></tr>
+    <tr><td>贪心生成</td><td>输出前缀是原提示；每个新 token 是上一步最后位置 logits 的 argmax；结果确定</td></tr>
+  </table></div>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么 loss 要错开一位？位置 t 的输出要去预测位置 t+1 的 token，所以拿 <code>logits[:, :-1]</code> 对 <code>labels[:, 1:]</code>。</li>
+    <li>共享权重在 PyTorch 里怎么写？让 <code>lm_head.weight</code> 指向同一个 <code>Parameter</code>：<code>lm_head.weight = embed_tokens.weight</code>。<code>model.parameters()</code> 会自动去重，所以参数量只算一次。</li>
+    <li>生成时为什么要 <code>@torch.no_grad()</code>？不需要梯度，省显存。<code>model.eval()</code> 与它是两回事：前者关梯度，后者关 dropout 等训练行为。</li>
+    <li>这个生成循环有什么低效之处？每一步都把整段序列重新过一遍，代价是 O(T²) 次前向。接上 2.3 的 KV cache，每步只处理新 token。</li>
+    <li>贪心生成有什么问题？总选概率最大的，容易重复、缺乏多样性。采样（温度、top-k、top-p）在第 5 节讲。</li>
+  </ol>
+  <h3>可选的延伸</h3>
+  <ul>
+    <li>把 2.3 的 KV cache 接进 <code>RopeAttention</code>：记得新 token 的 RoPE 位置要用缓存当前的长度。</li>
+    <li>数一数你的模型有多少参数，和 3.1 里的公式对一对。</li>
+    <li>用很小的配置过拟合一小段文本，看 loss 能否降到接近 0。</li>
+  </ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/s3_3_smollm_model.py
+实现  SwiGLU · SmolLM · greedy_generate（以及粘贴进来的 RMSNorm、RopeAttention）
+核验  python study/board.py check 3.3</code></pre>
+  <div class="next"><button class="btn ghost" data-go="sblock">← 3.2</button><button class="btn" data-go="board">去看板 →</button></div>
+</section>
+
+<!-- ============ A.0 策略 ============ -->
+<section id="a0" data-title="A.0 应试策略" hidden>
+  <h2>A.0 应用 ML 笔试：怎么准备</h2>
+  <p class="sub">这类测试考的不是调大模型，而是用 numpy / pandas 把基础算法写对、写稳。具体题型以招聘方给的说明为准。</p>
+  <h3>常见题型</h3>
+  <div class="scroll"><table>
+    <tr><th>类别</th><th>典型任务</th><th>对应课</th></tr>
+    <tr><td>指标</td><td>混淆矩阵、precision/recall/F1、AUC</td><td>A.1</td></tr>
+    <tr><td>数据清洗</td><td>缺失值、标准化、独热编码、分组统计、表连接</td><td>A.2 · A.9</td></tr>
+    <tr><td>验证</td><td>划分数据、K 折交叉验证、避免数据泄漏</td><td>A.3</td></tr>
+    <tr><td>从零实现</td><td>线性/逻辑回归、KNN、决策树划分、PCA、K-Means</td><td>A.4–A.8</td></tr>
+    <tr><td>概念问答</td><td>过拟合、偏差方差、正则化、类别不平衡</td><td>各课“常见坑”</td></tr>
+  </table></div>
+  <h3>答题时的习惯</h3>
+  <ol class="q">
+    <li>先读清楚输入输出的形状、类型、返回顺序，再动手。多数失分来自形状和约定，而不是算法。</li>
+    <li>用小例子手算一遍，再写代码。题目给的样例往往就是最小的测试。</li>
+    <li>先想边界：空类别、分母为 0、常数列、并列得分、NaN、k 大于样本数。隐藏测试喜欢考这些。</li>
+    <li>向量化。n 很大时，Python 双重循环会超时；会用广播和 <code>axis</code> 就够了。</li>
+    <li>不要修改传入的数组或 DataFrame（先 <code>.copy()</code>）；随机性一律固定 seed。</li>
+    <li>把“截距不惩罚”“ddof=0”“平票取小”这类细节写成注释，检查时逐条对。</li>
+  </ol>
+  <h3>numpy 速查</h3>
+<pre><code>X[:, None, :] - Y[None, :, :]       # 广播出成对差，形状 (n, m, d)
+X.sum(axis=0) / X.mean(axis=1, keepdims=True)
+np.where(cond, a, b)                # 向量化 if/else
+np.argsort(x)[:k]                   # 最小的 k 个下标
+np.bincount(labels)                 # 类别计数（非负整数）
+np.linalg.lstsq / solve / eigh      # 最小二乘 / 解方程 / 对称矩阵特征分解
+np.random.default_rng(seed)         # 可复现随机数</code></pre>
+  <h3>数据泄漏：最常见的丢分点</h3>
+  <p>scikit-learn 的文档讲得很清楚：反复根据测试集调整超参数，会让“关于测试集的知识泄漏进模型”，评估指标就不再反映泛化性能。解决办法是再留出一份<b>验证集</b>：训练集上训练，验证集上选超参，最后只在测试集上评估一次。</p>
+  <p>预处理（标准化、特征选择等）同样要<b>只从训练集学出来</b>，再应用到验证集和测试集。文档给的示例就是先 <code>fit</code> 在训练集上，再 <code>transform</code> 测试集；在交叉验证里，用 <code>Pipeline</code> 可以自动保证这一点。</p>
+  <h3>概念问答速答</h3>
+  <div class="scroll"><table>
+    <tr><th>问题</th><th>要点</th></tr>
+    <tr><td>偏差与方差</td><td>偏差高：欠拟合，训练和验证误差都高；方差高：过拟合，训练误差低、验证误差高</td></tr>
+    <tr><td>L1 与 L2 正则</td><td>L2 把权重整体收缩；L1 倾向把一些权重压成恰好为 0（稀疏）</td></tr>
+    <tr><td>类别不平衡怎么办</td><td>用 precision/recall/F1、PR 曲线或 AUC，不要只看 accuracy；可以调类别权重、重采样、调阈值</td></tr>
+    <tr><td>哪些模型需要特征缩放</td><td>基于距离的（KNN、K-Means）和用梯度下降的（线性/逻辑回归、神经网络）；树模型不需要</td></tr>
+    <tr><td>怎么选超参数</td><td>交叉验证；最后一次性在测试集上评估</td></tr>
+    <tr><td>训练集上表现好、线上差</td><td>先查数据泄漏、训练/线上分布是否一致，再考虑过拟合</td></tr>
+  </table></div>
+  <h3>性能上的几条经验</h3>
+  <ul>
+    <li>能用广播和矩阵运算，就不要写 Python 双重循环。但要留意中间数组的大小：<code>(n_test, n_train, d)</code> 的广播张量在 n 大时会爆内存，可以展开平方距离再用矩阵乘，或分块计算。</li>
+    <li>先写一个朴素但正确的版本，用小例子验证，再优化。</li>
+    <li>复杂度要会口算：排序 O(n log n)，距离矩阵 O(n_test·n_train·d)，特征分解 O(d³)。</li>
+  </ul>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/doc/modules/cross_validation.rst" target="_blank" rel="noopener">scikit-learn：交叉验证文档（cross_validation.rst）</a> <span class="sub">（测试集泄漏、验证集、预处理只在训练集上学习、Pipeline）</span></span></li></ul>
+  <h3>本地练习</h3>
+  <pre><code>python study/board.py check A.1   # 编号 A.1 ~ A.9，只需要 numpy 和 pandas</code></pre>
+  <div class="next"><span></span><button class="btn" data-go="a1">A.1 评估指标 →</button></div>
+</section>
+
+<!-- ============ A.1 ============ -->
+<section id="a1" data-title="A.1 指标" hidden>
+  <h2>A.1 评估指标</h2>
+  <p class="sub">模型好不好，先看你问的是哪个问题。</p>
+  <h3>混淆矩阵</h3>
+<pre><code>             预测 0   预测 1
+真实 0         TN       FP
+真实 1         FN       TP</code></pre>
+  <div class="scroll"><table>
+    <tr><th>指标</th><th>公式</th><th>回答的问题</th></tr>
+    <tr><td>Accuracy</td><td>(TP+TN) / 全部</td><td>总体预测对了多少</td></tr>
+    <tr><td>Precision</td><td>TP / (TP+FP)</td><td>报“正”的里面，多少是真的</td></tr>
+    <tr><td>Recall</td><td>TP / (TP+FN)</td><td>真的正例里，抓到了多少</td></tr>
+    <tr><td>F1</td><td>2PR / (P+R)</td><td>P 和 R 的调和平均，任何一个低都会拉低它</td></tr>
+  </table></div>
+  <h3>AUC</h3>
+  <p>AUC = 随机抽一个正样本和一个负样本，正样本得分更高的概率（并列算 0.5）。它只看排序，与阈值无关。</p>
+  <p>不用画 ROC 曲线就能算：把所有得分排秩（并列取平均秩），则</p>
+<pre><code>AUC = ( Σ正样本的秩 − P(P+1)/2 ) / (P · N)      P、N 为正、负样本数</code></pre>
+  <h3>常见坑</h3>
+  <ol class="q">
+    <li>类别不平衡时 accuracy 会骗人：99% 负样本，全猜负也有 99%。这时看 P/R/F1 或 AUC。</li>
+    <li>没有任何预测为正时 precision 分母为 0，要约定返回 0.0，而不是 nan。</li>
+    <li>得分并列时，直接 <code>argsort</code> 两次得到的秩是错的，要对相同得分取平均秩。</li>
+    <li>阈值怎么选？降低阈值：recall 升、precision 通常降。按业务代价选，而不是默认 0.5。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. F1 的零除约定。</b>scikit-learn 的 <code>f1_score</code> 有 <code>zero_division</code> 参数，默认值是 <code>"warn"</code>：行为等同于返回 0，同时发出一条警告；也可以设成 0.0、1.0 或 <code>np.nan</code>（设成 nan 时，这样的值不参与平均）。本题的判题采用“返回 0.0”。</p>
+  <p><b>2. AUC 只看排序。</b><code>roc_auc_score</code> 的文档说明，目标得分可以是正类的概率估计，也可以是未经阈值化的决策值。所以 AUC 与阈值无关，也不要求得分是“校准过的概率”。</p>
+  <p><b>3. AUC 的定义。</b>随机抽一个正样本和一个负样本，正样本得分更高的概率，并列时算一半：</p>
+<pre><code>AUC = P(s⁺ &gt; s⁻) + ½ · P(s⁺ = s⁻)</code></pre>
+  <p>它等价于 Mann–Whitney U 统计量，所以能用“排秩”一次算出（O(n log n)），而不必比较所有 P·N 个配对。</p>
+  <p><b>4. 什么时候看哪个指标。</b>类别极不平衡时，ROC 曲线可能显得很乐观，因为假阳性率的分母是（很大的）负样本数；此时 PR 曲线（precision-recall）更能反映正类上的表现。AUC 高也不等于概率“校准”得好：校准关心的是预测 0.8 的样本里是否真有约 80% 是正类。</p>
+  <p><b>5. 多分类。</b>把每个类别分别当作“正类”算一遍，再平均：宏平均（每类等权）、微平均（按样本汇总）。类别不平衡时两者差别会很大。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>precision 和 recall 的取舍，各举一个场景？垃圾邮件过滤更怕误杀（重 precision）；疾病筛查更怕漏诊（重 recall）。</li>
+    <li>调高分类阈值，precision 和 recall 怎么变？通常 precision 上升、recall 下降。</li>
+    <li>F1 为什么用调和平均而不是算术平均？调和平均对较小的那个更敏感，任何一个很低，F1 就会很低。</li>
+    <li>ROC 曲线的横纵轴分别是什么？横轴假阳性率，纵轴真阳性率（即 recall）。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/metrics/_classification.py" target="_blank" rel="noopener">scikit-learn：metrics/_classification.py（f1_score 的 zero_division）</a></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/metrics/_ranking.py" target="_blank" rel="noopener">scikit-learn：metrics/_ranking.py（roc_auc_score 的 y_score）</a></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/a1_metrics.py
+实现  confusion_matrix · precision_recall_f1 · roc_auc
+核验  python study/board.py check A.1</code></pre>
+  <div class="next"><button class="btn ghost" data-go="a0">← A.0</button><button class="btn" data-go="a2">A.2 预处理 →</button></div>
+</section>
+
+<!-- ============ A.2 ============ -->
+<section id="a2" data-title="A.2 预处理" hidden>
+  <h2>A.2 数据预处理</h2>
+  <p class="sub">模型之前的那一半工作。</p>
+  <h3>四个基本操作</h3>
+<pre><code>标准化      z = (x − mean) / std            每列均值 0、方差 1
+Min-Max     x' = (x − min) / (max − min)    压到 [0, 1]
+独热编码    类别 → 长度为类别数的 0/1 向量
+缺失值      数值列常用均值/中位数填充，类别列常用众数</code></pre>
+  <h3>什么时候用哪个</h3>
+  <ul>
+    <li>基于距离的模型（KNN、K-Means、SVM）和用梯度下降的模型（线性/逻辑回归、神经网络）都需要把特征缩放到相近量级。</li>
+    <li>树模型不依赖缩放。</li>
+    <li>有极端离群点时，Min-Max 会被拉歪，标准化或中位数更稳。</li>
+  </ul>
+  <h3>最重要的一条：不要泄漏</h3>
+  <p>均值、标准差、填充值都只能从<b>训练集</b>算出，再原样用到验证集和测试集。先在全量数据上标准化再划分，是最常见的数据泄漏。</p>
+  <h3>常见坑</h3>
+  <ol class="q">
+    <li>常数列的 std 为 0：除之前先处理，结果应为 0 而不是 nan。</li>
+    <li>样本标准差（ddof=1）和总体标准差（ddof=0）差一点；题目没说就按 numpy 默认 ddof=0，并写在注释里。</li>
+    <li>one-hot 的列顺序必须确定：按排序后的类别排列，并允许外部传入 categories，保证训练和测试的列一致。</li>
+    <li>填充时用 <code>np.nanmean</code> 忽略 NaN，否则整列均值都是 nan。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. 标准差用哪个。</b>scikit-learn 的 <code>StandardScaler</code> 用的是有偏估计，等价于 <code>numpy.std(x, ddof=0)</code>，文档还特别说明 ddof 的选择通常影响不大。本题与它一致。</p>
+  <p><b>2. 常数特征。</b>scikit-learn 里有专门的 <code>_handle_zeros_in_scale</code>，作用是“把接近常数的特征的缩放系数设为 1”。因此常数列标准化后全是 0，而不是 nan。这正是本题判题的要求。</p>
+  <p><b>3. 防泄漏的标准写法。</b></p>
+<pre><code>scaler = StandardScaler().fit(X_train)       # 只用训练集学均值、标准差
+X_train_t = scaler.transform(X_train)
+X_test_t  = scaler.transform(X_test)         # 测试集用训练集的统计量</code></pre>
+  <p><b>4. 类别编码。</b>one-hot 对低基数类别很好用；类别很多（高基数）时会产生很宽的稀疏矩阵，常改用频率/目标编码、哈希或嵌入。测试时如果出现训练时没见过的类别，要事先约定怎么处理（全 0 行或报错）。</p>
+  <p><b>5. 缺失值。</b>均值、中位数（对离群点更稳）、众数（类别列）都是常见选择；有时把“是否缺失”本身作为一列特征，因为缺失可能携带信息。填充值同样只能来自训练集。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>标准化和归一化有什么区别？习惯上标准化指减均值除标准差，归一化指缩放到固定范围（如 [0,1]）；但不同资料用词不一致，答题时先说明你指的是哪个。</li>
+    <li>有离群点时用哪个？标准化和 Min-Max 都会被离群点影响；可以先截断，或用基于中位数/分位数的缩放。</li>
+    <li>树模型需要标准化吗？不需要，分裂只依赖特征的排序。</li>
+    <li>线性模型加正则前为什么要标准化？惩罚项对特征的量级敏感，量级大的特征权重会被惩罚得更轻。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/preprocessing/_data.py" target="_blank" rel="noopener">scikit-learn：preprocessing/_data.py</a> <span class="sub">（StandardScaler 用 ddof=0；近常数特征的缩放系数设为 1）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/doc/modules/cross_validation.rst" target="_blank" rel="noopener">scikit-learn：交叉验证文档</a> <span class="sub">（预处理应只从训练集学习）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/a2_preprocess.py
+实现  standardize · min_max_scale · one_hot · impute_mean
+核验  python study/board.py check A.2</code></pre>
+  <div class="next"><button class="btn ghost" data-go="a1">← A.1</button><button class="btn" data-go="a3">A.3 划分与 CV →</button></div>
+</section>
+
+<!-- ============ A.3 ============ -->
+<section id="a3" data-title="A.3 划分/CV" hidden>
+  <h2>A.3 划分数据集与交叉验证</h2>
+  <p class="sub">你的分数可信吗，取决于这一步。</p>
+  <h3>三份数据各管什么</h3>
+  <div class="scroll"><table>
+    <tr><th>集合</th><th>用途</th></tr>
+    <tr><td>训练集</td><td>拟合参数</td></tr>
+    <tr><td>验证集</td><td>选超参数、选模型，可以反复看</td></tr>
+    <tr><td>测试集</td><td>最后只评估一次，估计真实表现</td></tr>
+  </table></div>
+  <h3>K 折交叉验证</h3>
+  <ol>
+    <li>打乱下标，平均分成 k 份。</li>
+    <li>轮流取其中 1 份当验证集，其余 k−1 份训练。</li>
+    <li>k 个验证分数取平均（再看一下标准差），数据少时比单次划分稳定。</li>
+  </ol>
+<pre><code>idx = rng.permutation(n)
+parts = np.array_split(idx, k)         # 大小最多相差 1
+val_i = parts[i];  train_i = 其余拼接</code></pre>
+  <h3>常见坑</h3>
+  <ol class="q">
+    <li>X 和 y 必须用同一组下标，否则标签错位，模型像在学随机噪声。</li>
+    <li>固定 seed，结果才可复现；判分常依赖这一点。</li>
+    <li>分类且类别不平衡时用分层抽样（stratified），让每份里的类别比例接近整体。</li>
+    <li>时间序列不能随机打乱：只能用过去预测未来，按时间切分。</li>
+    <li>先划分，再做标准化/特征选择。顺序反了就是泄漏（见 A.2）。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. 划分大小的约定。</b>scikit-learn 的 <code>train_test_split</code> 内部是 <code>n_test = ceil(test_size × n_samples)</code>；只给 test_size 时 <code>n_train = n_samples − n_test</code>（给了 train_size 则取 floor）。本题的判题采用同样的约定，所以 n=10、test_size=0.25 时测试集是 3 个。</p>
+  <p><b>2. K 折的大小。</b>scikit-learn 的 <code>KFold</code> 文档写明：前 <code>n_samples % n_splits</code> 折的大小是 <code>n_samples // n_splits + 1</code>，其余折是 <code>n_samples // n_splits</code>。<code>np.array_split</code> 的切法与此一致。</p>
+  <p><b>3. 几种常用的划分方式。</b></p>
+  <ul>
+    <li><b>分层（Stratified）</b>：每折里各类别比例接近整体，用于分类，尤其是类别不平衡时。</li>
+    <li><b>分组（Group）</b>：同一个用户/病人的样本只能整体落在训练或验证一边，否则会泄漏。</li>
+    <li><b>时间序列</b>：只能用过去预测未来，按时间先后切分，不能随机打乱。</li>
+  </ul>
+  <p><b>4. 泄漏的几种来源。</b>预处理在全量数据上 fit；特征选择在全量数据上做；重复样本跨越训练和测试；用了未来的信息；特征里混入了由目标衍生的信息。</p>
+  <p><b>5. 同时选超参数又要评估。</b>如果用交叉验证的分数选了最好的超参，这个分数就带有乐观偏差。更严格的做法是嵌套交叉验证，或留出一个从未参与选择的测试集。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>k 折里 k 取多大？常见 5 或 10。k 大：每次训练数据多，偏差小，但计算量大、折之间相关；k 小则相反。</li>
+    <li>数据很少怎么办？用交叉验证，并报告均值和标准差，而不是单次划分的数字。</li>
+    <li>为什么要固定随机种子？保证划分可复现，方便比较不同模型。</li>
+    <li>时间序列为什么不能 K 折随机打乱？会用“未来”的数据去预测“过去”，评估结果虚高。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/model_selection/_split.py" target="_blank" rel="noopener">scikit-learn：model_selection/_split.py</a> <span class="sub">（n_test = ceil(test_size·n)；KFold 前 n % k 折多一个样本）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/doc/modules/cross_validation.rst" target="_blank" rel="noopener">scikit-learn：交叉验证文档</a> <span class="sub">（训练/验证/测试三分法、泄漏的说明）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/a3_splits.py
+实现  train_test_split · k_fold_indices
+核验  python study/board.py check A.3</code></pre>
+  <div class="next"><button class="btn ghost" data-go="a2">← A.2</button><button class="btn" data-go="a4">A.4 线性回归 →</button></div>
+</section>
+
+<!-- ============ A.4 ============ -->
+<section id="a4" data-title="A.4 线性回归" hidden>
+  <h2>A.4 线性回归、岭回归与梯度下降</h2>
+  <p class="sub">最基础的模型，也是最常考的“从零实现”。</p>
+  <h3>模型与损失</h3>
+<pre><code>ŷ = X w + b                 MSE = (1/n) Σ (ŷ − y)²</code></pre>
+  <h3>两种解法</h3>
+  <p><b>解析解（正规方程）。</b>给 X 拼一列 1 吸收截距，得到 Xb；令梯度为 0：</p>
+<pre><code>(XbᵀXb) θ = Xbᵀ y        # 用 np.linalg.lstsq 或 solve，不要手写求逆</code></pre>
+  <p><b>梯度下降。</b>每步沿负梯度走一小步：</p>
+<pre><code>e = X w + b − y
+w ← w − lr · (2/n) Xᵀ e
+b ← b − lr · (2/n) Σ e</code></pre>
+  <h3>岭回归（L2 正则）</h3>
+<pre><code>损失 = ‖y − Xw‖² + α‖w‖²       （平方误差之和，与 scikit-learn 的 Ridge 一致）
+解：(XbᵀXb + αI) θ = Xbᵀ y      （I 中对应截距的那一项设为 0）</code></pre>
+  <p>α 越大，权重越小、模型越简单：方差降、偏差升。共线特征多时，正则还能让 XᵀX 可逆，解更稳。</p>
+  <h3>偏差与方差</h3>
+  <div class="scroll"><table>
+    <tr><th></th><th>训练误差</th><th>验证误差</th><th>处理</th></tr>
+    <tr><td>欠拟合（高偏差）</td><td>高</td><td>高</td><td>更复杂的模型、更多特征</td></tr>
+    <tr><td>过拟合（高方差）</td><td>低</td><td>高</td><td>更多数据、正则、简化模型</td></tr>
+  </table></div>
+  <h3>常见坑</h3>
+  <ol class="q">
+    <li>截距不要被惩罚；惩罚它等于强迫模型过原点。</li>
+    <li>梯度下降不收敛时，先怀疑学习率太大或特征没缩放（A.2）。</li>
+    <li>w 的形状是 <code>(d,)</code>，b 是标量；返回顺序按题目约定。</li>
+    <li>直接求逆 <code>inv(XᵀX)</code> 在共线时会爆，用 <code>lstsq</code>。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. 先把岭回归的公式对齐。</b>scikit-learn 的 <code>Ridge</code> 最小化的是</p>
+<pre><code>‖y − Xw‖² + α‖w‖²           （平方误差之和，不是均值）</code></pre>
+  <p>对应的正规方程是 <code>(XᵀX + αI) w = Xᵀy</code>（带截距时 I 的对应项设为 0）。如果你的损失写成<b>均值</b> MSE，那么等价的正则系数是 <code>α/n</code>。题目里的判题只比较“α=0 时与普通最小二乘一致”和“α 变大权重变小”，两种写法都能通过，但要和自己的公式保持一致。</p>
+  <p><b>2. 截距不被惩罚。</b>scikit-learn 在 <code>fit_intercept=True</code> 时会先对 X 和 y 做中心化（内部调用 <code>_preprocess_data</code>），再解带惩罚的问题，所以截距不受惩罚。</p>
+  <p><b>3. 为什么 α&gt;0 一定可解。</b>XᵀX 半正定；加上 αI 后是正定的，必然可逆。当特征共线或样本数少于特征数时，普通最小二乘的解不唯一，而岭回归有唯一解。</p>
+  <p><b>4. 概率解释。</b>假设噪声是高斯的，最小二乘就是最大似然；再给权重加一个高斯先验，得到的就是岭回归（最大后验）。</p>
+  <p><b>5. 梯度下降的学习率范围。</b>MSE 的 Hessian 是 <code>2XᵀX/n</code>。学习率超过 <code>1/λ_max(XᵀX/n)</code> 就会发散。这就是为什么特征没缩放、量级差很大时，梯度下降很难调。</p>
+  <p><b>6. 评估。</b>除了 MSE，还常用 <code>R² = 1 − SS_res/SS_tot</code>：它衡量模型比“始终预测均值”好多少。残差图可以发现非线性或异方差。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>样本数小于特征数时，最小二乘会怎样？XᵀX 不可逆，解不唯一；用正则（岭回归）或降维。</li>
+    <li>L1（Lasso）和 L2（岭）的区别？L1 倾向产生稀疏解、没有闭式解；L2 收缩权重、有闭式解。</li>
+    <li>多重共线性有什么表现？系数估计很不稳定，符号和大小随数据微小变化而剧烈变化；岭回归能缓解。</li>
+    <li>为什么线性回归用 MSE？在高斯噪声假设下，它就是最大似然。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/linear_model/_ridge.py" target="_blank" rel="noopener">scikit-learn：linear_model/_ridge.py</a> <span class="sub">（目标函数 ‖y−Xw‖² + α‖w‖²；fit 前先 _preprocess_data 中心化）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/a4_linreg.py
+实现  mse · linear_regression · ridge_regression · gradient_descent_linreg
+核验  python study/board.py check A.4</code></pre>
+  <div class="next"><button class="btn ghost" data-go="a3">← A.3</button><button class="btn" data-go="a5">A.5 逻辑回归 →</button></div>
+</section>
+
+<!-- ============ A.5 ============ -->
+<section id="a5" data-title="A.5 逻辑回归" hidden>
+  <h2>A.5 逻辑回归</h2>
+  <p class="sub">线性模型 + sigmoid，二分类的基准线。</p>
+  <h3>模型与损失</h3>
+<pre><code>p = σ(X w + b),   σ(z) = 1 / (1 + e^−z)
+log_loss = −mean( y·log p + (1−y)·log(1−p) )</code></pre>
+  <h3>梯度（值得背下来）</h3>
+<pre><code>∂L/∂w = Xᵀ (p − y) / n  (+ l2 · w)
+∂L/∂b = mean(p − y)</code></pre>
+  <p>它和线性回归的梯度长得一样，只是残差变成了 <code>p − y</code>。这是 sigmoid 配交叉熵的结果。</p>
+  <h3>数值稳定</h3>
+  <ul>
+    <li>sigmoid：<code>z</code> 很负时 <code>e^−z</code> 会溢出。分段写：z≥0 用 <code>1/(1+e^−z)</code>，z&lt;0 用 <code>e^z/(1+e^z)</code>。</li>
+    <li>log_loss：先把 p 夹到 <code>[1e-12, 1−1e-12]</code>，避免 <code>log(0)</code>。</li>
+  </ul>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>线性可分时，不加正则的权重会无限增大。L2 的作用之一就是让它有限。</li>
+    <li>决策边界是 <code>w·x + b = 0</code>，是一条直线（超平面）。</li>
+    <li>阈值 0.5 不是神圣的。类别不平衡或代价不对称时要调整。</li>
+    <li>多分类怎么推广？softmax + 交叉熵（见仓库的 Softmax 题）。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. 交叉熵从哪来。</b>把 y 看作伯努利变量、概率为 p，对数似然是 <code>y·log p + (1−y)·log(1−p)</code>，取负号就是 log loss。再对 w 求导，因为 <code>σ'(z) = σ(z)(1−σ(z))</code> 恰好与交叉熵里的分母抵消，剩下 <code>(p − y)·x</code>，非常简洁。</p>
+  <p><b>2. 数值稳定的 log loss。</b>直接算 <code>log(σ(z))</code> 在 z 很负时会下溢。用等价的写法（z 是 logit，y∈{0,1}）：</p>
+<pre><code>loss = max(z, 0) − z·y + log(1 + exp(−|z|))</code></pre>
+  <p>它对任意大的 |z| 都稳定，深度学习框架里的“带 logits 的二元交叉熵”就是这样实现的。本题允许先算概率再 clip。</p>
+  <p><b>3. 正则化的写法差异。</b>scikit-learn 的 <code>LogisticRegression</code> 用参数 <code>C</code>，文档说明它是“正则化强度的倒数”，更小的 C 意味着更强的正则，<code>C=np.inf</code> 即不正则。而本题的 <code>l2</code> 是直接作用在“均值损失”上的系数。若把目标写成“均值交叉熵 + (l2/2)·‖w‖²”，它与 sklearn 的 C 大致是 <code>l2 = 1/(C·n)</code> 的关系（这是我按常见的目标函数写法推导的，换算前请对照文档里的目标函数）。</p>
+  <p><b>4. 线性可分时。</b>不加正则时，权重会一直增大让损失趋于 0，永远不收敛到有限值；加 L2 或提前停止可以避免。</p>
+  <p><b>5. 为什么分类不用 MSE。</b>配合 sigmoid 时 MSE 不是凸的，且预测很错但很自信时梯度会饱和；交叉熵的梯度 <code>p − y</code> 在错得越多时越大。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>决策边界是什么形状？<code>w·x + b = 0</code>，一个超平面。想要弯曲的边界，需要构造多项式/交叉特征，或换成非线性模型。</li>
+    <li>类别不平衡怎么办？调类别权重、重采样、改阈值，并用 PR/AUC 评估（见 A.1）。</li>
+    <li>多分类怎么做？softmax 回归（多项式逻辑回归），或者一对多（OvR）。</li>
+    <li>输出的概率可信吗？不一定校准；需要时做校准（如 Platt scaling、等温回归）。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/linear_model/_logistic.py" target="_blank" rel="noopener">scikit-learn：linear_model/_logistic.py</a> <span class="sub">（C 是正则强度的倒数，C=inf 即无正则）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/a5_logreg.py
+实现  sigmoid · log_loss · predict_proba · fit_logistic
+核验  python study/board.py check A.5</code></pre>
+  <div class="next"><button class="btn ghost" data-go="a4">← A.4</button><button class="btn" data-go="a6">A.6 KNN →</button></div>
+</section>
+
+<!-- ============ A.6 ============ -->
+<section id="a6" data-title="A.6 KNN" hidden>
+  <h2>A.6 K 近邻（KNN）</h2>
+  <p class="sub">没有训练过程的模型：预测就是“找最像的 k 个，投票”。</p>
+  <h3>算法</h3>
+  <ol>
+    <li>对每个测试点，算它到所有训练点的距离。</li>
+    <li>取距离最小的 k 个。</li>
+    <li>分类：多数表决；回归：取均值。</li>
+  </ol>
+<pre><code>D = ((X_test[:, None, :] − X_train[None, :, :]) ** 2).sum(-1)   # (n_test, n_train)
+nn = np.argsort(D, axis=1)[:, :k]                                # 最近 k 个的下标</code></pre>
+  <p>比较远近只需要平方距离，不必开方。</p>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>k 小：边界复杂、方差大，容易过拟合；k 大：边界平滑、偏差大。用交叉验证（A.3）选 k。</li>
+    <li>必须缩放特征（A.2），否则量级大的特征会主导距离。</li>
+    <li>高维下“距离”会失去区分度（维度灾难）。</li>
+    <li>复杂度：预测 O(n_train · d) 每个点，数据大时需要 KD-tree 或近似最近邻。</li>
+    <li>平票怎么办？约定一个确定的规则（例如取最小标签），否则结果不可复现。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. 平票要显式约定。</b>scikit-learn 的 KNN 文档里有一条警告：如果第 k 个和第 k+1 个近邻的距离相同但标签不同，结果会取决于训练数据的顺序。所以笔试里一定要照题目约定（本题是平票取最小标签），否则结果不可复现。</p>
+  <p><b>2. 加速结构。</b>scikit-learn 的 <code>algorithm</code> 参数有 <code>auto</code>、<code>ball_tree</code>、<code>kd_tree</code>、<code>brute</code>。低维时树结构有效，高维时往往退化成暴力搜索。<code>weights</code> 参数可选 <code>uniform</code>（等权）或 <code>distance</code>（按距离倒数加权）。</p>
+  <p><b>3. 用矩阵乘法算距离。</b>展开平方距离：</p>
+<pre><code>‖a − b‖² = ‖a‖² + ‖b‖² − 2 a·b      →  D = |A|²[:,None] + |B|²[None,:] − 2 A Bᵀ</code></pre>
+  <p>这样不需要创建 <code>(n_test, n_train, d)</code> 的三维数组。数值误差可能让个别结果出现很小的负数，需要 <code>clip(min=0)</code>。n 很大时，即使是 <code>(n_test, n_train)</code> 的距离矩阵也会占很多内存，要按批处理测试点。</p>
+  <p><b>4. 高维。</b>高维空间里点与点的距离常常变得相近，“最近”与“最远”的区别变小，KNN 的效果通常随维度升高而下降。先降维或做特征选择往往有用。</p>
+  <p><b>5. 回归版。</b>对 k 个近邻的目标值取（加权）平均。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>k 取大取小各有什么后果？k=1 时训练误差为 0、边界很碎（高方差）；k 越大越平滑、偏差越大。用交叉验证选。</li>
+    <li>二分类时 k 为什么常取奇数？避免平票。</li>
+    <li>为什么 KNN 必须做特征缩放？距离被量级大的特征主导。</li>
+    <li>KNN 的训练和预测代价？训练几乎为零（只存数据），预测每个点要和全部训练点比较。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/neighbors/_classification.py" target="_blank" rel="noopener">scikit-learn：neighbors/_classification.py</a> <span class="sub">（平票时结果取决于训练数据顺序的警告；algorithm 与 weights 参数）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/a6_knn.py
+实现  knn_predict(X_train, y_train, X_test, k)
+核验  python study/board.py check A.6</code></pre>
+  <div class="next"><button class="btn ghost" data-go="a5">← A.5</button><button class="btn" data-go="a7">A.7 决策树 →</button></div>
+</section>
+
+<!-- ============ A.7 ============ -->
+<section id="a7" data-title="A.7 决策树" hidden>
+  <h2>A.7 决策树：找最好的一次划分</h2>
+  <p class="sub">整棵树只是把“最好的一次划分”递归地用下去。</p>
+  <h3>基尼不纯度</h3>
+<pre><code>Gini(y) = 1 − Σ_c p_c²
+纯节点 = 0；二分类各一半 = 0.5</code></pre>
+  <h3>划分的增益</h3>
+<pre><code>Gain = Gini(父) − (n_L/n)·Gini(左) − (n_R/n)·Gini(右)</code></pre>
+  <h3>找最好的划分</h3>
+  <ol>
+    <li>对每个特征，把取值排序、去重。</li>
+    <li>相邻两个不同取值的<b>中点</b>就是候选阈值。</li>
+    <li>规则：<code>x ≤ 阈值</code> 进左子树，其余进右子树。</li>
+    <li>选增益最大的 (特征, 阈值)。已纯或没法划分就返回 (None, None, 0)。</li>
+  </ol>
+  <p>也可以用信息熵 <code>−Σ p log p</code> 代替基尼；两者结果通常接近。</p>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>不限制深度的树能把训练集分到全纯：训练误差为 0，几乎必定过拟合。要用 <code>max_depth</code>、最小叶子样本数、剪枝来控制。</li>
+    <li>树对特征缩放不敏感，能处理非线性和特征交互，但单棵树方差大。</li>
+    <li>随机森林 = 许多棵在自助采样 + 随机特征子集上训练的树的投票，主要降低方差。</li>
+    <li>梯度提升 = 一棵接一棵地拟合前面所有树的残差，主要降低偏差。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. 默认准则。</b>scikit-learn 的 <code>DecisionTreeClassifier</code> 的 <code>criterion</code> 可选 <code>"gini"</code>、<code>"entropy"</code>、<code>"log_loss"</code>，默认是 <code>"gini"</code>。</p>
+  <p><b>2. 树的几个固有特点。</b>scikit-learn 的决策树文档里列出：</p>
+  <ul>
+    <li>树容易<b>过拟合</b>：生成过于复杂、泛化差的树，需要用最大深度、叶子最小样本数等机制来控制。</li>
+    <li>树<b>不稳定</b>：数据的小变化可能得到完全不同的树，需要用集成方法来缓解。</li>
+    <li>学习最优决策树被证明是 <b>NP 完全</b>的，所以实际算法是贪心的：每个节点做局部最优的选择，不保证得到全局最优的树。</li>
+  </ul>
+  <p><b>3. 本题的朴素实现与高效实现。</b>本题的参考写法对每个候选阈值都重新统计左右两边，总代价约 O(n²·d)。高效做法：对每个特征先排序，再沿排序顺序一边扫描一边累加各类别的计数，每个阈值 O(1) 更新，总计 O(n log n · d)。数据一大，这个区别就是能否通过时间限制的关键。</p>
+  <p><b>4. 回归树。</b>把不纯度换成方差（MSE），叶子输出该叶子里目标的均值。</p>
+  <p><b>5. 集成。</b>随机森林：在自助采样（bootstrap）和随机特征子集上训练许多棵树，投票/平均，主要降低方差。梯度提升：一棵接一棵地拟合前面模型的残差，主要降低偏差。</p>
+  <p><b>6. 特征重要性的一个坑。</b>基于不纯度下降的特征重要性，容易偏向取值很多的特征（如 ID 类字段）。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>基尼和熵有什么区别？两者的不纯度曲线形状相近，实践中得到的树通常差不多。</li>
+    <li>怎么防止过拟合？限制深度、最小叶子样本数、预剪枝/后剪枝，或者用集成。</li>
+    <li>树对特征缩放敏感吗？不敏感，只依赖排序。</li>
+    <li>为什么阈值取相邻取值的中点？任何落在两个相邻取值之间的阈值给出的划分都相同，中点是个自然的选择。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/tree/_classes.py" target="_blank" rel="noopener">scikit-learn：tree/_classes.py</a> <span class="sub">（criterion 的选项与默认值 gini）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/doc/modules/tree.rst" target="_blank" rel="noopener">scikit-learn：决策树文档（tree.rst）</a> <span class="sub">（过拟合、不稳定、NP 完全与贪心算法、CART）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/a7_tree.py
+实现  gini · best_split
+核验  python study/board.py check A.7</code></pre>
+  <div class="next"><button class="btn ghost" data-go="a6">← A.6</button><button class="btn" data-go="a8">A.8 PCA →</button></div>
+</section>
+
+<!-- ============ A.8 ============ -->
+<section id="a8" data-title="A.8 PCA" hidden>
+  <h2>A.8 主成分分析（PCA）</h2>
+  <p class="sub">找方差最大的方向，用更少的维度保留更多信息。</p>
+  <h3>步骤</h3>
+  <ol>
+    <li>每列减去均值：<code>Xc = X − mean</code>。</li>
+    <li>协方差矩阵 <code>C = XcᵀXc / n</code>，形状 (d, d)，对称。</li>
+    <li>特征分解 <code>C v = λ v</code>，用 <code>np.linalg.eigh</code>（它返回升序，要翻转）。</li>
+    <li>特征向量就是主成分，特征值 λ 就是该方向上的方差。</li>
+    <li>取前 k 个：<code>投影 = Xc @ components.T</code>。</li>
+  </ol>
+<pre><code>解释方差比_j = λ_j / Σ λ
+还原：X ≈ 投影 @ components + mean</code></pre>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li>为什么要先中心化？不中心化，第一主成分会被“均值方向”占据。</li>
+    <li>主成分的符号是任意的（v 和 −v 等价）。判分时要用与符号无关的性质来比较。</li>
+    <li>PCA 对特征量级敏感：量级不同时，先标准化（A.2）。</li>
+    <li>取满 d 个成分时应能无损还原；k 越小，信息损失越大。</li>
+    <li>等价说法：对 <code>Xc</code> 做 SVD，右奇异向量就是主成分，λ = σ²/n。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. 与 SVD 的关系。</b>对中心化后的数据做奇异值分解 <code>Xc = U Σ Vᵀ</code>：Vᵀ 的行就是主成分，第 j 个主成分上的方差是 <code>σ_j²/n</code>（用 n−1 则是样本方差），投影结果是 <code>U Σ</code>（等于 <code>Xc V</code>）。scikit-learn 的 PCA 文档写明它用的是“数据的奇异值分解”，并且<b>输入会被中心化，但不会按特征缩放</b>。</p>
+  <p><b>2. 方差的分母。</b>scikit-learn 的实现里有 <code>explained_variance_ = (S**2) / (n_samples − 1)</code>，即用的是 n−1。本题按 n 计算，只影响方差的数值，不影响<b>解释方差比</b>。</p>
+  <p><b>3. 符号是任意的。</b>主成分 v 和 −v 是同一个方向。scikit-learn 在代码里专门用 <code>svd_flip</code> 对符号做约定（注释写的是“flip eigenvectors' sign to enforce deterministic output”）。这就是为什么本题的判题用“与符号无关”的性质（正交性、投影方差、重构误差）。</p>
+  <p><b>4. 重建误差。</b>丢掉的那些特征值之和，就是平均重建误差的平方。取满 d 个成分则可以无损还原。</p>
+  <p><b>5. 选多少个成分。</b>看累计解释方差比（例如保留 90%–95%），或看碎石图（特征值的下降曲线）的拐点。</p>
+  <p><b>6. 复杂度。</b>对 d×d 协方差矩阵做特征分解是 O(d³)；当 d 远大于 n 时，可以改为分解 n×n 的 Gram 矩阵，或对数据矩阵直接做（截断）SVD。</p>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>PCA 是监督还是无监督？无监督，只看特征的方差，不看标签。方差大不等于对分类有用。</li>
+    <li>为什么先标准化？PCA 对尺度敏感，量级大的特征会主导主成分。</li>
+    <li>PCA 能处理非线性结构吗？不能，它是线性的；非线性可以用核 PCA、t-SNE、UMAP 等。</li>
+    <li>主成分是怎么互相“正交”的？它们是对称矩阵的不同特征值对应的特征向量，天然正交。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/decomposition/_pca.py" target="_blank" rel="noopener">scikit-learn：decomposition/_pca.py</a> <span class="sub">（基于 SVD、输入中心化但不缩放、svd_flip 确定符号、explained_variance_ = S²/(n−1)）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/a8_pca.py
+实现  pca(X, n_components) → (components, explained_variance_ratio, projected)
+核验  python study/board.py check A.8</code></pre>
+  <div class="next"><button class="btn ghost" data-go="a7">← A.7</button><button class="btn" data-go="a9">A.9 pandas →</button></div>
+</section>
+
+<!-- ============ A.9 ============ -->
+<section id="a9" data-title="A.9 pandas" hidden>
+  <h2>A.9 pandas 数据处理</h2>
+  <p class="sub">数据类题目的核心工具：分组、连接、填充。</p>
+  <h3>常用操作</h3>
+<pre><code>df.groupby("g")["x"].agg(["sum", "count"]).reset_index()   # 分组聚合
+df.groupby("g")["x"].transform("mean")                      # 结果与原表等长，便于填充
+df.sort_values("x", ascending=False).groupby("g").head(k)   # 每组前 k
+a.merge(b, on="key", how="left")                            # 左连接
+df["x"].fillna(value)    df.dropna(subset=["x"])            # 缺失值
+df.copy()                                                   # 修改前先复制</code></pre>
+  <h3>要想清楚</h3>
+  <ol class="q">
+    <li><code>how="left"</code> 保留左表所有行；右表没匹配到的列是 NaN。<code>groupby</code> 默认会丢掉分组键为 NaN 的行。</li>
+    <li><code>agg</code> 返回的是以分组键为索引的表，要 <code>reset_index()</code> 才能让分组键变回一列。</li>
+    <li><code>transform</code> 和 <code>agg</code> 的区别：前者保持原行数，后者每组一行。</li>
+    <li>链式赋值（<code>df[df.a&gt;0]["b"] = 1</code>）在 pandas 3.0 起永远不会生效，更早的版本里不可预测；统一用 <code>.loc</code>。</li>
+    <li>能用向量化操作就别写 <code>apply</code> 加循环，慢几十倍。</li>
+  </ol>
+  <h3>深入一层</h3>
+  <p><b>1. transform 与 agg。</b>pandas 的用户指南定义：transformation 是一种 GroupBy 操作，它的结果与被分组的对象<b>有相同的索引</b>（例如 <code>cumsum</code>、<code>diff</code>）。<code>agg</code> 则是每组一行。所以“用同组均值填缺失”要用 <code>transform</code>。</p>
+  <p><b>2. 分组键里的 NaN。</b>指南写明：默认情况下，<code>groupby</code> 会把 NA 值从分组键里排除；想保留要传 <code>dropna=False</code>。所以左连接后没有匹配上国家的订单，在按 country 聚合时会被丢掉，这正是本题判题期望的行为。</p>
+  <p><b>3. 链式赋值。</b>pandas 的指南写明：从 pandas 3.0 起 Copy-on-Write 是默认行为，这意味着<b>链式索引赋值永远不会生效</b>（即 <code>df[df.a &gt; 0]["b"] = 1</code> 改不到原表）。在更早的版本里，它是否生效取决于内部是视图还是副本，行为不可预测。统一的安全写法是用 <code>.loc</code>：</p>
+<pre><code>df.loc[df["a"] &gt; 0, "b"] = 1</code></pre>
+  <p><b>4. 合并要检查行数。</b>连接键有重复时（多对多），行数会成倍增长。合并前后核对行数，或使用 <code>merge</code> 的 <code>validate</code> 参数声明预期的关系（一对一、一对多等）。</p>
+  <p><b>5. 常见的笔试题型。</b></p>
+<pre><code>每组前 k      sort_values(...).groupby(g).head(k)      或 groupby(g)[v].nlargest(k)
+去重          drop_duplicates(subset=[...], keep="first")
+透视          pivot_table(index=..., columns=..., values=..., aggfunc=...)
+滚动窗口      df[col].rolling(window).mean()
+日期          pd.to_datetime(df[col])  之后用 .dt 访问年月日
+缺失统计      df.isna().sum()</code></pre>
+  <h3>面试常追问</h3>
+  <ol class="q">
+    <li>merge 的四种 how 有什么区别？inner 取交集，left/right 保留一侧全部，outer 取并集。</li>
+    <li>apply 为什么慢？它对每行/每组调用 Python 函数；能用向量化运算或内置聚合就不要用。</li>
+    <li>怎么找出重复的行？<code>df.duplicated(subset=...)</code>。</li>
+    <li>排序之后的 head 在相同值上怎么选？取决于排序是否稳定，需要确定性时加第二排序键。</li>
+  </ol>
+  <h3>资料与核对</h3>
+  <ul class="refs"><li><span class="pill">已核对</span><span><a href="https://github.com/pandas-dev/pandas/blob/main/doc/source/user_guide/groupby.rst" target="_blank" rel="noopener">pandas：groupby 用户指南</a> <span class="sub">（transform 的结果与原对象同索引；默认排除 NA 分组键，dropna=False 保留）</span></span></li><li><span class="pill">已核对</span><span><a href="https://github.com/pandas-dev/pandas/blob/main/doc/source/user_guide/indexing.rst" target="_blank" rel="noopener">pandas：indexing 用户指南</a> <span class="sub">（pandas 3.0 默认 Copy-on-Write，链式索引赋值永远不会生效）</span></span></li></ul>
+  <h3>提交</h3>
+  <pre><code>文件  study/submissions/a9_pandas.py
+实现  top_k_per_group · fill_group_mean · merge_and_aggregate
+核验  python study/board.py check A.9</code></pre>
+  <div class="next"><button class="btn ghost" data-go="a8">← A.8</button><button class="btn" data-go="board">去看板 →</button></div>
+</section>
+
+<!-- ============ TorchLeet 题库 ============ -->
+<section id="bank-llm" data-title="LLM 路径" data-track="llm-path" hidden></section>
+<section id="bank-basics" data-title="Basics" data-track="basics" hidden></section>
+<section id="bank-advanced" data-title="Advanced" data-track="advanced" hidden></section>
+
+<!-- ============ 看板 ============ -->
+<section id="board" data-title="看板" hidden>
+  <h2>提交与核验看板</h2>
+  <p class="note"><b>为什么不能在网页里直接运行：</b>页面的沙箱只能加载脚本，没有 PyTorch，也不能连到你的电脑。所以代码在你本机核验，每次核验会打印一行 <code>TL-RESULT</code>，把它粘贴到下面的框里，网页就会自动记录进度。</p>
+  <h3>提交流水线（网页里点“提交”）</h3>
+  <p>每道题和每节课下面都有“提交到流水线”：粘贴或上传你的 <code>.py</code>，点“提交核验”。代码会通过 Claude Code Remote 连接器发给<b>当前这个 Claude Code 会话</b>，我在一个隔离的子进程里跑判题（没有网络、清空环境变量、有超时），结果写回这个页面，并自动记入进度。</p>
+  <ul>
+    <li>第一次提交，claude.ai 会请你允许这个页面使用 <b>Claude Code Remote</b> 连接器，请选允许。</li>
+    <li>它依赖这个会话还在运行。会话休眠或结束后，提交会一直“等待中”，这时请回到会话里说一声，或用下面的本机命令。</li>
+    <li>每次提交是会话里的一轮对话，通常几十秒；需要代码里只保留定义，别在模块顶层跑训练。</li>
+  </ul>
+  <h3>环境（本机核验，只需一次）</h3>
+<pre><code>git fetch origin claude/intelligent-hamilton-zuyh27
+git checkout claude/intelligent-hamilton-zuyh27
+pip install torch numpy pandas</code></pre>
+  <p class="note"><b>注意：</b>请用 <code>python study/board.py</code> 运行。在仓库根目录直接 <code>import torch</code> 会被根目录的 <code>torch/</code> 题目文件夹遮住。</p>
+  <h3>命令</h3>
+<pre><code>python study/board.py                       # 终端里的进度看板
+python study/board.py check 1.1             # 第 1、2、3 节 / 应用 ML（1.x、2.x、3.x、A.1 ~ A.9）
+python study/board.py tl list basics        # TorchLeet 全题库
+python study/board.py tl init  lin-regression   # 生成桩文件
+python study/board.py tl check lin-regression   # 自动核验
+python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
+  <h3>粘贴核验结果</h3>
+  <div id="global-verify"></div>
+  <h3>题库进度</h3>
+  <div id="bank-progress"></div>
+  <h3>课程进度表 <span class="pill" id="prog">0 / 20</span></h3>
+  <div id="checks"></div>
+  <p class="sub" style="margin-top:12px">通过的结果也会写入本机 <code>~/.torchleet/progress.json</code>，终端看板以它为准。这里的进度只记在这个浏览器里；也可以手动勾选。</p>
+  <div class="next"><button class="btn ghost" data-go="attention">← 1.5</button><span></span></div>
+</section>
+</main>
+</div>
+
+<script type="application/json" id="bank">__PROBLEM_BANK_JSON__</script>
+<script>
+(function(){
+  var groups=[
+    {name:'总览',ids:['overview']},
+    {name:'第 1 节 Foundations',ids:['bpe','sinusoidal','rope','rmsnorm','attention']},
+    {name:'第 2 节 Core Transformer',ids:['mha','gqa','kvcache','swa']},
+    {name:'第 3 节 Full Model',ids:['arch','sblock','smodel']},
+    {name:'应用 ML',ids:['a0','a1','a2','a3','a4','a5','a6','a7','a8','a9']},
+    {name:'TorchLeet 题库',ids:['bank-llm','bank-basics','bank-advanced']},
+    {name:'看板',ids:['board']}];
+  var order=[].concat.apply([],groups.map(function(g){return g.ids}));
+  var lessons=[['bpe','1.1 BPE','s1_1_bpe.py'],['sinusoidal','1.2 Sinusoidal','s1_2_sinusoidal.py'],
+    ['rope','1.3 RoPE','s1_3_rope.py'],['rmsnorm','1.4 RMSNorm','s1_4_rmsnorm.py'],['attention','1.5 Attention','s1_5_attention.py'],
+    ['mha','2.1 Multi-Head Attention','s2_1_mha.py'],['gqa','2.2 Grouped Query Attention','s2_2_gqa.py'],['kvcache','2.3 KV Cache','s2_3_kvcache.py'],['swa','2.4 Sliding Window','s2_4_swa.py'],['sblock','3.2 RoPE+GQA 注意力块','s3_2_rope_gqa_block.py'],['smodel','3.3 组装完整 SmolLM','s3_3_smollm_model.py'],
+    ['a1','A.1 评估指标','a1_metrics.py'],['a2','A.2 数据预处理','a2_preprocess.py'],['a3','A.3 划分与交叉验证','a3_splits.py'],
+    ['a4','A.4 线性/岭回归','a4_linreg.py'],['a5','A.5 逻辑回归','a5_logreg.py'],['a6','A.6 KNN','a6_knn.py'],
+    ['a7','A.7 决策树划分','a7_tree.py'],['a8','A.8 PCA','a8_pca.py'],['a9','A.9 pandas','a9_pandas.py']];
+  var store={get:function(k){try{return localStorage.getItem(k)}catch(e){return null}},set:function(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+  var done={};try{done=JSON.parse(store.get('tl-done')||'{}')}catch(e){}
+
+  var tabsEl=document.getElementById('tabs'),grpEl=document.getElementById('groups');
+  function groupOf(id){for(var i=0;i<groups.length;i++)if(groups[i].ids.indexOf(id)>=0)return i;return 0}
+  function label(id){var t=document.getElementById(id).dataset.title;var st=lessonState(id);return (st==='done'?'<span class="done">\u2713</span> ':st==='part'?'<span class="done">\u25D0</span> ':'')+t}
+  function render(id){
+    var gi=groupOf(id);
+    grpEl.innerHTML='';
+    groups.forEach(function(g,i){
+      var b=document.createElement('button');b.className='tab';b.textContent=g.name;
+      b.setAttribute('aria-selected',i===gi);b.onclick=function(){go(g.ids[0])};grpEl.appendChild(b);
+    });
+    tabsEl.innerHTML='';
+    var ids=groups[gi].ids;
+    if(ids.length>1)ids.forEach(function(x){
+      var b=document.createElement('button');b.className='tab';b.setAttribute('role','tab');b.dataset.id=x;
+      b.innerHTML=label(x);b.setAttribute('aria-selected',x===id);b.onclick=function(){go(x)};tabsEl.appendChild(b);
+      if(x===id&&b.scrollIntoView)setTimeout(function(){b.scrollIntoView({inline:'center',block:'nearest'})},0);
+    });
+  }
+  function go(id){
+    if(order.indexOf(id)<0)id='overview';
+    order.forEach(function(x){document.getElementById(x).hidden=(x!==id)});
+    render(id);
+    if(location.hash!=='#'+id)history.replaceState(null,'','#'+id);
+    window.scrollTo(0,0);draw(id);
+  }
+  window.addEventListener('hashchange',function(){go(location.hash.slice(1))});
+  document.addEventListener('click',function(e){var g=e.target.closest('[data-go]');if(g)go(g.dataset.go)});
+
+  /* checklist built in progress module below */
+
+  /* ---- BPE stepper ---- */
+  var bv,bm;
+  function bInit(){
+    var words=document.getElementById('bpe-corpus').value.trim().split(/\s+/).filter(Boolean);bv={};bm=[];
+    words.forEach(function(w){var k=JSON.stringify(w.split('').concat(['</w>']));bv[k]=(bv[k]||0)+1});
+    bRender(null);document.getElementById('bpe-log').textContent='共 '+words.length+' 个词。点“合并下一步”。';
+  }
+  function bStats(){var p={};Object.keys(bv).forEach(function(k){var s=JSON.parse(k);for(var i=0;i<s.length-1;i++){var q=JSON.stringify([s[i],s[i+1]]);p[q]=(p[q]||0)+bv[k]}});return p}
+  function bRender(pair){
+    var out=document.getElementById('bpe-out');out.innerHTML='';
+    Object.keys(bv).forEach(function(k){
+      var s=JSON.parse(k),row=document.createElement('div');
+      s.forEach(function(x){var e=document.createElement('span');e.className='sym'+(pair&&x===pair?' m':'');e.textContent=x;row.appendChild(e)});
+      var c=document.createElement('span');c.className='cnt';c.textContent='× '+bv[k];row.appendChild(c);out.appendChild(row);
+    });
+  }
+  function bStep(){
+    var p=bStats(),best=null;
+    Object.keys(p).forEach(function(q){if(best===null||p[q]>p[best]||(p[q]===p[best]&&q<best))best=q});
+    if(best===null){document.getElementById('bpe-log').textContent='没有可合并的相邻对了。';return}
+    var pr=JSON.parse(best),nv={},merged=pr[0]+pr[1];
+    Object.keys(bv).forEach(function(k){
+      var s=JSON.parse(k),o=[],i=0;
+      while(i<s.length){if(i<s.length-1&&s[i]===pr[0]&&s[i+1]===pr[1]){o.push(merged);i+=2}else{o.push(s[i]);i++}}
+      var nk=JSON.stringify(o);nv[nk]=(nv[nk]||0)+bv[k];
+    });
+    bv=nv;bm.push(pr);bRender(merged);
+    document.getElementById('bpe-log').textContent='第 '+bm.length+' 次合并：('+pr[0]+', '+pr[1]+') → '+merged+'，该对加权频次 '+p[best];
+  }
+  document.getElementById('bpe-step').onclick=bStep;
+  document.getElementById('bpe-reset').onclick=bInit;
+  document.getElementById('bpe-corpus').onchange=bInit;
+  bInit();
+
+  /* ---- canvas helpers ---- */
+  function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+  function setup(c){var r=window.devicePixelRatio||1,w=c.clientWidth||640,h=w*c.height/c.width;
+    if(c._w!==w){c.width=w*r;c.height=h*r;c._w=w;c._h=h}
+    var x=c.getContext('2d');x.setTransform(r,0,0,r,0,0);x.clearRect(0,0,c._w,c._h);return [x,c._w,c._h]}
+
+  /* ---- PE heatmap ---- */
+  function drawPE(){
+    var c=document.getElementById('pe-canvas'),s=setup(c),x=s[0],W=s[1],H=s[2];
+    var d=+document.getElementById('pe-d').value,L=64,cw=W/d,ch=H/L,acc=cssv('--accent'),bg=cssv('--surface');
+    x.fillStyle=bg;x.fillRect(0,0,W,H);
+    for(var p=0;p<L;p++)for(var j=0;j<d;j++){
+      var i=Math.floor(j/2),w=1/Math.pow(10000,2*i/d),v=(j%2===0)?Math.sin(p*w):Math.cos(p*w);
+      x.globalAlpha=Math.abs(v);x.fillStyle=v>=0?acc:cssv('--warn');x.fillRect(j*cw,p*ch,cw+.5,ch+.5);
+    }
+    x.globalAlpha=1;
+  }
+  document.getElementById('pe-d').onchange=drawPE;
+
+  /* ---- RoPE ---- */
+  function drawRope(){
+    var m=+document.getElementById('rope-pos').value;
+    document.getElementById('rope-lab').textContent='m = '+m;
+    var c=document.getElementById('rope-canvas'),s=setup(c),x=s[0],W=s[1],H=s[2];
+    x.fillStyle=cssv('--surface');x.fillRect(0,0,W,H);
+    var th=[1,0.3,0.06],names=['θ₀ 高频','θ₁ 中频','θ₂ 低频'],cols=[cssv('--accent'),cssv('--warn'),cssv('--muted')];
+    var R=Math.min(H/2-20,W/6-14);
+    th.forEach(function(t,k){
+      var cx=W*(k+0.5)/3,cy=H/2,a=m*t;
+      x.strokeStyle=cssv('--line');x.lineWidth=1;x.beginPath();x.arc(cx,cy,R,0,6.283);x.stroke();
+      x.beginPath();x.moveTo(cx-R,cy);x.lineTo(cx+R,cy);x.moveTo(cx,cy-R);x.lineTo(cx,cy+R);x.stroke();
+      x.strokeStyle=cols[k];x.lineWidth=2.5;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+R*Math.cos(a),cy-R*Math.sin(a));x.stroke();
+      x.fillStyle=cols[k];x.beginPath();x.arc(cx+R*Math.cos(a),cy-R*Math.sin(a),4,0,6.283);x.fill();
+      x.fillStyle=cssv('--muted');x.font='12px '+cssv('--font-body');x.textAlign='center';
+      x.fillText(names[k]+'  mθ='+(a%(2*Math.PI)).toFixed(2),cx,H-6);
+    });
+  }
+  document.getElementById('rope-pos').oninput=drawRope;
+
+  /* ---- attention scaling ---- */
+  function randn(){var u=1-Math.random(),v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+  var seed=[];for(var i=0;i<12;i++){var z=[];for(var j=0;j<512;j++)z.push([randn(),randn()]);seed.push(z)}
+  function drawAtt(){
+    var d=+document.getElementById('att-d').value;document.getElementById('att-lab').textContent='d_k = '+d;
+    var sc=seed.map(function(z){var s=0;for(var j=0;j<d;j++)s+=z[j][0]*z[j][1];return s});
+    function sm(a){var m=Math.max.apply(null,a),e=a.map(function(v){return Math.exp(v-m)}),t=e.reduce(function(p,q){return p+q},0);return e.map(function(v){return v/t})}
+    var a=sm(sc),b=sm(sc.map(function(v){return v/Math.sqrt(d)}));
+    var c=document.getElementById('att-canvas'),s=setup(c),x=s[0],W=s[1],H=s[2];
+    x.fillStyle=cssv('--surface');x.fillRect(0,0,W,H);
+    function bars(arr,y0,col,label){
+      var bw=(W-60)/arr.length,h=H/2-34;
+      x.fillStyle=cssv('--muted');x.font='12px '+cssv('--font-body');x.textAlign='left';x.fillText(label,8,y0+12);
+      arr.forEach(function(v,i){x.fillStyle=col;var bh=Math.max(1,v*h);x.fillRect(30+i*bw+3,y0+h+14-bh,bw-6,bh)});
+    }
+    bars(a,4,cssv('--warn'),'不缩放，max 权重 '+Math.max.apply(null,a).toFixed(2));
+    bars(b,H/2+4,cssv('--accent'),'除以 √d_k，max 权重 '+Math.max.apply(null,b).toFixed(2));
+  }
+  document.getElementById('att-d').oninput=drawAtt;
+
+
+  /* ================= results, widgets, checklist ================= */
+  var pidMap={bpe:'byte-pair-encoder',sinusoidal:'sinusoidal-positional-embedding',rope:'rotary-positional-embedding',
+    rmsnorm:'rms-norm',attention:'implement-attention-from-scratch',a1:'a1-metrics',a2:'a2-preprocess',a3:'a3-splits',
+    sblock:'smollm',smodel:'s3-smollm-model',mha:'multi-head-attention',gqa:'grouped-query-attention',kvcache:'kv-cache',swa:'sliding-window-attention',a4:'a4-linreg',a5:'a5-logreg',a6:'a6-knn',a7:'a7-tree',a8:'a8-pca',a9:'a9-pandas'};
+  var results={};try{results=JSON.parse(store.get('tl-results')||'{}')}catch(e){}
+  function stat(pid){
+    var r=results[pid];if(!r)return 'none';
+    if(r.t>0&&r.p===r.t&&!r.s)return 'done';
+    if(r.p>0&&r.p+(r.s||0)===r.t)return 'part';
+    return 'fail';
+  }
+  function lessonState(id){var st=pidMap[id]?stat(pidMap[id]):'none';return st!=='none'&&st!=='fail'?st:(done[id]?'done':'none')}
+  function statText(pid){
+    var r=results[pid];if(!r)return '尚未核验';
+    var base=r.p+' / '+r.t+(r.s?'（'+r.s+' 项在本机无法验证）':'');
+    return (stat(pid)==='done'?'已通过 ':stat(pid)==='part'?'部分通过 ':'最近一次 ')+base;
+  }
+  function ingest(text){
+    var re=/TL-RESULT\s+(\S+)\s+(\d+)\/(\d+)(?:\s+skip=(\d+))?/g,m,got=[];
+    while((m=re.exec(text))){results[m[1]]={p:+m[2],t:+m[3],s:+(m[4]||0),ts:Date.now()};got.push(m[1])}
+    if(got.length){store.set('tl-results',JSON.stringify(results));refreshAll()}
+    return got;
+  }
+  var widgets=[],wid=0;
+  function mkPaste(pid){
+    var w=document.createElement('div');w.className='verify';var id='vt-'+(++wid);
+    w.innerHTML='<div class="vhead"><b>本机核验结果</b><span class="pill vst"></span></div>'+
+      '<p class="sub" style="margin:4px 0 8px">在本机运行核验命令后，把终端里以 <code>TL-RESULT</code> 开头的那一行（或整段输出）粘贴到这里。</p>'+
+      '<textarea id="'+id+'" rows="2" spellcheck="false" placeholder="TL-RESULT '+(pid||'题目id')+' 5/5"></textarea>'+
+      '<div class="row"><button class="btn">记录结果</button><span class="sub vmsg"></span></div>';
+    var ta=w.querySelector('textarea'),msg=w.querySelector('.vmsg');
+    w.querySelector('button').onclick=function(){
+      var got=ingest(ta.value);
+      if(!got.length){msg.textContent='没有找到 TL-RESULT 行，请复制终端里的那一行。';return}
+      ta.value='';msg.textContent='已记录：'+got.join('、')+(pid&&got.indexOf(pid)<0?'（注意：这不是本题的结果）':'');
+    };
+    var rec={el:w,pid:pid,upd:function(){var st=w.querySelector('.vst');if(!pid){st.hidden=true;return}
+      var k=stat(pid);st.className='pill vst '+(k==='done'?'ok':k==='none'?'':'pt');st.textContent=statText(pid)}};
+    widgets.push(rec);rec.upd();return w;
+  }
+  function refreshAll(){
+    render(location.hash.slice(1)||'overview');
+    widgets.forEach(function(w){w.upd()});
+    Array.prototype.forEach.call(document.querySelectorAll('[data-cstat]'),function(e){
+      var k=stat(e.dataset.cstat);e.className='pill cs '+(k==='done'?'ok':k==='none'?'':'pt');
+      e.textContent=k==='done'?'✓ 通过':k==='part'?'◐ 部分':k==='fail'?'未通过':'';e.hidden=k==='none';
+    });
+    renderChecks();renderProgress();
+  }
+
+  /* ================= submit pipeline ================= */
+  var SESSION='__SESSION_ID__',CCR='Claude Code Remote',MAXCODE=40000;
+  var pending={};try{pending=JSON.parse(store.get('tl-pending')||'{}')}catch(e){}
+  var subViews={},unsubs={};
+  function savePending(){store.set('tl-pending',JSON.stringify(pending))}
+  var stIcon={pass:'✅',fail:'❌',skip:'–'};
+  function showResult(el,r){
+    el.innerHTML='';
+    var head=document.createElement('div'),k=r.status;
+    var cls=k==='pass'?'ok':k==='partial'?'pt':'bad';
+    var txt={pass:'全部通过',partial:'部分通过',fail:'未通过',error:'出错',timeout:'超时'}[k]||k;
+    head.innerHTML='<span class="pill '+cls+'">'+txt+'</span> <span class="sub">'+(r.total?r.passed+' / '+r.total+' 项':'')+(r.seconds!=null?' · 用时 '+r.seconds+' 秒':'')+'</span>';
+    el.appendChild(head);
+    if(r.error){var e=document.createElement('div');e.className='err';e.textContent=r.error;e.style.marginTop='8px';el.appendChild(e)}
+    if(r.checks&&r.checks.length){
+      var ul=document.createElement('ul');
+      r.checks.forEach(function(c){var li=document.createElement('li');li.textContent=(stIcon[c.status]||'')+' '+c.name+(c.detail?' — '+c.detail:'');ul.appendChild(li)});
+      el.appendChild(ul);
+    }
+    if(r.log&&r.log.trim()){var d=document.createElement('details');d.className='manual';var sm=document.createElement('summary');sm.textContent='你的代码的输出';
+      var pre=document.createElement('pre');pre.textContent=r.log;d.appendChild(sm);d.appendChild(pre);el.appendChild(d)}
+  }
+  function watchSub(subId,pid,el,msgEl){
+    if(unsubs[subId])return;
+    claude.use('db').then(function(db){
+      if(!db){msgEl.textContent='结果通道不可用（页面未获得 db 权限）。';return}
+      var timer=setTimeout(function(){msgEl.textContent='还没收到结果。会话可能在休眠或正忙；结果出来后会自动出现在这里，你也可以稍后刷新页面。'},180000);
+      unsubs[subId]=db.doc('results/'+subId).onSnapshot(function(snap){
+        if(!snap.exists)return;
+        clearTimeout(timer);var r=snap.data();
+        msgEl.textContent='';showResult(el,r);
+        if(r.problem&&r.total!=null&&(r.status==='pass'||r.status==='partial'||r.status==='fail')){
+          ingest('TL-RESULT '+r.problem+' '+r.passed+'/'+r.total+(r.skipped?' skip='+r.skipped:''));
+        }
+        delete pending[subId];savePending();
+        if(unsubs[subId]){unsubs[subId]();delete unsubs[subId]}
+      },function(err){clearTimeout(timer);msgEl.textContent='读取结果失败：'+(err&&err.code||'未知错误')});
+    });
+  }
+  function mkSubmit(pid){
+    var w=document.createElement('div');w.className='submit';var id='sb-'+(++wid);
+    w.innerHTML='<div class="vhead"><b>提交到流水线</b><span class="pill sst" hidden></span></div>'+
+      '<p class="sub" style="margin:4px 0 8px">把你的实现（只保留 import 和定义）粘贴到这里，或选择一个 .py 文件。</p>'+
+      '<textarea id="'+id+'" spellcheck="false" placeholder="# 粘贴你的代码"></textarea>'+
+      '<div class="row"><button class="btn">提交核验</button><label class="btn ghost" style="cursor:pointer">选择 .py 文件<input type="file" accept=".py,text/x-python,text/plain" hidden id="'+id+'-f"></label><span class="sub smsg"></span></div>'+
+      '<div class="res"></div>';
+    var ta=w.querySelector('textarea'),btn=w.querySelector('button'),msg=w.querySelector('.smsg'),res=w.querySelector('.res');
+    var draftKey='tl-draft-'+pid;
+    try{var dr=localStorage.getItem(draftKey);if(dr)ta.value=dr}catch(e){}
+    ta.oninput=function(){store.set(draftKey,ta.value)};
+    w.querySelector('input[type=file]').onchange=function(e){
+      var f=e.target.files[0];if(!f)return;
+      var r=new FileReader();r.onload=function(){ta.value=String(r.result);store.set(draftKey,ta.value);msg.textContent='已读入 '+f.name};r.readAsText(f);
+    };
+    btn.onclick=function(){
+      var code=ta.value;
+      if(!code.trim()){msg.textContent='请先粘贴代码。';return}
+      if(code.length>MAXCODE){msg.textContent='代码太长（上限 '+MAXCODE+' 字符），请删掉演示/训练代码。';return}
+      if(!window.claude||!claude.use){msg.textContent='只有在 claude.ai 里打开这个页面时才能提交。';return}
+      var subId='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      btn.disabled=true;res.innerHTML='';msg.textContent='正在发送…';
+      claude.use('mcp').then(function(mcp){
+        if(!mcp){msg.textContent='这个视图没有连接器权限，无法提交。请在 claude.ai 里打开。';btn.disabled=false;return}
+        var body='[TORCHLEET-SUBMIT v1]\nid: '+subId+'\nproblem: '+pid+'\n---CODE---\n'+code+'\n---END---';
+        watchSub(subId,pid,res,msg);
+        return mcp.callTool(CCR,'send_message',{session_id:SESSION,message:body}).then(function(){
+          pending[subId]={pid:pid,ts:Date.now()};savePending();
+          msg.textContent='已送出（'+subId+'），等待流水线运行…';
+        });
+      }).catch(function(e){
+        var c=e&&e.code,t={approval_required:'需要你在 claude.ai 里允许这个页面使用 Claude Code Remote 连接器，然后再点一次。',
+          not_in_manifest:'你拒绝了连接器权限。可以在页面的权限菜单里重新允许。',
+          server_not_connected:'没有找到 Claude Code Remote 连接器，请在 claude.ai 设置 → 连接器里添加。',
+          needs_reauth:'连接器登录已过期，请在 claude.ai 设置 → 连接器里重新连接。'}[c];
+        msg.textContent=t||('发送失败：'+(c||'未知错误')+(e&&e.message?'（'+e.message+'）':''));
+        if(unsubs[subId]){unsubs[subId]();delete unsubs[subId]}
+      }).then(function(){btn.disabled=false});
+    };
+    subViews[pid]=subViews[pid]||[];subViews[pid].push({res:res,msg:msg});
+    return w;
+  }
+  function mkWidget(pid){
+    var box=document.createElement('div');
+    if(pid)box.appendChild(mkSubmit(pid));
+    var d=document.createElement('details');d.className='manual';
+    var sm=document.createElement('summary');sm.textContent=pid?'或者：在本机运行后粘贴 TL-RESULT 结果':'在本机运行后粘贴 TL-RESULT 结果';
+    d.appendChild(sm);d.appendChild(mkPaste(pid));if(!pid)d.open=true;
+    box.appendChild(d);return box;
+  }
+  lessons.forEach(function(l){
+    var sec=document.getElementById(l[0]),nx=sec.querySelector('.next');
+    sec.insertBefore(mkWidget(pidMap[l[0]]),nx);
+  });
+  document.getElementById('global-verify').appendChild(mkWidget(''));
+
+  function renderChecks(){
+    var cl=document.getElementById('checks');cl.innerHTML='';
+    lessons.forEach(function(l){
+      var d=document.createElement('label');d.className='check';var k=pidMap[l[0]];
+      d.innerHTML='<input type="checkbox" id="chk-'+l[0]+'"'+(lessonState(l[0])==='done'?' checked':'')+'><span><b>'+l[1]+'</b> <span class="sub">· '+statText(k)+'</span><br><code>study/submissions/'+l[2]+'</code></span>';
+      d.firstChild.onchange=function(e){done[l[0]]=e.target.checked;store.set('tl-done',JSON.stringify(done));refreshAll()};
+      cl.appendChild(d);
+    });
+    var n=lessons.filter(function(l){return lessonState(l[0])==='done'}).length;
+    document.getElementById('prog').textContent=n+' / '+lessons.length;
+  }
+
+  /* ================= problem bank ================= */
+  var bank=JSON.parse(document.getElementById('bank').textContent);
+  var trackOf={'bank-llm':'llm-path','bank-basics':'basics','bank-advanced':'advanced'};
+  var trackName={'llm-path':'LLM 学习路径','basics':'Basics','advanced':'Advanced'};
+  var diffName={basic:'入门',easy:'简单',medium:'中等',hard:'困难',expert:'专家'};
+  function renderProgress(){
+    var el=document.getElementById('bank-progress');el.innerHTML='';
+    Object.keys(trackName).forEach(function(t){
+      var ps=bank.filter(function(b){return b.tracks.indexOf(t)>=0&&b.graded});
+      var n=ps.filter(function(b){return stat(b.id)==='done'}).length;
+      var d=document.createElement('div');
+      d.innerHTML='<div class="sub" style="margin:0">'+trackName[t]+'：<b>'+n+' / '+ps.length+'</b>（有自动判题的题目）</div><div class="bar"><i style="width:'+(ps.length?100*n/ps.length:0)+'%"></i></div>';
+      el.appendChild(d);
+    });
+  }
+  function esc(x){return x.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+  function inline(x){
+    var codes=[];
+    x=x.replace(/`([^`]+)`/g,function(_,c){codes.push(c);return '\u0000'+(codes.length-1)+'\u0000'});
+    x=esc(x);
+    x=x.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+    x=x.replace(/(^|[^*\w])\*([^*\s][^*]*)\*/g,'$1<i>$2</i>');
+    x=x.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return x.replace(/\u0000(\d+)\u0000/g,function(_,i){return '<code>'+esc(codes[+i])+'</code>'});
+  }
+  function listHtml(items){
+    var h='',st=[];
+    items.forEach(function(it){
+      while(st.length&&it.ind<st[st.length-1].ind){h+='</li></'+st.pop().tag+'>'}
+      if(!st.length||it.ind>st[st.length-1].ind){var tag=it.ord?'ol':'ul';st.push({ind:it.ind,tag:tag});h+='<'+tag+'>'}
+      else h+='</li>';
+      h+='<li>'+inline(it.tx);
+    });
+    while(st.length)h+='</li></'+st.pop().tag+'>';
+    return h;
+  }
+  function md(src){
+    var L=src.split('\n'),out=[],i=0,para=[];
+    function flush(){if(para.length){out.push('<p>'+inline(para.join(' '))+'</p>');para=[]}}
+    while(i<L.length){
+      var ln=L[i],t=ln.trim(),m;
+      if(/^```/.test(t)){flush();var code=[];i++;while(i<L.length&&!/^```/.test(L[i].trim())){code.push(L[i]);i++}i++;
+        out.push('<pre><code>'+esc(code.join('\n'))+'</code></pre>');continue}
+      if(!t){flush();i++;continue}
+      if((m=/^(#{1,6})\s+(.*)$/.exec(t))){flush();out.push('<div class="mh"><b>'+inline(m[2])+'</b></div>');i++;continue}
+      if(/^(-{3,}|\*{3,})$/.test(t)){flush();i++;continue}
+      if(t.charAt(0)==='|'&&i+1<L.length&&/^\|?[\s:|-]+\|[\s:|-]*$/.test(L[i+1].trim())){
+        flush();var rows=[];while(i<L.length&&L[i].trim().charAt(0)==='|'){rows.push(L[i].trim());i++}
+        var cells=function(r){return r.replace(/^\||\|$/g,'').split('|').map(function(c){return c.trim()})};
+        var h=cells(rows[0]),html='<div class="scroll"><table><tr>'+h.map(function(c){return '<th>'+inline(c)+'</th>'}).join('')+'</tr>';
+        rows.slice(2).forEach(function(r){html+='<tr>'+cells(r).map(function(c){return '<td>'+inline(c)+'</td>'}).join('')+'</tr>'});
+        out.push(html+'</table></div>');continue}
+      if((m=/^([-*]|\d+\.)\s+(.*)$/.exec(t))){
+        flush();var items=[];
+        while(i<L.length){var l2=L[i],t2=l2.trim(),m2=/^([-*]|\d+\.)\s+(.*)$/.exec(t2);
+          if(m2){items.push({ind:l2.search(/\S/),ord:/\d/.test(m2[1]),tx:m2[2]});i++}
+          else if(t2&&items.length&&l2.search(/\S/)>=2&&!/^```/.test(t2)){items[items.length-1].tx+=' '+t2;i++}
+          else break}
+        out.push(listHtml(items));continue}
+      if(t.charAt(0)==='>'){flush();var q=[];while(i<L.length&&L[i].trim().charAt(0)==='>'){q.push(L[i].trim().replace(/^>\s?/,''));i++}
+        out.push('<blockquote>'+inline(q.join(' '))+'</blockquote>');continue}
+      para.push(t);i++;
+    }
+    flush();return out.join('');
+  }
+  function copyBtn(text,label){
+    var b=document.createElement('button');b.className='btn ghost';b.textContent=label||'复制';
+    b.onclick=function(){
+      var ok=function(){b.textContent='已复制';setTimeout(function(){b.textContent=label||'复制'},1200)};
+      var fb=function(){var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok()}catch(e){b.textContent='请手动选择'}document.body.removeChild(ta)};
+      try{navigator.clipboard.writeText(text).then(ok,fb)}catch(e){fb()}
+    };
+    return b;
+  }
+  function codeBlock(text,lang){
+    var w=document.createElement('div');w.className='codewrap';
+    var pre=document.createElement('pre'),c=document.createElement('code');c.textContent=text;pre.appendChild(c);
+    w.appendChild(copyBtn(text));w.appendChild(pre);return w;
+  }
+  function fill(body,b){
+    var h='';
+    h+='<div class="md"><p>'+inline(b.description)+'</p></div>';
+    var meta=[];
+    if(b.entries.length)meta.push('需要实现：'+b.entries.map(function(e){return '<code>'+esc(e)+'</code>'}).join(' '));
+    if(b.device==='cuda')meta.push('<b>需要 CUDA GPU</b>，没有 GPU 的机器上相关检查会被跳过');
+    if(b.extras&&b.extras.length)meta.push('额外依赖：'+b.extras.map(function(e){return '<code>'+esc(e)+'</code>'}).join(' '));
+    if(meta.length)h+='<p class="sub">'+meta.join('　·　')+'</p>';
+    h+='<h4>题目</h4><div class="md">'+md(b.statement)+'</div>';
+    body.innerHTML=h;
+    var add=function(title){var e=document.createElement('h4');e.textContent=title;body.appendChild(e)};
+    add('起始代码');
+    body.appendChild(codeBlock(b.starter));
+    var cmds='python study/board.py tl init '+b.id+'\npython study/board.py tl check '+b.id;
+    var p1=document.createElement('p');p1.className='sub';
+    p1.innerHTML='本机生成同样的桩文件并核验：';body.appendChild(p1);
+    body.appendChild(codeBlock(cmds));
+    var p2=document.createElement('p');p2.className='sub';
+    p2.innerHTML='也可以在仓库 notebook 里做，用 <code>from torchleet import check</code> 核验。<a href="https://github.com/Exorust/TorchLeet/blob/main/'+b.question+'" target="_blank" rel="noopener">打开题目 notebook</a>'+(b.colab?'　<a href="'+b.colab+'" target="_blank" rel="noopener">Colab</a>':'');
+    body.appendChild(p2);
+    add('自动验证');
+    if(b.graded){
+      var n=document.createElement('p');n.className='sub';
+      n.textContent='共 '+b.checks.length+' 项检查。判题器验证实现的性质（形状、数值、不变量），不对比标准答案，写法和官方不同也能通过。把鼠标放在检查项上看说明。';
+      body.appendChild(n);
+      var ul=document.createElement('ul');ul.className='chk-list';
+      b.checks.forEach(function(c){var li=document.createElement('li');li.textContent=c.name;if(c.doc)li.title=c.doc;ul.appendChild(li)});
+      body.appendChild(ul);
+      body.appendChild(mkWidget(b.id));
+    }else{
+      var n2=document.createElement('p');n2.className='note';
+      n2.innerHTML='<b>这题暂时没有自动判题。</b>请对照 notebook 里的测试单元自查，做完后再看仓库里的 SOLN 解答。';body.appendChild(n2);
+    }
+    if(b.hints.length){
+      add('分级提示');
+      var hb=document.createElement('div'),btn=document.createElement('button'),k=0;
+      btn.className='btn ghost';btn.textContent='看提示 1 / '+b.hints.length;
+      var box=document.createElement('div');box.className='hintbox';
+      btn.onclick=function(){
+        var p=document.createElement('p');p.textContent=b.hints[k];box.appendChild(p);k++;
+        if(k>=b.hints.length)btn.hidden=true;else btn.textContent='再看一条 '+(k+1)+' / '+b.hints.length;
+      };
+      hb.appendChild(btn);hb.appendChild(box);body.appendChild(hb);
+    }
+  }
+  function renderBank(id){
+    var sec=document.getElementById(id),track=trackOf[id];
+    if(!sec.dataset.ready){
+      sec.dataset.ready='1';
+      var list=bank.filter(function(b){return b.tracks.indexOf(track)>=0});
+      if(track==='llm-path')list.sort(function(a,b){return (a.order==null?999:a.order)-(b.order==null?999:b.order)});
+      var intro={'llm-path':'按顺序从零搭一个 LLM：分词、位置编码、归一化、注意力，一直到对齐训练与推理。题号即推荐顺序。',
+        'basics':'核心 PyTorch 与经典机器学习，由易到难。',
+        'advanced':'带公司标签的进阶题：系统、内核、现代架构、对齐。'}[track];
+      sec.innerHTML='<h2>'+trackName[track]+' <span class="count">'+list.length+' 题</span></h2><p class="sub">'+intro+'</p>'+
+        '<div class="bankbar"><input type="search" id="q-'+id+'" placeholder="搜索标题、公司、关键词" aria-label="搜索题目">'+
+        '<select id="d-'+id+'" aria-label="难度"><option value="">全部难度</option>'+Object.keys(diffName).map(function(d){return '<option value="'+d+'">'+diffName[d]+'</option>'}).join('')+'</select>'+
+        '<label class="count"><input type="checkbox" id="g-'+id+'"> 只看有自动判题的</label><span class="count" id="n-'+id+'"></span></div><div class="cards"></div>';
+      var cards=sec.querySelector('.cards'),els=[];
+      list.forEach(function(b,i){
+        var d=document.createElement('details');d.className='card';
+        var sm=document.createElement('summary');
+        sm.innerHTML=(track==='llm-path'&&b.order?'<span class="pill">'+b.order+'</span>':'')+
+          '<span class="ttl">'+esc(b.title)+'</span>'+
+          '<span class="pill d-'+b.difficulty+'">'+(diffName[b.difficulty]||b.difficulty)+'</span>'+
+          b.companies.slice(0,3).map(function(c){return '<span class="pill co">'+esc(c)+'</span>'}).join('')+
+          (b.graded?'':'<span class="pill co">无判题</span>')+'<span class="pill cs" data-cstat="'+b.id+'" hidden></span>';
+        d.appendChild(sm);
+        var body=document.createElement('div');body.className='cbody';d.appendChild(body);
+        d.addEventListener('toggle',function(){if(d.open&&!body.dataset.f){body.dataset.f='1';fill(body,b)}});
+        cards.appendChild(d);
+        els.push({el:d,b:b,text:(b.title+' '+b.description+' '+b.companies.join(' ')+' '+b.id+' '+b.category).toLowerCase()});
+      });
+      var q=sec.querySelector('#q-'+id),dd=sec.querySelector('#d-'+id),gg=sec.querySelector('#g-'+id),nn=sec.querySelector('#n-'+id);
+      var apply=function(){
+        var term=q.value.trim().toLowerCase(),n=0;
+        els.forEach(function(e){
+          var ok=(!term||e.text.indexOf(term)>=0)&&(!dd.value||e.b.difficulty===dd.value)&&(!gg.checked||e.b.graded);
+          e.el.hidden=!ok;if(ok)n++;
+        });nn.textContent='显示 '+n+' 题';
+      };
+      q.oninput=apply;dd.onchange=apply;gg.onchange=apply;apply();
+      refreshAll();
+    }
+  }
+  refreshAll();
+  Object.keys(pending).forEach(function(k){
+    if(Date.now()-pending[k].ts>86400000){delete pending[k];return}
+    var ghost=document.createElement('div'),m=document.createElement('span');
+    watchSub(k,pending[k].pid,ghost,m);
+  });
+  savePending();
+
+  /* ---- section 2 demos ---- */
+  function fmtN(n){return n>=1e9?(n/1e9).toFixed(2)+' G':n>=1e6?(n/1e6).toFixed(2)+' M':n>=1e3?(n/1e3).toFixed(1)+' K':String(n)}
+  function fmtB(b){var u=['B','KB','MB','GB','TB'],i=0;while(b>=1024&&i<4){b/=1024;i++}return b.toFixed(i?2:0)+' '+u[i]}
+  function updMha(){
+    var d=+document.getElementById('mha-d').value,h=+document.getElementById('mha-h').value,o=document.getElementById('mha-out');
+    if(d%h){o.textContent='d_model='+d+' 不能被 h='+h+' 整除，每个头分不到整数维。';return}
+    var dh=d/h;
+    o.textContent='d_head = d_model / h = '+d+' / '+h+' = '+dh+'\n'+
+      '输入 X          (B, T, '+d+')\n'+
+      '投影后 Q/K/V    (B, T, '+d+')\n'+
+      '拆头后          (B, '+h+', T, '+dh+')\n'+
+      '注意力分数      (B, '+h+', T, T)    缩放因子 1/sqrt('+dh+') = '+(1/Math.sqrt(dh)).toFixed(4)+'\n'+
+      '合头后          (B, T, '+d+')\n'+
+      '参数量          4 x '+d+'^2 = '+fmtN(4*d*d)+'   （与头数无关）';
+  }
+  function updGqa(){
+    var h=+document.getElementById('gqa-h').value,gs=document.getElementById('gqa-g'),gv=+gs.value;
+    var opts=[];for(var g=1;g<=h;g++)if(h%g===0)opts.push(g);
+    if(opts.indexOf(gv)<0||gs.dataset.h!=String(h)){
+      gs.innerHTML=opts.map(function(g){return '<option'+(g===Math.max(1,Math.round(h/4))&&opts.indexOf(g)>=0?' selected':'')+'>'+g+'</option>'}).join('');
+      gs.dataset.h=String(h);gv=+gs.value;
+    }
+    var r=h/gv,seq=+document.getElementById('gqa-s').value;
+    var m=document.getElementById('gqa-map');m.innerHTML='';
+    for(var i=0;i<h;i++){var e=document.createElement('span');e.className='sym'+(i%2?'':' m');e.textContent='Q'+i+'→KV'+Math.floor(i/r);m.appendChild(e)}
+    var L=32,dh=128,bytes=2,perTok=function(g){return 2*L*g*dh*bytes};
+    document.getElementById('gqa-out').textContent=
+      '每个 K/V 组服务 '+r+' 个 Q 头（'+(gv===h?'这就是 MHA':gv===1?'这就是 MQA':'GQA')+'）\n'+
+      '假设 32 层、d_head=128、fp16、batch=1、序列 '+seq+'：\n'+
+      '  MHA（'+h+' 个 K/V 头） '+fmtB(perTok(h)*seq)+'\n'+
+      '  当前（'+gv+' 个 K/V 头） '+fmtB(perTok(gv)*seq)+'   为 MHA 的 '+(100*gv/h).toFixed(1)+'%\n'+
+      '  MQA（1 个 K/V 头）   '+fmtB(perTok(1)*seq);
+  }
+  function updKv(){
+    var n=+document.getElementById('kv-n').value;document.getElementById('kv-lab').textContent='N = '+n;
+    var no=n*(n+1)/2;
+    document.getElementById('kv-out').textContent=
+      '不缓存：第 t 步重新投影 t 个 token 的 K、V，共 N(N+1)/2 = '+no.toLocaleString()+' 次\n'+
+      '缓存  ：每步只投影 1 个新 token，共 N = '+n.toLocaleString()+' 次\n'+
+      '少算了 '+(no/n).toFixed(1)+' 倍的 K/V 投影；代价是要常驻显存保存全部历史 K/V。';
+  }
+  function drawSwa(){
+    var w=+document.getElementById('swa-w').value,causal=document.getElementById('swa-c').checked,n=24;
+    document.getElementById('swa-lab').textContent='w = '+w;
+    var c=document.getElementById('swa-canvas'),s=setup(c),x=s[0],W=s[1],cs=W/n,on=0;
+    x.fillStyle=cssv('--surface');x.fillRect(0,0,W,W);
+    for(var i=0;i<n;i++)for(var j=0;j<n;j++){
+      var ok=causal?(j<=i&&i-j<=w):(Math.abs(i-j)<=w);
+      if(ok)on++;
+      x.fillStyle=ok?cssv('--accent'):cssv('--code-bg');x.fillRect(j*cs+.5,i*cs+.5,cs-1,cs-1);
+    }
+    var rows=[1,2,4,8,16].map(function(L){var reach=causal?Math.min(n,L*w+1):Math.min(n,2*L*w+1);return 'L='+L+': '+reach});
+    document.getElementById('swa-out').textContent=
+      '允许的注意力格 '+on+' / '+(n*n)+'（'+(100*on/(n*n)).toFixed(0)+'% 的完整注意力）\n'+
+      '堆叠 L 层后，一个 token 最远能间接看到的范围（n='+n+'）：\n  '+rows.join('   ');
+  }
+  ['mha-d','mha-h'].forEach(function(i){document.getElementById(i).onchange=updMha});
+  ['gqa-h','gqa-g','gqa-s'].forEach(function(i){document.getElementById(i).onchange=updGqa});
+  document.getElementById('kv-n').oninput=updKv;
+  document.getElementById('swa-w').oninput=drawSwa;document.getElementById('swa-c').onchange=drawSwa;
+
+  function draw(id){
+    if(id==='mha')updMha();
+    if(id==='gqa')updGqa();
+    if(id==='kvcache')updKv();
+    if(id==='swa')drawSwa();
+    if(id.indexOf('bank-')===0)renderBank(id);
+    if(id==='sinusoidal')drawPE();
+    if(id==='rope')drawRope();
+    if(id==='attention')drawAtt();
+  }
+  window.addEventListener('resize',function(){draw(location.hash.slice(1))});
+  go(location.hash.slice(1));
+})();
+</script>
