@@ -100,7 +100,7 @@ python study/build_bank.py
 ## 公式渲染与题库
 
 - 讲义里的公式用 **MathJax 3.2.2**（`tex-svg-full`，从 cdnjs 加载）渲染：行内 `\( … \)`，独立公式 `<div class="eq">\[ … \]</div>`。不要用 `$…$`，也不要把公式放进 `<pre>`/`<code>`（MathJax 会跳过）。页面只在切到某一课时排版那一课；过宽的行内公式在窄屏上会自动改成单独一行。
-- 提交框是内联的 **CodeMirror 5.65.16**（MIT，`study/site/vendor/`，由 `build_site.py` 填进 `__CODEMIRROR_JS__` / `__CODEMIRROR_CSS__`），不依赖 CDN；编辑器在滚动到可见时才初始化。CodeMirror 加载失败时退回普通 textarea（仍支持 Tab 缩进与自动缩进）。页面因此约 1.3 MB。
+- 提交框是内联的 **CodeMirror 5.65.16**（MIT，`study/site/vendor/`，由 `build_site.py` 填进 `__CODEMIRROR_JS__` / `__CODEMIRROR_CSS__`），不依赖 CDN；编辑器在滚动到可见时才初始化。CodeMirror 加载失败时退回普通 textarea（仍支持 Tab 缩进与自动缩进）。“全屏”是左右分栏：左边克隆本课（或题库卡片）的内容并滚到“本课练习”，右边是编辑器，中缝可拖动、宽度记在 localStorage；窄屏改为上下排列。页面因此约 1.3 MB。
 - 云会话本身访问不了 cdnjs。本地测试可以用 `npm pack mathjax@3.2.2` 拿到同一个文件，再把页面里的脚本地址换成本地路径。
 - `python study/build_bank.py` 生成题库：仓库原有的 68 题，加上本教程自建的 12 题（`study/applied_checks.py` 里登记的题，在页面“TorchLeet 题库 → 本教程自建”）。凡是 `study/board.py` 登记过的题，题库里的起始代码直接用 `study/submissions/` 里的提交桩，保证网页、看板、本机三处一致。
 

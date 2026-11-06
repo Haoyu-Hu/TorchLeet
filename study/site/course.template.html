@@ -178,7 +178,18 @@ mjx-container.wide{display:block;overflow-x:auto;overflow-y:hidden;max-width:100
 .ed .cm-s-default .cm-variable-2,.ed .cm-s-default .cm-variable-3,.ed .cm-s-default .cm-type{color:var(--syn-def)}
 .ed .cm-s-default .cm-meta,.ed .cm-s-default .cm-atom{color:var(--syn-kw)}.ed .cm-s-default .cm-operator,.ed .cm-s-default .cm-property,.ed .cm-s-default .cm-variable{color:var(--fg)}
 .ed .cm-s-default .cm-error{color:var(--warn)}
-.ed.full{position:fixed;inset:0;z-index:100;border-radius:0;display:flex;flex-direction:column;border:0}
+.ed.full{position:fixed;top:0;right:0;bottom:0;left:var(--split,42%);z-index:100;border-radius:0;display:flex;flex-direction:column;border:0}
+.ed-pane{position:fixed;top:0;left:0;bottom:0;width:var(--split,42%);overflow:auto;z-index:100;background:var(--bg);border-right:1px solid var(--line);padding:0 22px 48px;font-size:15px;line-height:1.7;overscroll-behavior:contain}
+.ed-pane .pane-head{position:sticky;top:0;z-index:1;background:var(--bg);border-bottom:1px solid var(--line);margin:0 -22px 12px;padding:8px 22px;display:flex;gap:8px;align-items:center;font:600 13px var(--font-body);color:var(--muted)}
+.ed-pane .pane-head span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ed-pane h2{font-size:22px}.ed-pane h3{margin-top:24px}
+.ed-pane pre{max-height:none}
+.ed-drag{position:fixed;top:0;bottom:0;left:calc(var(--split,42%) - 4px);width:8px;cursor:col-resize;z-index:101;touch-action:none}
+.ed-drag:hover,.ed-drag.on{background:color-mix(in srgb,var(--accent) 35%,transparent)}
+@media (max-width:760px){
+  .ed-pane{width:auto;right:0;bottom:auto;height:40vh;border-right:0;border-bottom:1px solid var(--line)}
+  .ed.full{left:0;top:40vh}
+  .ed-drag{display:none}}
 .ed.full .CodeMirror{flex:1;height:auto}
 .ed.full textarea{flex:1}
 @media (max-width:600px){.ed .CodeMirror{height:300px}.ed-foot .keys{display:none}}
@@ -5568,9 +5579,38 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
     b('复制','复制全部代码',function(e){var t=api.get(),btn=e.target;
       var ok=function(){btn.textContent='已复制';setTimeout(function(){btn.textContent='复制'},1200)};
       try{navigator.clipboard.writeText(t).then(ok,function(){})}catch(err){}});
-    var fs=b('全屏','全屏编辑（Esc 退出）',function(){toggleFull()});
+    var fs=b('全屏','全屏：左边题目、右边编辑器（Esc 退出）',function(){toggleFull()});
+    var pane=null,drag=null;
+    function buildPane(){
+      /* left pane: the problem (bank card body) or the whole lesson, cloned without widgets/demos/ids */
+      var src=box.closest('.cbody')||box.closest('section'),title='';
+      if(!src)return null;
+      var card=box.closest('details.card');
+      if(card){var t=card.querySelector('.ttl');title=t?t.textContent:''}else{var h=src.querySelector('h2');title=h?h.textContent:''}
+      var c=src.cloneNode(true);
+      c.querySelectorAll('.submit,details.manual,.ed,.demo,canvas,.next,ul.refs,script,button,.codewrap').forEach(function(x){x.remove()});
+      c.querySelectorAll('[id]').forEach(function(x){x.removeAttribute('id')});
+      if(c.id)c.removeAttribute('id');c.hidden=false;
+      var p=document.createElement('div');p.className='ed-pane tex2jax_ignore mathjax_ignore';
+      p.innerHTML='<div class="pane-head"><span></span></div>';p.querySelector('.pane-head span').textContent=title||'题目';
+      while(c.firstChild)p.appendChild(c.firstChild);
+      p.querySelectorAll('[data-go]').forEach(function(a){a.addEventListener('click',function(){toggleFull(false)})});
+      var d=document.createElement('div');d.className='ed-drag';d.title='拖动调整宽度';
+      d.addEventListener('pointerdown',function(e){
+        e.preventDefault();d.setPointerCapture(e.pointerId);d.classList.add('on');
+        var mv=function(ev){var pct=Math.min(75,Math.max(20,ev.clientX/window.innerWidth*100));document.documentElement.style.setProperty('--split',pct+'%');if(cm)cm.refresh()};
+        var up=function(){d.classList.remove('on');d.removeEventListener('pointermove',mv);d.removeEventListener('pointerup',up);store.set('tl-split',document.documentElement.style.getPropertyValue('--split'))};
+        d.addEventListener('pointermove',mv);d.addEventListener('pointerup',up)});
+      return [p,d];
+    }
     function toggleFull(force){var on=force===undefined?!box.classList.contains('full'):force;
+      if(on&&!pane){var pd=buildPane();if(pd){pane=pd[0];drag=pd[1];document.body.appendChild(pane);document.body.appendChild(drag);
+        var sp=store.get('tl-split');if(sp)document.documentElement.style.setProperty('--split',sp);
+        var hx=[].slice.call(pane.querySelectorAll('h3')).filter(function(h){return /本课练习|练习|你的任务/.test(h.textContent)})[0];
+        if(hx)pane.scrollTop=hx.offsetTop-48}}
+      if(!on&&pane){pane.remove();drag.remove();pane=drag=null}
       box.classList.toggle('full',on);fs.textContent=on?'退出全屏':'全屏';document.documentElement.style.overflow=on?'hidden':'';
+      if(!pane&&on)box.style.left='0';else box.style.left='';
       if(cm)cm.refresh();api.focus()}
     ta.parentNode.insertBefore(box,ta);box.appendChild(bar);box.appendChild(ta);box.appendChild(foot);
     ta.setAttribute('wrap','off');
