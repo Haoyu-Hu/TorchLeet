@@ -9,7 +9,8 @@
 ┌────────────────────────── claude.ai 上的 Artifact 页面 ──────────────────────────┐
 │ 教程（讲义 + 交互演示）· 68 题题库 · “提交到流水线”                                 │
 └───────────┬──────────────────────────────────────────────────────────────▲───────┘
-            │ ① Claude Code Remote 连接器：send_message(会话ID, 代码)        │ ④ 结果写回 db：results/<提交id>
+            │ ① 代码写进 db：submissions/<提交id>，再发一条“Send to Claude”评论 │ ④ 结果写回 db：results/<提交id>
+            │   （备用：Claude Code Remote 连接器 send_message）            │
             ▼                                                              │   页面 onSnapshot 订阅，自动显示并记进度
 ┌───────────────────────────── 你的 Claude Code 云会话 ─────────────────────────┴───┐
 │ ② 按 AGENTS.md 的规则处理消息：把代码写进临时文件                                  │
@@ -21,7 +22,7 @@
 |---|---|
 | `study/site/course.template.html` | 页面源码（讲义、演示、提交面板）。有两个占位符：会话 ID 和题库 |
 | `study/site/build_site.py` | 把模板 + `problem_bank.json` + 会话 ID 生成 `study/site/dist/course.html` |
-| `study/site/capabilities.json` | 发布页面时要声明的运行时能力（`db` 规则 + `mcp` 连接器） |
+| `study/site/capabilities.json` | 发布页面时要声明的运行时能力（`db` 规则 + `comments` + 备用的 `mcp` 连接器） |
 | `study/build_bank.py` → `study/problem_bank.json` | 从 `problems.json`、题目 notebook、判题规格生成题库（不含答案） |
 | `study/run_submission.py`、`study/_worker.py` | 隔离判题执行器 |
 | `study/applied_checks.py` | 本仓库自带的判题（应用 ML、3.3、自检题） |
@@ -56,10 +57,11 @@
 5. **发布为 Artifact**。直接对会话里的 Claude 说：
    > 请把 `study/site/dist/course.html` 发布成 Artifact，`capabilities` 用 `study/site/capabilities.json` 里的内容，并把得到的链接存进 `study/site/.artifact_url`。
 
-   页面声明的能力：`db`（结果文档，只有编辑者/所有者可写）和 `mcp`（只调用 Claude Code Remote 的 `send_message`）。
-6. **第一次使用**：打开页面，随便一道题里粘贴代码并点“提交核验”。claude.ai 会请你允许页面使用 Claude Code Remote 连接器，选允许。
+   页面声明的能力：`db`（`results` 与 `submissions`，只有编辑者/所有者可写）、`comments`（以你的身份发“Send to Claude”评论来唤醒会话）和备用的 `mcp`（只调用 Claude Code Remote 的 `send_message`）。
+   发布后会话会自动“监听”这个 Artifact：评论被送到 Claude 时会话会被唤醒。
+6. **第一次使用**：打开页面，随便一道题里写好代码并点“提交核验”。claude.ai 会请你允许页面以你的身份发评论，选允许。每次提交会在页面上留下一条评论，Claude 在里面回复结果。
 
-会话侧不需要手动做任何事：仓库根目录的 `AGENTS.md` 已经写好了处理 `[TORCHLEET-SUBMIT v1]` 消息的规则，会话打开这个仓库就会遵守。
+会话侧不需要手动做任何事：仓库根目录的 `AGENTS.md` 已经写好了处理 `[TORCHLEET-SUBMIT v2]` 评论与 `v1` 消息的规则，会话打开这个仓库就会遵守。
 
 ## 必须知道的限制与坑
 
@@ -67,6 +69,8 @@
 - 页面的沙箱只能加载脚本，**不能运行 Python，也不能连到外部服务或你的电脑**。所以代码必须在会话（或本机）里运行，结果再写回页面。
 - 流水线**依赖这个会话在线**。会话休眠或结束后，提交会一直“等待中”。完全空闲的会话会不会被提交消息唤醒，我们没有验证过。
 - 会话 ID **写死在页面里**。换了会话，就要用新的 ID 重新构建并发布。
+- 我们实际遇到过：在 claude.ai 里打开页面时 Claude Code Remote 连接器显示“Couldn't load this connector”，页面拿不到 `send_message`。所以主通道改成了评论（`comments.sendToClaude`），只有评论通道不可用时才退回连接器。
+- 评论通道只对页面的编辑者/所有者开放，且需要至少一个监听这个 Artifact 的 Claude 会话；页面会先用 `canSendToClaude()` 检查。
 - 连接器以**查看者本人的身份**调用 `send_message`，所以预期只有会话所有者自己的账号能把提交送进这个会话（我们没有用第二个账号验证过）。页面默认是私有的，分享要在页面的 Share 菜单里操作。
 - 每次提交占用会话里的一轮对话，**成本与时延**都不是零；批量提交不适合。
 

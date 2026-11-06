@@ -5348,6 +5348,12 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
     sec.dataset.mj='1';
     MathJax.typesetPromise([sec]).then(function(){fitWide(sec)}).catch(function(){sec.dataset.mj=''});
   }
+  function typesetEl(el){
+    if(!/\\\(|\\\[/.test(el.textContent))return;
+    var run=function(){MathJax.typesetPromise([el]).then(function(){fitWide(el)}).catch(function(){})};
+    if(window.__mjReady&&window.MathJax&&MathJax.typesetPromise)run();
+    else{var t=setInterval(function(){if(window.__mjReady){clearInterval(t);run()}},500);setTimeout(function(){clearInterval(t)},30000)}
+  }
   /* 行内公式比所在段落还宽时（窄屏），改成单独一行并可横向滚动 */
   function fitWide(sec){
     sec.querySelectorAll('mjx-container:not([display="true"])').forEach(function(c){
@@ -5683,18 +5689,46 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
       if(!window.claude||!claude.use){msg.textContent='只有在 claude.ai 里打开这个页面时才能提交。';return}
       var subId='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
       btn.disabled=true;res.innerHTML='';msg.textContent='正在发送…';
-      claude.use('mcp').then(function(mcp){
-        if(!mcp){msg.textContent='这个视图没有连接器权限，无法提交。请在 claude.ai 里打开。';btn.disabled=false;return}
-        var body='[TORCHLEET-SUBMIT v1]\nid: '+subId+'\nproblem: '+pid+'\n---CODE---\n'+code+'\n---END---';
-        watchSub(subId,pid,res,msg);
-        return mcp.callTool(CCR,'send_message',{session_id:SESSION,message:body}).then(function(){
-          pending[subId]={pid:pid,ts:Date.now()};savePending();
-          msg.textContent='已送出（'+subId+'），等待流水线运行…';
+      var anchorP=null;
+      /* 通道 2（备用）：Claude Code Remote 连接器的 send_message。 */
+      function viaMcp(why){
+        return claude.use('mcp').then(function(mcp){
+          if(!mcp){msg.textContent='这个视图无法提交（评论通道'+(why?'：'+why:'不可用')+'，连接器也不可用）。请在 claude.ai 里打开本页，或在本机运行核验命令。';return}
+          var body='[TORCHLEET-SUBMIT v1]\nid: '+subId+'\nproblem: '+pid+'\n---CODE---\n'+code+'\n---END---';
+          watchSub(subId,pid,res,msg);
+          return mcp.callTool(CCR,'send_message',{session_id:SESSION,message:body}).then(function(){
+            pending[subId]={pid:pid,ts:Date.now()};savePending();
+            msg.textContent='已送出（'+subId+'），等待流水线运行…';
+          });
+        });
+      }
+      /* 通道 1：把代码写进页面数据库 submissions/<id>，再用评论的 Send to Claude 唤醒 Claude Code 会话。 */
+      Promise.all([claude.use('db'),claude.use('comments')]).then(function(r){
+        var db=r[0],cmt=r[1];
+        if(!db||!cmt)return viaMcp();
+        anchorP=cmt.anchorFor(w).catch(function(){return null});
+        return cmt.canSendToClaude().catch(function(){return 'off'}).then(function(st){
+          if(st!=='available'){
+            if(st==='no_session'){msg.textContent='现在没有在线的 Claude Code 会话能接收提交（会话可能已结束）。请看 study/DEPLOY.md 重新部署，或在本机运行核验命令。';return}
+            return viaMcp(st);
+          }
+          return db.doc('submissions/'+subId).set({problem:pid,code:code,ts:Date.now()}).then(function(){return anchorP}).then(function(anchor){
+            if(!anchor)throw {code:'invalid',message:'无法定位提交框'};
+            watchSub(subId,pid,res,msg);
+            return cmt.sendToClaude({anchor:anchor,text:'[TORCHLEET-SUBMIT v2]\nid: '+subId+'\nproblem: '+pid+'\ncode: db submissions/'+subId});
+          }).then(function(){
+            pending[subId]={pid:pid,ts:Date.now()};savePending();
+            msg.textContent='已送出（'+subId+'），等待流水线运行…（页面上会多出一条提交评论，Claude 会在里面回复结果）';
+          });
         });
       }).catch(function(e){
-        var c=e&&e.code,t={approval_required:'需要你在 claude.ai 里允许这个页面使用 Claude Code Remote 连接器，然后再点一次。',
+        var c=e&&e.code,t={consent_required:'需要先允许这个页面以你的身份发评论（提交通过评论通知 Claude）。请再点一次“提交核验”并在弹窗里允许。',
+          forbidden:'这个页面没有发评论的权限（可能之前拒绝过）。请在 claude.ai 的评论面板里重新允许，或在本机运行核验命令。',
+          claude_unavailable:'评论没能送到 Claude：当前没有会话在监听，或你不是这个页面的编辑者。代码已保存，可稍后再提交。',
+          rate_limited:'提交太频繁了，请稍等片刻再试。',
+          approval_required:'需要你在 claude.ai 里允许这个页面使用 Claude Code Remote 连接器，然后再点一次。',
           not_in_manifest:'你拒绝了连接器权限。可以在页面的权限菜单里重新允许。',
-          server_not_connected:'没有找到 Claude Code Remote 连接器，请在 claude.ai 设置 → 连接器里添加。',
+          server_not_connected:'没有找到 Claude Code Remote 连接器。',
           needs_reauth:'连接器登录已过期，请在 claude.ai 设置 → 连接器里重新连接。'}[c];
         msg.textContent=t||('发送失败：'+(c||'未知错误')+(e&&e.message?'（'+e.message+'）':''));
         if(unsubs[subId]){unsubs[subId]();delete unsubs[subId]}
@@ -5749,10 +5783,16 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
   function inline(x){
     var codes=[];
     x=x.replace(/`([^`]+)`/g,function(_,c){codes.push(c);return '\u0000'+(codes.length-1)+'\u0000'});
+    var maths=[],keep=function(tex,disp){maths.push((disp?'\\[':'\\(')+esc(tex)+(disp?'\\]':'\\)'));return '\u0001'+(maths.length-1)+'\u0001'};
+    x=x.replace(/\$\$([\s\S]+?)\$\$/g,function(_,t){return keep(t,true)})
+       .replace(/\\\[([\s\S]+?)\\\]/g,function(_,t){return keep(t,true)})
+       .replace(/\\\(([\s\S]+?)\\\)/g,function(_,t){return keep(t,false)})
+       .replace(/(^|[^\\$])\$([^$\n]+?)\$(?!\$)/g,function(_,a,t){return a+keep(t,false)});
     x=esc(x);
     x=x.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
     x=x.replace(/(^|[^*\w])\*([^*\s][^*]*)\*/g,'$1<i>$2</i>');
     x=x.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+    x=x.replace(/\u0001(\d+)\u0001/g,function(_,i){return maths[+i]});
     return x.replace(/\u0000(\d+)\u0000/g,function(_,i){return '<code>'+esc(codes[+i])+'</code>'});
   }
   function listHtml(items){
@@ -5774,6 +5814,10 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
       if(/^```/.test(t)){flush();var code=[];i++;while(i<L.length&&!/^```/.test(L[i].trim())){code.push(L[i]);i++}i++;
         out.push('<pre><code>'+esc(code.join('\n'))+'</code></pre>');continue}
       if(!t){flush();i++;continue}
+      if(/^\$\$/.test(t)){flush();var mm=[t];
+        if(!(t.length>4&&/\$\$$/.test(t))){i++;while(i<L.length){mm.push(L[i].trim());if(/\$\$$/.test(L[i].trim()))break;i++}}
+        i++;var tex=mm.join('\n').replace(/^\$\$|\$\$$/g,'');
+        out.push('<div class="eq">\\['+esc(tex)+'\\]</div>');continue}
       if((m=/^(#{1,6})\s+(.*)$/.exec(t))){flush();out.push('<div class="mh"><b>'+inline(m[2])+'</b></div>');i++;continue}
       if(/^(-{3,}|\*{3,})$/.test(t)){flush();i++;continue}
       if(t.charAt(0)==='|'&&i+1<L.length&&/^\|?[\s:|-]+\|[\s:|-]*$/.test(L[i+1].trim())){
@@ -5879,7 +5923,7 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
           (b.graded?'':'<span class="pill co">无判题</span>')+'<span class="pill cs" data-cstat="'+b.id+'" hidden></span>';
         d.appendChild(sm);
         var body=document.createElement('div');body.className='cbody';d.appendChild(body);
-        d.addEventListener('toggle',function(){if(d.open&&!body.dataset.f){body.dataset.f='1';fill(body,b)}});
+        d.addEventListener('toggle',function(){if(d.open&&!body.dataset.f){body.dataset.f='1';fill(body,b);typesetEl(body)}});
         cards.appendChild(d);
         els.push({el:d,b:b,text:(b.title+' '+b.description+' '+b.companies.join(' ')+' '+b.id+' '+b.category).toLowerCase()});
       });

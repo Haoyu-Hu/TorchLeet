@@ -1,8 +1,21 @@
 # 提交流水线
 
-网页教程里点“提交核验” → 通过 Claude Code Remote 连接器把代码发到本会话 → 本会话在隔离子进程里判题 → 结果写回网页的 `results/<提交id>` 文档。
+网页教程里点“提交核验” → 代码写进网页数据库 `submissions/<提交id>`，并发一条“Send to Claude”评论唤醒本会话（备用：Claude Code Remote 连接器 `send_message`）→ 本会话在隔离子进程里判题 → 结果写回网页的 `results/<提交id>` 文档，并在评论里回复一行结果。
 
 ## 消息格式（网页发来）
+
+主通道（评论）：
+
+```
+[TORCHLEET-SUBMIT v2]
+id: <提交id>
+problem: <题目id>
+code: db submissions/<提交id>
+```
+
+用 `ArtifactData` `get` 读 `submissions/<提交id>`，核对其中的 `problem` 与评论一致，代码在 `code` 字段。
+
+备用通道（连接器消息）：
 
 ```
 [TORCHLEET-SUBMIT v1]

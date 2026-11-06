@@ -1,12 +1,27 @@
 {
   "db": {
     "rules": [
-      { "path": "results", "read": "view", "write": "admin" }
+      {
+        "path": "results",
+        "read": "view",
+        "write": "admin"
+      },
+      {
+        "path": "submissions",
+        "read": "admin",
+        "write": "admin"
+      }
     ]
   },
+  "comments": {},
   "mcp": {
     "servers": [
-      { "server": "Claude Code Remote", "tools": ["send_message"] }
+      {
+        "server": "Claude Code Remote",
+        "tools": [
+          "send_message"
+        ]
+      }
     ]
   }
 }
