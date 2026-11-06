@@ -420,7 +420,13 @@ s low&lt;/w&gt;         只剩 (s,low)，不在表里，停止 → 2 个 token</
   <h2>1.3 RoPE 旋转位置编码</h2>
   <p class="sub">LLaMA、Mistral、Qwen 都在用。</p>
   <h3>为什么</h3>
-  <p>绝对位置编码是“加”在输入上的，相对距离只能靠模型间接学到。RoPE 改为<b>旋转 q 和 k</b>，让位置只以 \(m-n\) 的形式进入注意力分数 \(\mathbf{q}_m^\top \mathbf{k}_n\)。（它并不自动解决长度外推，见下文“长度外推”。）</p>
+  <p>先约定符号：\(m\) 是发出查询的 token 的位置（第 m 个词），\(n\) 是被查看的 token 的位置。\(\mathbf{q}_m\) 是第 m 个词的 query 向量，\(\mathbf{k}_n\) 是第 n 个词的 key 向量（见 <a href="#attention" data-go="attention">1.5 课</a>）。注意力分数就是两者的点积 \(\mathbf{q}_m^\top \mathbf{k}_n\)，分数越大，第 m 个词越关注第 n 个词。</p>
+  <p>语言里真正重要的往往是<b>相对距离</b> \(m-n\)：“前一个词”“三个词之前”。不管这句话出现在文章开头还是第 1000 个词处，“相邻两个词”的关系应该一样。</p>
+  <p><b>1.2 课的做法有什么不足。</b>正弦位置编码把位置向量加到词嵌入上：\(\mathbf{x}_m + \mathbf{p}_m\)。再乘上投影矩阵算点积，展开后是四项：</p>
+  <div class="eq">\[ (\mathbf{x}_m + \mathbf{p}_m)^\top W_Q^\top W_K (\mathbf{x}_n + \mathbf{p}_n) = \underbrace{\mathbf{x}_m^\top A\, \mathbf{x}_n}_{\text{内容-内容}} + \underbrace{\mathbf{x}_m^\top A\, \mathbf{p}_n + \mathbf{p}_m^\top A\, \mathbf{x}_n + \mathbf{p}_m^\top A\, \mathbf{p}_n}_{\text{含位置的三项}}, \qquad A = W_Q^\top W_K \]</div>
+  <p class="eq-note">含位置的三项里出现的是 \(m\) 和 \(n\) 各自的<b>绝对</b>位置。分数里没有一项天然只依赖 \(m-n\)；模型想利用相对距离，只能自己从这些项里学出来，这就是“间接学到”的意思。</p>
+  <p><b>RoPE 的做法。</b>不往输入上加东西，而是在算完 q、k 之后，把 \(\mathbf{q}_m\) 按位置 m 转一个角度，把 \(\mathbf{k}_n\) 按位置 n 转一个角度。下面会推出，转完之后的点积只和 \(m-n\) 有关，与 m、n 各自是多少无关。相对位置于是被直接写进了注意力分数。</p>
+  <p class="note">相对位置写进了分数，不等于模型能处理比训练时更长的序列。这是另一个问题，见下文“长度外推”。</p>
   <h3>直觉：两根表针的夹角</h3>
   <p>把 q 和 k 想成钟面上的两根表针。位置 m 的 q 逆时针多转 \(m\theta\)，位置 n 的 k 多转 \(n\theta\)。点积只看两根针的长度和<b>夹角</b>。两根针都转了，夹角只变了 \((m-n)\theta\)。所以无论这对 token 出现在句首还是第 1000 个位置，只要相隔一样远，它们的注意力分数就一样。</p>
   <h3>数学：二维旋转</h3>
