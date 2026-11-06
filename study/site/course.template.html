@@ -332,6 +332,12 @@ s low&lt;/w&gt;         只剩 (s,low)，不在表里，停止 → 2 个 token</
   <h3>为什么</h3>
   <p>不加位置信息时，Attention 对输入是<b>置换等变</b>的：把 token 顺序打乱，输出只是跟着同样打乱，模型分不出先后。“狗咬人”和“人咬狗”在它眼里是同一堆词。要让模型感知顺序，就得把位置信息显式注入。</p>
   <p>正弦位置编码的做法很简单。给每个位置 \(pos\) 算一个和词嵌入同样长度 \(d_{\text{model}}\) 的向量 \(\mathrm{PE}(pos)\)，直接加到该位置的词嵌入上。</p>
+  <p>先说清两个符号：</p>
+  <ul>
+    <li><b>\(pos\)</b>：token 在序列里的位置编号，从 0 开始。句子“狗 咬 人”里，“狗”的 \(pos = 0\)，“咬”是 1，“人”是 2。它是整数，最大到序列长度减 1。</li>
+    <li><b>\(d_{\text{model}}\)</b>：模型宽度，即每个 token 用多长的向量表示。词嵌入表把每个 token 映射成一个长度为 \(d_{\text{model}}\) 的向量，例如原始 Transformer 取 512。整个网络里每一层的输入输出都保持这个长度，所以位置向量也必须是这个长度，才能和词嵌入逐元素相加。</li>
+  </ul>
+  <p>形状上看：一批输入的词嵌入是 \((B, T, d_{\text{model}})\)，\(B\) 是批大小，\(T\) 是序列长度。位置编码是一张 \((T, d_{\text{model}})\) 的表，第 \(pos\) 行就是 \(\mathrm{PE}(pos)\)。相加时它沿批维广播。符号约定也可以查“总览”页的符号表。</p>
   <h3>公式</h3>
   <div class="eq">\[ \begin{aligned} \omega_i &amp;= \frac{1}{10000^{2i/d_{\text{model}}}}, \qquad i = 0, 1, \dots, \tfrac{d_{\text{model}}}{2} - 1 \\ \mathrm{PE}(pos, 2i) &amp;= \sin(pos \cdot \omega_i) \\ \mathrm{PE}(pos, 2i+1) &amp;= \cos(pos \cdot \omega_i) \end{aligned} \]</div>
   <p class="eq-note">其中 \(pos\) 是位置编号，\(i\) 是<b>频率下标</b>。第 \(2i\) 维和第 \(2i+1\) 维组成一对，共用同一个 \(\omega_i\)，一个取 sin，一个取 cos。</p>
