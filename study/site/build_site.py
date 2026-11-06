@@ -3,9 +3,10 @@
 
     python study/site/build_site.py --session-id session_xxxxxxxx
 
-模板里有两个占位符：
+模板里的占位符：
   __SESSION_ID__          提交流水线要把代码发往的 Claude Code 会话 ID（"从哪里取"见 study/DEPLOY.md）
   __PROBLEM_BANK_JSON__   study/problem_bank.json 的内容（先运行 python study/build_bank.py 更新它）
+  __CODEMIRROR_JS/CSS__   study/site/vendor/ 下的 CodeMirror 5（MIT，内联进页面，提交框的代码编辑器）
 """
 import argparse, json, re
 from pathlib import Path
@@ -26,7 +27,12 @@ def main():
         assert tpl.count(k) == 1, f"模板里应恰好有一个 {k}"
     bank = json.loads((ROOT / "problem_bank.json").read_text())
     data = json.dumps(bank, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-    html = tpl.replace("__PROBLEM_BANK_JSON__", data).replace("__SESSION_ID__", a.session_id)
+    vendor = HERE / "vendor"
+    cm_js = (vendor / "codemirror-5.65.16.js").read_text()
+    cm_css = (vendor / "codemirror-5.65.16.css").read_text()
+    assert "</script" not in cm_js.lower() and "</style" not in cm_css.lower()
+    html = (tpl.replace("__CODEMIRROR_JS__", cm_js).replace("__CODEMIRROR_CSS__", cm_css)
+            .replace("__PROBLEM_BANK_JSON__", data).replace("__SESSION_ID__", a.session_id))
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html)

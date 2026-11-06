@@ -24,16 +24,19 @@ window.MathJax = {
 :root{
   --bg:#f6f7f4; --surface:#ffffff; --fg:#1d2420; --muted:#5d6a63; --line:#dde2dc;
   --accent:#0b6b57; --accent-soft:#dff0ea; --code-bg:#eef1ec; --warn:#a8531a; --warn-soft:#f8e9dc;
+  --syn-kw:#7a3e9d; --syn-def:#1d5fa8; --syn-str:#a8531a; --syn-num:#0b6b57; --syn-com:#7b877f; --syn-bi:#0f6f80;
   --font-display:'Fraunces',Georgia,serif;
   --font-body:'IBM Plex Sans SC',system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
   --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#121815; --surface:#1a221e; --fg:#e6ebe7; --muted:#9aa89f; --line:#2c3732;
-  --accent:#58c4a6; --accent-soft:#1b3a31; --code-bg:#222c27; --warn:#e69a62; --warn-soft:#3a2a1d; color-scheme:dark}}
+  --accent:#58c4a6; --accent-soft:#1b3a31; --code-bg:#222c27; --warn:#e69a62; --warn-soft:#3a2a1d;
+  --syn-kw:#c9a0f0; --syn-def:#8fb6ff; --syn-str:#e6a46e; --syn-num:#58c4a6; --syn-com:#7d8b83; --syn-bi:#6fc7d6; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#121815; --surface:#1a221e; --fg:#e6ebe7; --muted:#9aa89f; --line:#2c3732;
-  --accent:#58c4a6; --accent-soft:#1b3a31; --code-bg:#222c27; --warn:#e69a62; --warn-soft:#3a2a1d; color-scheme:dark}
+  --accent:#58c4a6; --accent-soft:#1b3a31; --code-bg:#222c27; --warn:#e69a62; --warn-soft:#3a2a1d;
+  --syn-kw:#c9a0f0; --syn-def:#8fb6ff; --syn-str:#e6a46e; --syn-num:#58c4a6; --syn-com:#7d8b83; --syn-bi:#6fc7d6; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:16px;line-height:1.75;margin:0;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
@@ -129,7 +132,7 @@ details.card .ttl{font-weight:600;flex:1;min-width:140px}
 .bar i{display:block;height:100%;background:var(--accent)}
 
 .submit{background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;margin:14px 0}
-.submit textarea{width:100%;min-height:150px;font:13px/1.5 var(--font-mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;resize:vertical;min-width:0;tab-size:4}
+.submit textarea{width:100%;min-height:320px;font:13px/1.5 var(--font-mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;resize:vertical;min-width:0;tab-size:4}
 .submit .row{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
 .submit .res{margin-top:10px}
 .res ul{list-style:none;padding:0;margin:8px 0 0}
@@ -152,6 +155,33 @@ mjx-container[display="true"]{max-width:100%;overflow-x:auto;overflow-y:hidden}
 .eq-note{color:var(--muted);font-size:14px;margin:-8px 0 14px}
 mjx-container.wide{display:block;overflow-x:auto;overflow-y:hidden;max-width:100%;margin:4px 0}
 @media (prefers-reduced-motion:no-preference){section{animation:in .18s ease-out}@keyframes in{from{opacity:.4}to{opacity:1}}}
+
+/* code editor (CodeMirror 5, inlined) */
+.ed{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--bg);min-width:0}
+.ed-bar{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border-bottom:1px solid var(--line);background:var(--code-bg);flex-wrap:wrap}
+.ed-bar .lang{font:600 12px var(--font-mono);color:var(--muted);margin-right:auto}
+.ed-bar button{border:1px solid transparent;background:none;color:var(--muted);font:500 12.5px var(--font-body);padding:3px 8px;border-radius:5px;cursor:pointer}
+.ed-bar button:hover{color:var(--fg);border-color:var(--line);background:var(--surface)}
+.ed-foot{display:flex;gap:12px;justify-content:space-between;padding:3px 10px;border-top:1px solid var(--line);background:var(--code-bg);font:12px var(--font-mono);color:var(--muted);flex-wrap:wrap}
+.ed textarea{border:0;border-radius:0;margin:0;display:block;min-height:320px}
+.ed .CodeMirror{height:360px;font:13px/1.55 var(--font-mono);background:var(--bg);color:var(--fg)}
+.ed .CodeMirror-gutters{background:var(--code-bg);border-right:1px solid var(--line)}
+.ed .CodeMirror-linenumber{color:var(--muted)}
+.ed .CodeMirror-cursor{border-left:2px solid var(--fg)}
+.ed .CodeMirror-selected,.ed .CodeMirror-focused .CodeMirror-selected{background:var(--accent-soft)}
+.ed .CodeMirror-line::selection,.ed .CodeMirror-line>span::selection,.ed .CodeMirror-line>span>span::selection{background:var(--accent-soft)}
+.ed .CodeMirror-activeline-background{background:color-mix(in srgb,var(--code-bg) 60%,transparent)}
+.ed .CodeMirror-matchingbracket{color:var(--accent)!important;outline:1px solid var(--accent);outline-offset:-1px}
+.ed .cm-s-default .cm-keyword{color:var(--syn-kw);font-weight:500}.ed .cm-s-default .cm-def{color:var(--syn-def)}
+.ed .cm-s-default .cm-string,.ed .cm-s-default .cm-string-2{color:var(--syn-str)}.ed .cm-s-default .cm-number{color:var(--syn-num)}
+.ed .cm-s-default .cm-comment{color:var(--syn-com);font-style:italic}.ed .cm-s-default .cm-builtin{color:var(--syn-bi)}
+.ed .cm-s-default .cm-variable-2,.ed .cm-s-default .cm-variable-3,.ed .cm-s-default .cm-type{color:var(--syn-def)}
+.ed .cm-s-default .cm-meta,.ed .cm-s-default .cm-atom{color:var(--syn-kw)}.ed .cm-s-default .cm-operator,.ed .cm-s-default .cm-property,.ed .cm-s-default .cm-variable{color:var(--fg)}
+.ed .cm-s-default .cm-error{color:var(--warn)}
+.ed.full{position:fixed;inset:0;z-index:100;border-radius:0;display:flex;flex-direction:column;border:0}
+.ed.full .CodeMirror{flex:1;height:auto}
+.ed.full textarea{flex:1}
+@media (max-width:600px){.ed .CodeMirror{height:300px}.ed-foot .keys{display:none}}
 </style>
 
 <div class="wrap">
@@ -5247,6 +5277,8 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
 </main>
 </div>
 
+<style>__CODEMIRROR_CSS__</style>
+<script>__CODEMIRROR_JS__</script>
 <script type="application/json" id="bank">__PROBLEM_BANK_JSON__</script>
 <script>
 (function(){
@@ -5511,23 +5543,101 @@ python study/board.py tl hint  lin-regression 2 # 第 2 级提示</code></pre>
       },function(err){clearTimeout(timer);msgEl.textContent='读取结果失败：'+(err&&err.code||'未知错误')});
     });
   }
+
+  /* ---- code editor: CodeMirror if available, otherwise a textarea with Tab/indent handling ---- */
+  var isMac=/Mac|iP(hone|ad|od)/.test(navigator.platform||navigator.userAgent),MOD=isMac?'⌘':'Ctrl';
+  var edObs=('IntersectionObserver' in window)?new IntersectionObserver(function(es){
+    es.forEach(function(e){if(e.isIntersecting){edObs.unobserve(e.target);e.target.__edInit&&e.target.__edInit()}})}):null;
+  function starterOf(pid){try{for(var i=0;i<bank.length;i++)if(bank[i].id===pid)return bank[i].starter||''}catch(e){}return ''}
+  function mkEditor(ta,opts){
+    /* opts: {pid, onChange(value), onSubmit()} ; returns {el, get(), set(v), focus()} */
+    var box=document.createElement('div');box.className='ed tex2jax_ignore mathjax_ignore';
+    var bar=document.createElement('div');bar.className='ed-bar';
+    bar.innerHTML='<span class="lang">Python 3</span>';
+    var foot=document.createElement('div');foot.className='ed-foot';
+    foot.innerHTML='<span class="pos">行 1，列 1</span><span class="keys">Tab 缩进 · Shift+Tab 反缩进 · '+MOD+'+/ 注释 · '+MOD+'+Enter 提交</span>';
+    var pos=foot.querySelector('.pos'),cm=null;
+    function b(label,title,fn){var x=document.createElement('button');x.type='button';x.textContent=label;x.title=title;x.onclick=fn;bar.appendChild(x);return x}
+    var api={el:box,
+      get:function(){return cm?cm.getValue():ta.value},
+      set:function(v){if(cm){cm.setValue(v);cm.clearHistory()}else ta.value=v;opts.onChange(v)},
+      focus:function(){cm?cm.focus():ta.focus()}};
+    b('起始代码','把编辑器内容换成本题的起始代码',function(){
+      var st=starterOf(opts.pid);if(!st){alert('这题没有起始代码。');return}
+      if(api.get().trim()&&!confirm('用起始代码替换编辑器里的内容？'))return;api.set(st);api.focus()});
+    b('复制','复制全部代码',function(e){var t=api.get(),btn=e.target;
+      var ok=function(){btn.textContent='已复制';setTimeout(function(){btn.textContent='复制'},1200)};
+      try{navigator.clipboard.writeText(t).then(ok,function(){})}catch(err){}});
+    var fs=b('全屏','全屏编辑（Esc 退出）',function(){toggleFull()});
+    function toggleFull(force){var on=force===undefined?!box.classList.contains('full'):force;
+      box.classList.toggle('full',on);fs.textContent=on?'退出全屏':'全屏';document.documentElement.style.overflow=on?'hidden':'';
+      if(cm)cm.refresh();api.focus()}
+    ta.parentNode.insertBefore(box,ta);box.appendChild(bar);box.appendChild(ta);box.appendChild(foot);
+    ta.setAttribute('wrap','off');
+    function upd(line,col){pos.textContent='行 '+(line+1)+'，列 '+(col+1)}
+    /* textarea fallback */
+    ta.addEventListener('keydown',function(e){
+      if(cm)return;
+      var v=ta.value,a=ta.selectionStart,z=ta.selectionEnd;
+      if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();opts.onSubmit();return}
+      if(e.key==='Escape'&&box.classList.contains('full')){toggleFull(false);return}
+      if(e.key==='Tab'){e.preventDefault();
+        var ls=v.lastIndexOf('\n',a-1)+1;
+        if(a===z&&!e.shiftKey){var col=a-ls,n=4-col%4;ta.setRangeText(' '.repeat(n),a,z,'end')}
+        else{var blk=v.slice(ls,z),out=blk.split('\n').map(function(l){return e.shiftKey?l.replace(/^ {1,4}/,''):'    '+l}).join('\n');
+          ta.setRangeText(out,ls,z,'select')}
+        opts.onChange(ta.value);return}
+      if(e.key==='Enter'&&!e.shiftKey&&a===z){
+        var ls2=v.lastIndexOf('\n',a-1)+1,line=v.slice(ls2,a),ind=line.match(/^ */)[0];
+        if(/:\s*(#.*)?$/.test(line))ind+='    ';
+        e.preventDefault();ta.setRangeText('\n'+ind,a,z,'end');opts.onChange(ta.value)}
+    });
+    ta.addEventListener('keyup',function(){if(cm)return;var a=ta.selectionStart,v=ta.value.slice(0,a),l=v.split('\n');upd(l.length-1,l[l.length-1].length)});
+    ta.addEventListener('click',function(){if(cm)return;var a=ta.selectionStart,l=ta.value.slice(0,a).split('\n');upd(l.length-1,l[l.length-1].length)});
+    function init(){
+      if(cm||!window.CodeMirror)return;
+      try{
+        cm=CodeMirror.fromTextArea(ta,{mode:{name:'python',version:3},lineNumbers:true,indentUnit:4,tabSize:4,indentWithTabs:false,
+          smartIndent:true,matchBrackets:true,autoCloseBrackets:true,styleActiveLine:true,lineWrapping:false,viewportMargin:20,
+          extraKeys:{
+            'Tab':function(c){if(c.somethingSelected())c.indentSelection('add');else c.execCommand('insertSoftTab')},
+            'Shift-Tab':function(c){c.indentSelection('subtract')},
+            'Backspace':function(c){
+              if(c.somethingSelected())return CodeMirror.Pass;
+              var p=c.getCursor(),before=c.getLine(p.line).slice(0,p.ch);
+              if(p.ch>0&&/^ +$/.test(before)){var n=(p.ch%4)||4;c.replaceRange('',{line:p.line,ch:p.ch-n},p);return}
+              return CodeMirror.Pass},
+            'Ctrl-/':'toggleComment','Cmd-/':'toggleComment',
+            'Ctrl-Enter':function(){opts.onSubmit()},'Cmd-Enter':function(){opts.onSubmit()},
+            'Esc':function(){if(box.classList.contains('full'))toggleFull(false)}
+          }});
+        cm.on('change',function(){cm.save();opts.onChange(cm.getValue())});
+        cm.on('cursorActivity',function(){var p=cm.getCursor();upd(p.line,p.ch)});
+      }catch(err){cm=null}
+    }
+    box.__edInit=init;
+    if(edObs)edObs.observe(box);else init();
+    return api;
+  }
   function mkSubmit(pid,label){
     var w=document.createElement('div');w.className='submit';var id='sb-'+(++wid);
     w.innerHTML='<div class="vhead"><b>提交到流水线'+(label?' · '+label:'')+'</b><span class="pill sst" hidden></span></div>'+
-      '<p class="sub" style="margin:4px 0 8px">把你的实现（只保留 import 和定义）粘贴到这里，或选择一个 .py 文件。</p>'+
+      '<p class="sub" style="margin:4px 0 8px">在编辑器里直接写（可点“起始代码”载入模板），只保留 import 和定义；也可以选择一个 .py 文件。</p>'+
       '<textarea id="'+id+'" spellcheck="false" placeholder="# 粘贴你的代码"></textarea>'+
       '<div class="row"><button class="btn">提交核验</button><label class="btn ghost" style="cursor:pointer">选择 .py 文件<input type="file" accept=".py,text/x-python,text/plain" hidden id="'+id+'-f"></label><span class="sub smsg"></span></div>'+
       '<div class="res"></div>';
     var ta=w.querySelector('textarea'),btn=w.querySelector('button'),msg=w.querySelector('.smsg'),res=w.querySelector('.res');
     var draftKey='tl-draft-'+pid;
     try{var dr=localStorage.getItem(draftKey);if(dr)ta.value=dr}catch(e){}
+    ta.placeholder='# 在这里写代码，或点上方“起始代码”';
+    var ed=mkEditor(ta,{pid:pid,onChange:function(v){store.set(draftKey,v)},onSubmit:function(){if(!btn.disabled)btn.onclick()}});
     ta.oninput=function(){store.set(draftKey,ta.value)};
     w.querySelector('input[type=file]').onchange=function(e){
       var f=e.target.files[0];if(!f)return;
-      var r=new FileReader();r.onload=function(){ta.value=String(r.result);store.set(draftKey,ta.value);msg.textContent='已读入 '+f.name};r.readAsText(f);
+      var r=new FileReader();r.onload=function(){ed.set(String(r.result));msg.textContent='已读入 '+f.name};r.readAsText(f);
     };
     btn.onclick=function(){
-      var code=ta.value;
+      var code=ed.get();
       if(!code.trim()){msg.textContent='请先粘贴代码。';return}
       if(code.length>MAXCODE){msg.textContent='代码太长（上限 '+MAXCODE+' 字符），请删掉演示/训练代码。';return}
       if(!window.claude||!claude.use){msg.textContent='只有在 claude.ai 里打开这个页面时才能提交。';return}
